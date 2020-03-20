@@ -1,8 +1,10 @@
 // Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.popup.async;
 
+import com.intellij.CommonBundle;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.PopupStep;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.ui.components.JBLabel;
@@ -30,8 +32,11 @@ public class AsyncPopupImpl extends WizardPopup implements Runnable {
   private final Alarm myAlarm;
   private JPanel myPanel;
 
-  public AsyncPopupImpl(@Nullable WizardPopup parent, @NotNull AsyncPopupStep step, Object parentValue) {
-    super(parent, step);
+  public AsyncPopupImpl(@Nullable Project project,
+                        @Nullable WizardPopup parent,
+                        @NotNull AsyncPopupStep<Object> step,
+                        @Nullable Object parentValue) {
+    super(project, parent, step);
 
     if (!(parent instanceof NextStepHandler)) throw new IllegalArgumentException("parent must be NextStepHandler");
 
@@ -77,7 +82,7 @@ public class AsyncPopupImpl extends WizardPopup implements Runnable {
     if (myPanel != null) return myPanel;
     myPanel = new JPanel(new BorderLayout());
     //myPanel.add(new AsyncProcessIcon("Async Popup Step"), BorderLayout.WEST);
-    JBLabel label = new JBLabel("Loading...");
+    JBLabel label = new JBLabel(CommonBundle.getLoadingTreeNodeText());
     label.setForeground(UIUtil.getLabelDisabledForeground());
     myPanel.add(label, BorderLayout.CENTER);
     myPanel.setBorder(new EmptyBorder(UIUtil.getListCellPadding()));

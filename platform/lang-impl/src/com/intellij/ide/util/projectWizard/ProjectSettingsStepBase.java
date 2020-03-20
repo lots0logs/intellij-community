@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util.projectWizard;
 
 import com.intellij.BundleBase;
 import com.intellij.facet.ui.ValidationResult;
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.impl.ProjectUtil;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -22,7 +23,6 @@ import com.intellij.platform.templates.TemplateProjectDirectoryGenerator;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -35,13 +35,15 @@ import java.awt.event.ActionListener;
 import java.io.File;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.intellij.openapi.wm.impl.welcomeScreen.FlatWelcomeFrame.BOTTOM_PANEL;
 
+@SuppressWarnings("ComponentNotRegistered")
 public class ProjectSettingsStepBase<T> extends AbstractActionWithPanel implements DumbAware, Disposable {
   protected DirectoryProjectGenerator<T> myProjectGenerator;
-  protected AbstractNewProjectStep.AbstractCallback myCallback;
+  protected AbstractNewProjectStep.AbstractCallback<T> myCallback;
   protected TextFieldWithBrowseButton myLocationField;
   protected File myProjectDirectory;
   protected JButton myCreateButton;
@@ -49,7 +51,7 @@ public class ProjectSettingsStepBase<T> extends AbstractActionWithPanel implemen
   protected NotNullLazyValue<ProjectGeneratorPeer<T>> myLazyGeneratorPeer;
 
   public ProjectSettingsStepBase(DirectoryProjectGenerator<T> projectGenerator,
-                                 AbstractNewProjectStep.AbstractCallback callback) {
+                                 AbstractNewProjectStep.AbstractCallback<T> callback) {
     super();
     getTemplatePresentation().setIcon(projectGenerator.getLogo());
     getTemplatePresentation().setText(projectGenerator.getName());
@@ -188,52 +190,42 @@ public class ProjectSettingsStepBase<T> extends AbstractActionWithPanel implemen
   }
 
   private void checkWebProjectValid() {
-    if (myProjectGenerator instanceof WebProjectTemplate && !((WebProjectTemplate)myProjectGenerator).postponeValidation()) {
+    if (myProjectGenerator instanceof WebProjectTemplate && !((WebProjectTemplate<?>)myProjectGenerator).postponeValidation()) {
       checkValid();
     }
   }
 
   public boolean checkValid() {
     if (myLocationField == null) return true;
-    final String projectName = myLocationField.getText();
-    setErrorText(null);
 
-    if (projectName.trim().isEmpty()) {
-      setErrorText("Project name can't be empty");
-      return false;
-    }
-    final String text = myLocationField.getText().trim();
-    if (text.indexOf('$') >= 0) {
-      setErrorText("Project directory name must not contain the $ character");
+    String projectPath = myLocationField.getText().trim();
+    if (projectPath.isEmpty()) {
+      setErrorText(IdeBundle.message("new.dir.project.error.empty"));
       return false;
     }
     try {
-      Paths.get(text);
-    } catch (InvalidPathException e) {
-      setErrorText("Invalid project directory path");
+      Paths.get(projectPath);
+    }
+    catch (InvalidPathException e) {
+      setErrorText(IdeBundle.message("new.dir.project.error.invalid"));
       return false;
     }
+
     if (myProjectGenerator != null) {
-      final String baseDirPath = myLocationField.getTextField().getText();
-      ValidationResult validationResult = myProjectGenerator.validate(baseDirPath);
-      final ValidationInfo peerValidationResult = getPeer().validate();
+      ValidationResult validationResult = myProjectGenerator.validate(projectPath);
       if (!validationResult.isOk()) {
         setErrorText(validationResult.getErrorMessage());
         return false;
-      } else if (peerValidationResult != null) {
+      }
+
+      ValidationInfo peerValidationResult = getPeer().validate();
+      if (peerValidationResult != null) {
         setErrorText(peerValidationResult.message);
         return false;
       }
-      if (myProjectGenerator instanceof WebProjectTemplate) {
-        final ProjectGeneratorPeer<T> peer = getPeer();
-        final ValidationInfo validationInfo = peer.validate();
-        if (validationInfo != null) {
-          setErrorText(validationInfo.message);
-          return false;
-        }
-      }
     }
 
+    setErrorText(null);
     return true;
   }
 
@@ -243,7 +235,7 @@ public class ProjectSettingsStepBase<T> extends AbstractActionWithPanel implemen
       getPeer().buildUI(settingsStep);
     }
     else if (myProjectGenerator instanceof TemplateProjectDirectoryGenerator) {
-      ((TemplateProjectDirectoryGenerator)myProjectGenerator).buildUI(settingsStep);
+      ((TemplateProjectDirectoryGenerator<?>)myProjectGenerator).buildUI(settingsStep);
     }
     else {
       return createContentPanelWithAdvancedSettingsPanel();
@@ -253,14 +245,14 @@ public class ProjectSettingsStepBase<T> extends AbstractActionWithPanel implemen
     if (settingsStep.isEmpty()) return createContentPanelWithAdvancedSettingsPanel();
 
     final JPanel jPanel = new JPanel(new VerticalFlowLayout(0, 5));
-    List<LabeledComponent> labeledComponentList = ContainerUtil.newArrayList();
+    List<LabeledComponent<? extends JComponent>> labeledComponentList = new ArrayList<>();
     labeledComponentList.add(createLocationComponent());
     labeledComponentList.addAll(settingsStep.getFields());
 
     final JPanel scrollPanel = new JPanel(new BorderLayout());
     scrollPanel.add(jPanel, BorderLayout.NORTH);
 
-    for (LabeledComponent component : labeledComponentList) {
+    for (LabeledComponent<? extends JComponent> component : labeledComponentList) {
       component.setLabelLocation(BorderLayout.WEST);
       jPanel.add(component);
     }
@@ -282,8 +274,9 @@ public class ProjectSettingsStepBase<T> extends AbstractActionWithPanel implemen
   }
 
   public void setWarningText(@Nullable String text) {
-    myErrorLabel.setText("<html>Note: " + text + "  </html>");
+    myErrorLabel.setText("<html><strong>Note:</strong> " + text + "  </html>");
     myErrorLabel.setForeground(MessageType.WARNING.getTitleForeground());
+    myErrorLabel.setIcon(StringUtil.isEmpty(text) ? null : AllIcons.Actions.Lightning);
   }
 
   @Nullable
@@ -318,8 +311,9 @@ public class ProjectSettingsStepBase<T> extends AbstractActionWithPanel implemen
     }
 
     final FileChooserDescriptor descriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor();
-    myLocationField.addBrowseFolderListener("Select Base Directory", "Select base directory for the project", null, descriptor);
-    return LabeledComponent.create(myLocationField, BundleBase.replaceMnemonicAmpersand("&Location"), BorderLayout.WEST);
+    myLocationField.addBrowseFolderListener(IdeBundle.message("directory.project.location.title"),
+                                            IdeBundle.message("directory.project.location.description"), null, descriptor);
+    return LabeledComponent.create(myLocationField, BundleBase.replaceMnemonicAmpersand(IdeBundle.message("directory.project.location.label")), BorderLayout.WEST);
   }
 
   @NotNull

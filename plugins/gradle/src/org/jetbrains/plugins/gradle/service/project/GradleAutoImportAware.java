@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service.project;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -22,6 +8,7 @@ import com.intellij.openapi.externalSystem.settings.AbstractExternalSystemSettin
 import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.module.ModuleManager;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.CompilerModuleExtension;
 import com.intellij.openapi.roots.CompilerProjectExtension;
@@ -74,7 +61,7 @@ public class GradleAutoImportAware implements ExternalSystemAutoImportAware {
     if (projectsSettings.isEmpty()) {
       return null;
     }
-    Map<String, String> rootPaths = ContainerUtil.newHashMap();
+    Map<String, String> rootPaths = new HashMap<>();
     for (ExternalProjectSettings setting : projectsSettings) {
       if(setting != null) {
         for (String path : setting.getModules()) {
@@ -140,14 +127,17 @@ public class GradleAutoImportAware implements ExternalSystemAutoImportAware {
                                   FileUtil.pathsEqual(projectSettings.getExternalProjectPath(), projectPath)
                                   ? projectSettings.getModules() : ContainerUtil.set(projectPath);
     for (String path : subProjectPaths) {
+      ProgressManager.checkCanceled();
+
       try {
         Files.walkFileTree(Paths.get(path), EnumSet.noneOf(FileVisitOption.class), 1, new SimpleFileVisitor<Path>() {
           @Override
-          public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-            String fileName = file.getFileName().toString();
+          public FileVisitResult visitFile(Path path, BasicFileAttributes attrs) {
+            String fileName = path.getFileName().toString();
             if (fileName.endsWith('.' + GradleConstants.EXTENSION) ||
                 fileName.endsWith('.' + GradleConstants.KOTLIN_DSL_SCRIPT_EXTENSION)) {
-              files.add(file.toFile());
+              File file = path.toFile();
+              if (file.isFile()) files.add(file);
             }
             return FileVisitResult.CONTINUE;
           }

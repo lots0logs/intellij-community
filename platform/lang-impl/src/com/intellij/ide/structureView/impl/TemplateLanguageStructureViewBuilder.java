@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.structureView.impl;
 
 import com.intellij.ide.structureView.StructureView;
@@ -15,7 +15,6 @@ import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileTypes.FileTypes;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.FileViewProvider;
 import com.intellij.psi.PsiElement;
@@ -31,6 +30,7 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @author peter
@@ -38,7 +38,8 @@ import java.util.List;
 public abstract class TemplateLanguageStructureViewBuilder extends TreeBasedStructureViewBuilder {
 
   @NotNull
-  public static TemplateLanguageStructureViewBuilder create(@NotNull PsiFile psiFile, @Nullable PairFunction<? super PsiFile, ? super Editor, ? extends StructureViewModel> modelFactory) {
+  public static TemplateLanguageStructureViewBuilder create(@NotNull PsiFile psiFile,
+                                                            @Nullable PairFunction<? super PsiFile, ? super Editor, ? extends StructureViewModel> modelFactory) {
     return new TemplateLanguageStructureViewBuilder(psiFile) {
       @Override
       protected TreeBasedStructureViewBuilder createMainBuilder(@NotNull PsiFile psi) {
@@ -79,7 +80,7 @@ public abstract class TemplateLanguageStructureViewBuilder extends TreeBasedStru
     PsiFile psiFile = file == null || !file.isValid()? null : PsiManager.getInstance(project).findFile(file);
     List<Language> languages = getLanguages(psiFile).toList();
     for (Language language : languages) {
-      StructureViewBuilder builder = getBuilder(ObjectUtils.notNull(psiFile), language);
+      StructureViewBuilder builder = getBuilder(Objects.requireNonNull(psiFile), language);
       if (builder == null) continue;
       StructureView structureView = builder.createStructureView(fileEditor, project);
       String title = language.getDisplayName();
@@ -93,16 +94,8 @@ public abstract class TemplateLanguageStructureViewBuilder extends TreeBasedStru
         VirtualFile file = fileEditor == null ? null : fileEditor.getFile();
         PsiFile psiFile = file == null || !file.isValid() ? null : PsiManager.getInstance(project).findFile(file);
         List<Language> newLanguages = getLanguages(psiFile).toList();
-        if (!Comparing.equal(languages, newLanguages)) return true;
-        if (psiFile == null) return true;
-        FileViewProvider viewProvider = psiFile.getViewProvider();
-        Language baseLanguage = viewProvider.getBaseLanguage();
-        StructureViewDescriptor[] views = getStructureViews();
-        boolean hasMainView = views.length > 0 && Comparing.equal(views[0].title, baseLanguage.getDisplayName());
-        JBIterable<Language> newAcceptedLanguages = JBIterable.from(newLanguages)
-          .filter(o -> o == baseLanguage && hasMainView ||
-                       o != baseLanguage && isAcceptableBaseLanguageFile(viewProvider.getPsi(o)));
-        return views.length != newAcceptedLanguages.size();
+        // think views count depends only on acceptable languages
+        return !Comparing.equal(languages, newLanguages);
       }
     };
   }
@@ -111,7 +104,7 @@ public abstract class TemplateLanguageStructureViewBuilder extends TreeBasedStru
   @NotNull
   public StructureViewModel createStructureViewModel(@Nullable Editor editor) {
     List<StructureViewComposite.StructureViewDescriptor> viewDescriptors = new ArrayList<>();
-    PsiFile psiFile = ObjectUtils.notNull(PsiManager.getInstance(myProject).findFile(myVirtualFile));
+    PsiFile psiFile = Objects.requireNonNull(PsiManager.getInstance(myProject).findFile(myVirtualFile));
     for (Language language : getLanguages(psiFile)) {
       StructureViewBuilder builder = getBuilder(psiFile, language);
       if (!(builder instanceof TreeBasedStructureViewBuilder)) continue;
@@ -124,16 +117,21 @@ public abstract class TemplateLanguageStructureViewBuilder extends TreeBasedStru
   }
 
   @NotNull
-  private static JBIterable<Language> getLanguages(@Nullable PsiFile psiFile) {
+  private JBIterable<Language> getLanguages(@Nullable PsiFile psiFile) {
     if (psiFile == null) return JBIterable.empty();
-    FileViewProvider provider = psiFile.getViewProvider();
+    FileViewProvider viewProvider = psiFile.getViewProvider();
 
-    Language baseLanguage = provider.getBaseLanguage();
-    Language dataLanguage = provider instanceof TemplateLanguageFileViewProvider
-                            ? ((TemplateLanguageFileViewProvider)provider).getTemplateDataLanguage() : null;
+    Language baseLanguage = viewProvider.getBaseLanguage();
+    Language dataLanguage = viewProvider instanceof TemplateLanguageFileViewProvider
+                            ? ((TemplateLanguageFileViewProvider)viewProvider).getTemplateDataLanguage() : null;
     return JBIterable.of(baseLanguage)
       .append(dataLanguage)
-      .append(JBIterable.from(provider.getLanguages()).filter(o -> o != baseLanguage && o != dataLanguage));
+      .append(viewProvider.getLanguages())
+      .unique()
+      .filter(language -> {
+        PsiFile psi = viewProvider.getPsi(language);
+        return psi != null && (language == baseLanguage || isAcceptableBaseLanguageFile(psi));
+      });
   }
 
   @Nullable
@@ -143,7 +141,6 @@ public abstract class TemplateLanguageStructureViewBuilder extends TreeBasedStru
     PsiFile psi = viewProvider.getPsi(language);
     if (psi == null) return null;
     if (language == baseLanguage) return createMainBuilder(psi);
-    if (!isAcceptableBaseLanguageFile(psi)) return null;
     PsiStructureViewFactory factory = LanguageStructureViewBuilder.INSTANCE.forLanguage(language);
     return factory == null ? null : factory.getStructureViewBuilder(psi);
   }
@@ -153,29 +150,5 @@ public abstract class TemplateLanguageStructureViewBuilder extends TreeBasedStru
   }
 
   @Nullable
-  protected TreeBasedStructureViewBuilder createMainBuilder(@NotNull PsiFile psi) {
-    //noinspection deprecation
-    StructureViewComposite.StructureViewDescriptor descriptor = createMainView(null, psi);
-    if (descriptor == null) return null;
-    return new TreeBasedStructureViewBuilder() {
-      @NotNull
-      @Override
-      public StructureViewModel createStructureViewModel(@Nullable Editor editor) {
-        Disposer.register(descriptor.structureModel, descriptor.structureView);
-        return descriptor.structureModel;
-      }
-
-      @NotNull
-      @Override
-      public StructureView createStructureView(FileEditor fileEditor, @NotNull Project project) {
-        return descriptor.structureView;
-      }
-    };
-  }
-
-  /** @deprecated override {@link #createMainBuilder(PsiFile)} instead */
-  @Deprecated
-  protected StructureViewComposite.StructureViewDescriptor createMainView(FileEditor fileEditor, PsiFile mainFile) {
-    throw new AssertionError();
-  }
+  protected abstract TreeBasedStructureViewBuilder createMainBuilder(@NotNull PsiFile psi);
 }

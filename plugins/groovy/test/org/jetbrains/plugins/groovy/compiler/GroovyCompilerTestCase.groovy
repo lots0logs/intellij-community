@@ -1,6 +1,7 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.compiler
 
+import com.intellij.compiler.CompilerConfiguration
 import com.intellij.compiler.server.BuildManager
 import com.intellij.execution.ExecutionException
 import com.intellij.execution.Executor
@@ -47,7 +48,6 @@ import org.jetbrains.plugins.groovy.util.Slow
 @Slow
 @CompileStatic
 abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase implements CompilerMethods {
-
   protected CompilerTester myCompilerTester
 
   @Override
@@ -64,8 +64,9 @@ abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase imp
   @Override
   protected void setUp() throws Exception {
     super.setUp()
-    edt { ModuleGroupTestsKt.renameModule(myModule, "mainModule") }
-    myCompilerTester = new CompilerTester(myModule)
+    edt { ModuleGroupTestsKt.renameModule(module, "mainModule") }
+    myCompilerTester = new CompilerTester(module)
+    CompilerConfiguration.getInstance(project).buildProcessVMOptions = "-XX:TieredStopAtLevel=1" // for faster build process startup
   }
 
   @Override
@@ -83,7 +84,7 @@ abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase imp
     super.runTest()
   }
 
-  protected static void addGroovyLibrary(final Module to) {
+  protected void addGroovyLibrary(final Module to) {
     File jar = BundledGroovy.getBundledGroovyFile()
     PsiTestUtil.addLibrary(to, "groovy", jar.getParent(), jar.getName())
   }
@@ -111,7 +112,7 @@ abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase imp
 
   protected void setupTestSources() {
     WriteCommandAction.runWriteCommandAction(getProject(), {
-        final ModuleRootManager rootManager = ModuleRootManager.getInstance(myModule)
+        final ModuleRootManager rootManager = ModuleRootManager.getInstance(module)
         final ModifiableRootModel rootModel = rootManager.getModifiableModel()
         final ContentEntry entry = rootModel.getContentEntries()[0]
         entry.removeSourceFolder(entry.getSourceFolders()[0])
@@ -123,7 +124,7 @@ abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase imp
 
   protected Module addDependentModule() {
     Module module = addModule("dependent", true)
-    ModuleRootModificationUtil.addDependency(module, myModule)
+    ModuleRootModificationUtil.addDependency(module, getModule())
     return module
   }
 
@@ -136,13 +137,13 @@ abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase imp
         moduleModel.commit()
 
         final Module dep = ModuleManager.getInstance(getProject()).findModuleByName(moduleName)
-        ModuleRootModificationUtil.setModuleSdk(dep, ModuleRootManager.getInstance(myModule).getSdk())
+        ModuleRootModificationUtil.setModuleSdk(dep, ModuleRootManager.getInstance(module).getSdk())
         if (withSource) {
           PsiTestUtil.addSourceRoot(dep, depRoot)
         } else {
           PsiTestUtil.addContentRoot(dep, depRoot)
         }
-        IdeaTestUtil.setModuleLanguageLevel(dep, LanguageLevelModuleExtensionImpl.getInstance(myModule).getLanguageLevel())
+        IdeaTestUtil.setModuleLanguageLevel(dep, LanguageLevelModuleExtensionImpl.getInstance(module).getLanguageLevel())
 
         return dep
     } as ThrowableComputable<Module,RuntimeException>)
@@ -154,7 +155,7 @@ abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase imp
 
   @Nullable
   protected VirtualFile findClassFile(String className) {
-    return findClassFile(className, myModule)
+    return findClassFile(className, module)
   }
 
   @Nullable
@@ -191,7 +192,7 @@ abstract class GroovyCompilerTestCase extends JavaCodeInsightFixtureTestCase imp
   }
 
   protected void assertOutput(String className, String output) throws ExecutionException {
-    assertOutput(className, output, myModule)
+    assertOutput(className, output, module)
   }
 
   protected void assertOutput(String className, String expected, final Module module) throws ExecutionException {

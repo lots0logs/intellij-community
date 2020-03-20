@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.indices;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -24,6 +10,7 @@ import com.intellij.ui.TabbedPaneWrapper;
 import com.intellij.util.ui.JBUI;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.idea.maven.dom.MavenDomBundle;
 import org.jetbrains.idea.maven.dom.model.MavenDomDependency;
 import org.jetbrains.idea.maven.model.MavenId;
 
@@ -102,7 +89,7 @@ public class MavenArtifactSearchDialog extends DialogWrapper {
 
     initComponents(project, initialText, classMode);
 
-    setTitle("Maven Artifact Search");
+    setTitle(MavenDomBundle.message("maven.artifact.pom.search.title"));
     updateOkButtonState();
     init();
 
@@ -129,8 +116,8 @@ public class MavenArtifactSearchDialog extends DialogWrapper {
     myArtifactsPanel = new MavenArtifactSearchPanel(project, !classMode ? initialText : "", false, listener, this, myManagedDependenciesMap);
     myClassesPanel = new MavenArtifactSearchPanel(project, classMode ? initialText : "", true, listener, this, myManagedDependenciesMap);
 
-    myTabbedPane.addTab("Search for artifact", myArtifactsPanel);
-    myTabbedPane.addTab("Search for class", myClassesPanel);
+    myTabbedPane.addTab(MavenDomBundle.message("maven.search.for.artifact.tab.title"), myArtifactsPanel);
+    myTabbedPane.addTab(MavenDomBundle.message("maven.search.for.class.tab.title"), myClassesPanel);
     myTabbedPane.setSelectedIndex(classMode ? 1 : 0);
 
     myTabbedPane.getComponent().setPreferredSize(JBUI.size(900, 600));
@@ -155,7 +142,7 @@ public class MavenArtifactSearchDialog extends DialogWrapper {
   @Override
   protected Action getOKAction() {
     Action result = super.getOKAction();
-    result.putValue(Action.NAME, "Add");
+    result.putValue(Action.NAME, MavenDomBundle.message("maven.artifact.pom.search.add"));
     return result;
   }
 

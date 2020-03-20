@@ -3,16 +3,28 @@ package com.jetbrains.python.sdk.flavors
 
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.SystemInfo
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileSystem
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+/**
+ * Powershell may not exist under PATH, so we first look for it in well-known location
+ */
+private fun findPowerShell(): VirtualFile? {
+  val fs = LocalFileSystem.getInstance()
+  val winDir = System.getenv("WINDIR") ?: return null
+  val winDirFile = fs.findFileByPath(winDir) ?: return null
+  return winDirFile.findFileByRelativePath("/System32/WindowsPowerShell/v1.0/powershell.exe")
+}
 
 /**
  * On Win10 uses `Get-AppxPackage` cmdlet to fetch installation location of package by name.
  * To be used to find location of tools installed with Windows Store
  */
-fun findInstallLocationForPackage(packageName: String): VirtualFile? {
+fun findInstallLocationForPackage(packageName: String, fs:VirtualFileSystem): VirtualFile? {
   if (!SystemInfo.isWin10OrNewer) {
     return null
   }
@@ -21,9 +33,16 @@ fun findInstallLocationForPackage(packageName: String): VirtualFile? {
   val logger = Logger.getFactory().getLoggerInstance("findPackage")
 
   assert(packageName.isNotBlank() && packageName.matches(alphaNumeric)) { "Only alphanumeric packages are supported" }
-  val command = "powershell.exe -Command \"Get-AppxPackage | Where-Object {\$_.Name -like '*$packageName*'} | Select-Object {\$_.InstallLocation} | Format-List\""
-
-  val process = Runtime.getRuntime().exec(command)
+  val powershell = findPowerShell()?.path ?: "powershell.exe"
+  val command = "\"Get-AppxPackage | Where-Object {\$_.Name -like '*$packageName*'} | Select-Object {\$_.InstallLocation} | Format-List\""
+  val process: Process
+  try {
+    process = Runtime.getRuntime().exec(arrayOf(powershell, "-Command", command))
+  }
+  catch (e: IOException) {
+    logger.warn(e)
+    return null
+  }
   val result = process.waitFor(5, TimeUnit.SECONDS)
   if (!result) {
     reportError(command, "Process still runs after timeout", process, logger)
@@ -40,7 +59,7 @@ fun findInstallLocationForPackage(packageName: String): VirtualFile? {
     logger.warn("Strange output: $line")
     return null
   }
-  return LocalFileSystem.getInstance().findFileByPath(groupValues[1])
+  return fs.refreshAndFindFileByPath(groupValues[1])
 }
 
 private fun reportError(command: String, error: String, process: Process, logger: Logger) {

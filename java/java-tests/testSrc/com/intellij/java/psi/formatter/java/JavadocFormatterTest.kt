@@ -5,7 +5,6 @@ import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.lang.java.JavaLanguage
 import com.intellij.openapi.roots.LanguageLevelProjectExtension
 import com.intellij.pom.java.LanguageLevel
-import com.intellij.testFramework.LightPlatformTestCase
 
 class JavadocFormatterTest : AbstractJavaFormatterTest() {
   fun testRIGHT_MARGIN() {
@@ -271,7 +270,7 @@ class A {
 
   fun testPreserveExistingSelfClosingTagsAndGenerateOnlyPTag() {
     getJavaSettings().ENABLE_JAVADOC_FORMATTING = true
-    LanguageLevelProjectExtension.getInstance(LightPlatformTestCase.getProject()).languageLevel = LanguageLevel.JDK_1_7
+    LanguageLevelProjectExtension.getInstance(getProject()).languageLevel = LanguageLevel.JDK_1_7
 
     doTextTest(
       """/**
@@ -299,7 +298,7 @@ class T {
       ENABLE_JAVADOC_FORMATTING = true
       JD_P_AT_EMPTY_LINES = true
     }
-    LanguageLevelProjectExtension.getInstance(LightPlatformTestCase.getProject()).languageLevel = LanguageLevel.JDK_1_7
+    LanguageLevelProjectExtension.getInstance(getProject()).languageLevel = LanguageLevel.JDK_1_7
 
     doTextTest(
       """/**
@@ -546,35 +545,34 @@ public int method(int parameter) {
   }
 
   fun testReturnTagAlignmentWithPreTagOnFirstLine() {
-    getSettings().apply {
+    settings.apply {
       RIGHT_MARGIN = 80
       WRAP_COMMENTS = true
       WRAP_LONG_LINES = true
     }
-    getJavaSettings().apply {
+    javaSettings.apply {
       ENABLE_JAVADOC_FORMATTING = true
       JD_LEADING_ASTERISKS_ARE_ENABLED = true
     }
 
     doClassTest(
       """
-    /**
-     * @return <pre>this is a return value documentation with a very long description
-     * that is longer than the right margin.</pre>
-     */
-    public int method(int parameter) {
-        return 0;
-    }""",
+      /**
+       * @return <pre>this is a return value documentation with a very long description
+       * that is longer than the right margin.</pre>
+       */
+      public int method(int parameter) {
+          return 0;
+      }""".trimIndent(),
 
-"\n/**\n" +
-" * @return <pre>this is a return value documentation with a very long " +
-"""
- * description
- * that is longer than the right margin.</pre>
- */
-public int method(int parameter) {
-    return 0;
-}""")
+      """
+      /**
+       * @return <pre>this is a return value documentation with a very long description
+       * that is longer than the right margin.</pre>
+       */
+      public int method(int parameter) {
+          return 0;
+      }""".trimIndent())
   }
 
   fun testDoNotMergeCommentLines() {
@@ -915,7 +913,7 @@ public void voo() {
       JD_P_AT_EMPTY_LINES = true
       ENABLE_JAVADOC_FORMATTING = true
     }
-    LanguageLevelProjectExtension.getInstance(LightPlatformTestCase.getProject()).languageLevel = LanguageLevel.JDK_1_7
+    LanguageLevelProjectExtension.getInstance(getProject()).languageLevel = LanguageLevel.JDK_1_7
 
     doClassTest(
       """/**
@@ -1115,19 +1113,19 @@ module M {
     /**
      * <h1>A description containing HTML tags</h1>
      * <p>
-     *     There might be lists in descriptions like this one:
-     *     <ul>
-     *         <li>Item one</li>
-     *         <li>Item two</li>
-     *         <li>Item three</li>
-     *     </ul>
-     *     which should be left as is, without any tags merged.
+     * There might be lists in descriptions like this one:
+     * <ul>
+     *     <li>Item one</li>
+     *     <li>Item two</li>
+     *     <li>Item three</li>
+     * </ul>
+     * which should be left as is, without any tags merged.
      * </p>
      * @param a Parameter descriptions can also be long but tag
      *          content should be left intact:
      *          <ol>
-     *          <li>Another item one</li>
-     *          <li>Item two</li>
+     *              <li>Another item one</li>
+     *              <li>Item two</li>
      *          </ol>
      */
     void test(int a) {
@@ -1143,19 +1141,18 @@ module M {
      * There might be lists in descriptions like
      * this one:
      * <ul>
-     * <li>Item one</li>
-     * <li>Item two</li>
-     * <li>Item three</li>
+     *     <li>Item one</li>
+     *     <li>Item two</li>
+     *     <li>Item three</li>
      * </ul>
-     * which should be left as is, without any
-     * tags merged.
+     * which should be left as is, without any tags merged.
      * </p>
      * @param a Parameter descriptions can also be
      *          long but tag content should be
      *          left intact:
      *          <ol>
-     *          <li>Another item one</li>
-     *          <li>Item two</li>
+     *              <li>Another item one</li>
+     *              <li>Item two</li>
      *          </ol>
      */
     void test(int a) {
@@ -1374,6 +1371,83 @@ public class Test {
               return new HashMap<>();
           }
 
+      }
+      """.trimIndent()
+    )
+  }
+
+  fun testIdea147601() {
+    doTextTest(
+      """
+      public class Idea147601 {
+      /**
+       * <table summary="">
+       *     <thead>
+       *         <tr>
+       *             <td>ABC</td>
+       *             <td>DEF</td>
+       *         </tr>
+       *     </thead>
+       *     <tbody>
+       *         <tr>
+       *             <td>some data here</td>
+       *             <td>some more</td>
+       *         </tr>
+       *     </tbody>
+       * </table>
+       */
+      void docTest() {}
+      }
+      """.trimIndent(),
+
+      """
+      public class Idea147601 {
+          /**
+           * <table summary="">
+           *     <thead>
+           *         <tr>
+           *             <td>ABC</td>
+           *             <td>DEF</td>
+           *         </tr>
+           *     </thead>
+           *     <tbody>
+           *         <tr>
+           *             <td>some data here</td>
+           *             <td>some more</td>
+           *         </tr>
+           *     </tbody>
+           * </table>
+           */
+          void docTest() {
+          }
+      }
+      """.trimIndent()
+    )
+  }
+
+  fun testIdea221827() {
+    settings.apply {
+      RIGHT_MARGIN = 40;
+      WRAP_LONG_LINES = true;
+    }
+
+    doTextTest(
+      """
+      /**
+       * <pre>
+       *     ScheduledFuture<?> future = executor.scheduleAtFixedRate(runnable, interval + delta, interval + delta, MILLISECONDS);
+       * </pre>
+       */
+      final class Temp { }
+      """.trimIndent(),
+
+      """
+      /**
+       * <pre>
+       *     ScheduledFuture<?> future = executor.scheduleAtFixedRate(runnable, interval + delta, interval + delta, MILLISECONDS);
+       * </pre>
+       */
+      final class Temp {
       }
       """.trimIndent()
     )

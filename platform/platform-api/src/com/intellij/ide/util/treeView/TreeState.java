@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util.treeView;
 
 import com.intellij.navigation.NavigationItem;
@@ -10,13 +10,13 @@ import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringHash;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.reference.SoftReference;
+import com.intellij.ui.ComponentUtil;
 import com.intellij.ui.tree.TreeVisitor;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import com.intellij.util.xmlb.XmlSerializer;
 import com.intellij.util.xmlb.annotations.Attribute;
@@ -37,6 +37,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -280,7 +281,7 @@ public class TreeState implements JDOMExternalizable {
       ContainerUtil.addIfNotNull(selection, treePath);
     }
     if (selection.isEmpty()) return;
-    tree.setSelectionPaths(selection.toArray(new TreePath[0]));
+    tree.setSelectionPaths(selection.toArray(TreeUtil.EMPTY_TREE_PATH));
     if (myScrollToSelection) {
       TreeUtil.showRowCentered(tree, tree.getRowForPath(selection.get(0)), true, true);
     }
@@ -374,7 +375,7 @@ public class TreeState implements JDOMExternalizable {
 
     @Override
     public ActionCallback getInitialized() {
-      WeakReference<ActionCallback> ref = UIUtil.getClientProperty(tree, CALLBACK);
+      WeakReference<ActionCallback> ref = ComponentUtil.getClientProperty(tree, CALLBACK);
       ActionCallback callback = SoftReference.dereference(ref);
       if (callback != null) return callback;
       return ActionCallback.DONE;
@@ -391,7 +392,7 @@ public class TreeState implements JDOMExternalizable {
     private final AbstractTreeBuilder myBuilder;
 
     BuilderFacade(AbstractTreeBuilder builder) {
-      super(ObjectUtils.notNull(builder.getTree()));
+      super(Objects.requireNonNull(builder.getTree()));
       myBuilder = builder;
     }
 
@@ -436,17 +437,17 @@ public class TreeState implements JDOMExternalizable {
   }
 
   /**
-   * Temporary solution to resolve simultaneous expansions with async tree model.
-   * Not that the specified consumer must resolve async promise at the end.
+   * @deprecated Temporary solution to resolve simultaneous expansions with async tree model.
+   * Note that the specified consumer must resolve async promise at the end.
    */
   @Deprecated
   public static void expand(@NotNull JTree tree, @NotNull Consumer<? super AsyncPromise<Void>> consumer) {
-    Promise<Void> expanding = UIUtil.getClientProperty(tree, EXPANDING);
+    Promise<Void> expanding = ComponentUtil.getClientProperty(tree, EXPANDING);
     LOG.debug("EXPANDING: ", expanding);
     if (expanding == null) expanding = Promises.resolvedPromise();
     expanding.onProcessed(value -> {
       AsyncPromise<Void> promise = new AsyncPromise<>();
-      UIUtil.putClientProperty(tree, EXPANDING, promise);
+      ComponentUtil.putClientProperty(tree, EXPANDING, promise);
       consumer.accept(promise);
     });
   }

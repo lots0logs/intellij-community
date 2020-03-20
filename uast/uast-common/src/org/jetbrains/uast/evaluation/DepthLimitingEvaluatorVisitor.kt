@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.uast.evaluation
 
 import com.intellij.openapi.diagnostic.Logger
@@ -6,12 +6,16 @@ import org.jetbrains.uast.*
 import org.jetbrains.uast.values.UUndeterminedValue
 import org.jetbrains.uast.visitor.UastTypedVisitor
 
-internal class DepthLimitingEvaluatorVisitor(val depthLimit: kotlin.Int,
-                                             delegator: (org.jetbrains.uast.evaluation.DepthLimitingEvaluatorVisitor) -> org.jetbrains.uast.visitor.UastTypedVisitor<org.jetbrains.uast.evaluation.UEvaluationState, org.jetbrains.uast.evaluation.UEvaluationInfo>) : UastTypedVisitor<UEvaluationState, UEvaluationInfo> {
+internal class DepthLimitingEvaluatorVisitor(
+  private val depthLimit: Int,
+  delegator: (DepthLimitingEvaluatorVisitor) -> UastTypedVisitor<UEvaluationState, UEvaluationInfo>
+) : UastTypedVisitor<UEvaluationState, UEvaluationInfo> {
 
   private val delegate = delegator(this)
 
   private var depth: Int = 0
+
+  private var errorLogged = false
 
   private inline fun <T : UElement> wrapCall(node: T,
                                              data: UEvaluationState,
@@ -19,7 +23,10 @@ internal class DepthLimitingEvaluatorVisitor(val depthLimit: kotlin.Int,
     try {
       depth++
       if (depth > depthLimit) {
-        LOG.info("evaluation depth exceeded $depth > $depthLimit for '$node' in '${node.sourcePsi?.containingFile?.name}'")
+        if (!errorLogged) {
+          LOG.info("evaluation depth exceeded $depth > $depthLimit for '$node' in '${node.sourcePsi?.containingFile?.name}'")
+          errorLogged = true
+        }
         return UUndeterminedValue to data
       }
       return delegateCall(node, data)
@@ -154,6 +161,9 @@ internal class DepthLimitingEvaluatorVisitor(val depthLimit: kotlin.Int,
 
   override fun visitBreakExpression(node: UBreakExpression, data: UEvaluationState): UEvaluationInfo =
     wrapCall(node, data, delegate::visitBreakExpression)
+
+  override fun visitYieldExpression(node: UYieldExpression, data: UEvaluationState): UEvaluationInfo =
+    wrapCall(node, data, delegate::visitYieldExpression)
 
   override fun visitContinueExpression(node: UContinueExpression, data: UEvaluationState): UEvaluationInfo =
     wrapCall(node, data, delegate::visitContinueExpression)

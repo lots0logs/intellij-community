@@ -15,8 +15,11 @@
  */
 package com.intellij.ide.util.newProjectWizard;
 
+import com.intellij.diagnostic.PluginException;
 import com.intellij.framework.FrameworkOrGroup;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.ui.CheckedTreeNode;
+import com.intellij.util.ui.EmptyIcon;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,10 +28,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * @author nik
- */
 public abstract class FrameworkSupportNodeBase<T extends FrameworkOrGroup> extends CheckedTreeNode {
+  private static final Logger LOG = Logger.getInstance(FrameworkSupportNodeBase.class);
   private final FrameworkSupportNodeBase myParentNode;
 
   public FrameworkSupportNodeBase(T userObject, final FrameworkSupportNodeBase parentNode) {
@@ -71,7 +72,14 @@ public abstract class FrameworkSupportNodeBase<T extends FrameworkOrGroup> exten
 
   @NotNull
   public final Icon getIcon() {
-    return getUserObject().getIcon();
+    Icon icon = getUserObject().getIcon();
+    //noinspection ConstantConditions
+    if (icon == null) {
+      Class<?> aClass = getUserObject().getClass();
+      PluginException.logPluginError(LOG, "FrameworkOrGroup::getIcon returns null for " + aClass, null, aClass);
+      return EmptyIcon.ICON_16;
+    }
+    return icon;
   }
 
   @NotNull

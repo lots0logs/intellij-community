@@ -17,18 +17,20 @@
 package com.intellij.codeInspection.htmlInspections;
 
 import com.intellij.codeHighlighting.HighlightDisplayLevel;
-import com.intellij.codeInsight.daemon.XmlErrorMessages;
 import com.intellij.codeInsight.daemon.impl.analysis.XmlHighlightVisitor;
-import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.LocalQuickFix;
+import com.intellij.codeInspection.ProblemDescriptor;
+import com.intellij.codeInspection.ProblemHighlightType;
+import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.html.HtmlTag;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.*;
-import com.intellij.xml.XmlBundle;
+import com.intellij.xml.analysis.XmlAnalysisBundle;
 import com.intellij.xml.util.XmlUtil;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -36,21 +38,6 @@ import org.jetbrains.annotations.NotNull;
  * @author spleaner
  */
 public class XmlWrongRootElementInspection extends HtmlLocalInspectionTool {
-
-  @Override
-  @Nls
-  @NotNull
-  public String getGroupDisplayName() {
-    return XmlInspectionGroupNames.XML_INSPECTIONS;
-  }
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return XmlBundle.message("xml.inspection.wrong.root.element");
-  }
-
   @Override
   @NonNls
   @NotNull
@@ -99,8 +86,8 @@ public class XmlWrongRootElementInspection extends HtmlLocalInspectionTool {
       String name = tag.getName();
       String text = nameElement.getText();
       if (tag instanceof HtmlTag) {
-        name = name.toLowerCase();
-        text = text.toLowerCase();
+        name = StringUtil.toLowerCase(name);
+        text = StringUtil.toLowerCase(text);
       }
 
       if (!name.equals(text)) {
@@ -113,15 +100,15 @@ public class XmlWrongRootElementInspection extends HtmlLocalInspectionTool {
           final LocalQuickFix localQuickFix = new MyLocalQuickFix(doctype.getNameElement().getText());
 
           holder.registerProblem(XmlChildRole.START_TAG_NAME_FINDER.findChild(tag.getNode()).getPsi(),
-            XmlErrorMessages.message("wrong.root.element"),
-            ProblemHighlightType.LIKE_UNKNOWN_SYMBOL, localQuickFix
+                                 XmlAnalysisBundle.message("wrong.root.element"),
+                                 ProblemHighlightType.LIKE_UNKNOWN_SYMBOL, localQuickFix
           );
 
           final ASTNode astNode = XmlChildRole.CLOSING_TAG_NAME_FINDER.findChild(tag.getNode());
           if (astNode != null) {
             holder.registerProblem(astNode.getPsi(),
-              XmlErrorMessages.message("wrong.root.element"),
-              ProblemHighlightType.LIKE_UNKNOWN_SYMBOL, localQuickFix
+                                   XmlAnalysisBundle.message("wrong.root.element"),
+                                   ProblemHighlightType.LIKE_UNKNOWN_SYMBOL, localQuickFix
             );
           }
         }
@@ -139,7 +126,7 @@ public class XmlWrongRootElementInspection extends HtmlLocalInspectionTool {
     @Override
     @NotNull
     public String getFamilyName() {
-      return XmlBundle.message("change.root.element.to", myText);
+      return XmlAnalysisBundle.message("change.root.element.to", myText);
     }
 
     @Override

@@ -13,11 +13,12 @@ import com.intellij.util.ArrayUtil;
 import com.siyeh.ig.psiutils.ControlFlowUtils;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import one.util.streamex.StreamEx;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.intellij.util.ObjectUtils.NULL;
 import static com.intellij.util.ObjectUtils.tryCast;
@@ -26,7 +27,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Represents a way to indicate whether method execution is already finished
  */
-class FinishMarker {
+public class FinishMarker {
   /**
    * Type of finish marker
    */
@@ -47,12 +48,12 @@ class FinishMarker {
    * @param returns list of all method returns
    * @return a FinishMarker which is suitable for given method
    */
-  static FinishMarker defineFinishMarker(@NotNull PsiCodeBlock block, @NotNull PsiType returnType, List<PsiReturnStatement> returns) {
+  public static FinishMarker defineFinishMarker(@NotNull PsiCodeBlock block, @NotNull PsiType returnType, List<? extends PsiReturnStatement> returns) {
     boolean mayNeedMarker = mayNeedMarker(returns, block);
     return defineFinishMarker(block, returns, returnType, mayNeedMarker, JavaPsiFacade.getElementFactory(block.getProject()));
   }
 
-  private static boolean mayNeedMarker(List<PsiReturnStatement> returns, PsiCodeBlock block) {
+  private static boolean mayNeedMarker(List<? extends PsiReturnStatement> returns, PsiCodeBlock block) {
     for (PsiReturnStatement returnStatement : returns) {
       if (mayNeedMarker(returnStatement, block)) return true;
     }
@@ -92,19 +93,23 @@ class FinishMarker {
       currentContext = loopOrSwitch;
     }
     else {
-      while (true) {
+      while (currentContext instanceof PsiIfStatement) {
         PsiElement ifParent = currentContext.getParent();
-        if (!(ifParent instanceof PsiCodeBlock)) break;
-        if (!(ifParent.getParent() instanceof PsiStatement)) {
-          return ifParent != block;
+        if (ifParent instanceof PsiIfStatement) {
+          currentContext = (PsiStatement)ifParent;
         }
-        currentContext = (PsiStatement)ifParent.getParent();
-        if (!(currentContext instanceof PsiBlockStatement) ||
-            !(currentContext.getParent() instanceof PsiIfStatement) ||
-            ControlFlowUtils.codeBlockMayCompleteNormally((PsiCodeBlock)ifParent)) {
-          break;
+        else if (ifParent instanceof PsiCodeBlock) {
+          if (!(ifParent.getParent() instanceof PsiStatement)) {
+            return ifParent != block;
+          }
+          currentContext = (PsiStatement)ifParent.getParent();
+          if (!(currentContext instanceof PsiBlockStatement) ||
+              !(currentContext.getParent() instanceof PsiIfStatement) ||
+              ControlFlowUtils.codeBlockMayCompleteNormally((PsiCodeBlock)ifParent)) {
+            break;
+          }
+          currentContext = (PsiStatement)currentContext.getParent();
         }
-        currentContext = (PsiStatement)currentContext.getParent();
       }
     }
     while (true) {
@@ -127,13 +132,13 @@ class FinishMarker {
     }
   }
 
-  private static FinishMarker defineFinishMarker(PsiCodeBlock block, List<PsiReturnStatement> returns, PsiType returnType,
+  private static FinishMarker defineFinishMarker(PsiCodeBlock block, List<? extends PsiReturnStatement> returns, PsiType returnType,
                                                  boolean mayNeedMarker, PsiElementFactory factory) {
     if (PsiType.VOID.equals(returnType)) {
       return new FinishMarker(FinishMarkerType.SEPARATE_VAR, null);
     }
     PsiReturnStatement terminalReturn = tryCast(ArrayUtil.getLastElement(block.getStatements()), PsiReturnStatement.class);
-    List<PsiExpression> nonTerminalReturns = StreamEx.of(returns).without(terminalReturn)
+    List<PsiExpression> nonTerminalReturns = StreamEx.<PsiReturnStatement>of(returns).without(terminalReturn)
       .map(PsiReturnStatement::getReturnValue)
       .map(PsiUtil::skipParenthesizedExprDown).toList();
     if (nonTerminalReturns.size() == 0) {
@@ -143,10 +148,11 @@ class FinishMarker {
       .map(val -> val instanceof PsiLiteralExpression ? ((PsiLiteralExpression)val).getValue() : NULL)
       .toSet();
     if (!mayNeedMarker) {
-      if (nonTerminalReturnValues.size() == 1 && nonTerminalReturnValues.iterator().next() != NULL) {
-        return new FinishMarker(FinishMarkerType.SEPARATE_VAR, nonTerminalReturns.iterator().next());
+      PsiExpression initValue = findBestExpression(terminalReturn, nonTerminalReturns, mayNeedMarker);
+      if (initValue == null && nonTerminalReturnValues.size() == 1 && nonTerminalReturnValues.iterator().next() != NULL) {
+        initValue = nonTerminalReturns.iterator().next();
       }
-      return new FinishMarker(FinishMarkerType.SEPARATE_VAR, null);
+      return new FinishMarker(FinishMarkerType.SEPARATE_VAR, initValue);
     }
     if (PsiType.BOOLEAN.equals(returnType)) {
       if (nonTerminalReturnValues.size() == 1) {
@@ -159,7 +165,7 @@ class FinishMarker {
       }
     }
     if (PsiType.INT.equals(returnType) || PsiType.LONG.equals(returnType)) {
-      return getMarkerForIntegral(nonTerminalReturns, terminalReturn, returnType, factory);
+      return getMarkerForIntegral(nonTerminalReturns, terminalReturn, mayNeedMarker, returnType, factory);
     }
     if (!(returnType instanceof PsiPrimitiveType)) {
       if (StreamEx.of(nonTerminalReturns).map(ret -> NullabilityUtil.getExpressionNullability(ret, true))
@@ -169,17 +175,40 @@ class FinishMarker {
     }
     if (terminalReturn != null) {
       PsiExpression value = terminalReturn.getReturnValue();
-      if (value != null && canMoveToStart(value)) {
+      if (canMoveToStart(value)) {
         return new FinishMarker(FinishMarkerType.SEPARATE_VAR, value);
       }
     }
-    return new FinishMarker(FinishMarkerType.SEPARATE_VAR, null);
+    return new FinishMarker(FinishMarkerType.SEPARATE_VAR, findBestExpression(terminalReturn, nonTerminalReturns, mayNeedMarker));
+  }
+
+  @Nullable
+  private static PsiExpression findBestExpression(PsiReturnStatement terminalReturn,
+                                                  List<PsiExpression> nonTerminalReturns,
+                                                  boolean mayNeedMarker) {
+    List<PsiExpression> bestGroup = StreamEx.of(nonTerminalReturns)
+      .filter(FinishMarker::canMoveToStart)
+      .groupingBy(PsiExpression::getText, LinkedHashMap::new, Collectors.toList())
+      .values()
+      .stream()
+      .max(Comparator.comparingInt(List::size))
+      .orElse(Collections.emptyList());
+    if (bestGroup.size() >= 2) {
+      return bestGroup.get(0);
+    }
+    if (terminalReturn != null && canMoveToStart(terminalReturn.getReturnValue())) {
+      return terminalReturn.getReturnValue();
+    }
+    if (mayNeedMarker && !bestGroup.isEmpty()) {
+      return bestGroup.get(0);
+    }
+    return null;
   }
 
   @NotNull
   private static FinishMarker getMarkerForIntegral(List<PsiExpression> nonTerminalReturns,
                                                    PsiReturnStatement terminalReturn,
-                                                   PsiType returnType, PsiElementFactory factory) {
+                                                   boolean mayNeedMarker, PsiType returnType, PsiElementFactory factory) {
     boolean isLong = PsiType.LONG.equals(returnType);
     LongRangeSet fullSet = requireNonNull(LongRangeSet.fromType(returnType));
     LongRangeSet set = nonTerminalReturns.stream()
@@ -217,18 +246,19 @@ class FinishMarker {
         return new FinishMarker(FinishMarkerType.VALUE_NON_EQUAL, factory.createExpressionFromText(text, null));
       }
     }
-    return new FinishMarker(FinishMarkerType.SEPARATE_VAR, null);
+    return new FinishMarker(FinishMarkerType.SEPARATE_VAR, findBestExpression(terminalReturn, nonTerminalReturns, mayNeedMarker));
   }
 
-  static boolean canMoveToStart(PsiExpression value) {
+  @Contract("null -> false")
+  private static boolean canMoveToStart(PsiExpression value) {
     if (!ExpressionUtils.isSafelyRecomputableExpression(value)) return false;
     PsiReferenceExpression ref = tryCast(PsiUtil.skipParenthesizedExprDown(value), PsiReferenceExpression.class);
     if (ref != null && !ref.isQualified()) {
       PsiVariable target = tryCast(ref.resolve(), PsiVariable.class);
       if (target instanceof PsiLocalVariable) return false;
       if (target instanceof PsiParameter) {
-        PsiElement block = PsiUtil.getVariableCodeBlock(target, null);
-        return block != null && HighlightControlFlowUtil.isEffectivelyFinal(target, block, null);
+        PsiElement block = ((PsiParameter)target).getDeclarationScope();
+        return block instanceof PsiMethod && HighlightControlFlowUtil.isEffectivelyFinal(target, block, null);
       }
     }
     return true;

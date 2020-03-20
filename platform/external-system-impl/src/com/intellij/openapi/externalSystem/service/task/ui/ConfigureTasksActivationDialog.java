@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service.task.ui;
 
+import com.intellij.icons.AllIcons;
 import com.intellij.ide.projectView.PresentationData;
 import com.intellij.ide.util.treeView.AbstractTreeBuilder;
 import com.intellij.ide.util.treeView.NodeDescriptor;
@@ -48,13 +35,12 @@ import com.intellij.openapi.util.WriteExternalException;
 import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.treeStructure.*;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.Function;
 import com.intellij.util.ObjectUtils;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.SwingHelper;
-import icons.ExternalSystemIcons;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -101,9 +87,8 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
     myTaskActivator = getInstance(myProject).getTaskActivator();
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
+  protected Action @NotNull [] createActions() {
     return new Action[]{getOKAction()};
   }
 
@@ -149,7 +134,7 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
 
         if (projectData == null || projectData.getExternalProjectStructure() == null) return;
 
-        final List<ProjectPopupItem> popupItems = ContainerUtil.newArrayList();
+        final List<ProjectPopupItem> popupItems = new ArrayList<>();
         for (DataNode<ModuleData> moduleDataNode : ExternalSystemApiUtil
           .findAllRecursively(projectData.getExternalProjectStructure(), ProjectKeys.MODULE)) {
           if(moduleDataNode.isIgnored()) continue;
@@ -177,8 +162,7 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
       setMoveUpActionUpdater(e -> isMoveActionEnabled(-1)).
       setMoveDownAction(button -> moveAction(+1)).
       setMoveDownActionUpdater(e -> isMoveActionEnabled(+1)).
-      setToolbarPosition(ActionToolbarPosition.RIGHT).
-      setToolbarBorder(JBUI.Borders.empty());
+      setToolbarPosition(ActionToolbarPosition.RIGHT);
     tasksPanel.add(decorator.createPanel());
     return contentPane;
   }
@@ -244,16 +228,16 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
 
   @NotNull
   private List<TaskActivationEntry> findSelectedTasks() {
-    List<TaskActivationEntry> tasks = ContainerUtil.newSmartList();
+    List<TaskActivationEntry> tasks = new SmartList<>();
     for (DefaultMutableTreeNode node : myTree.getSelectedNodes(DefaultMutableTreeNode.class, null)) {
-      ContainerUtil.addAll(tasks, findTasksUnder(ContainerUtil.ar((MyNode)node.getUserObject())));
+      tasks.addAll(findTasksUnder(ContainerUtil.ar((MyNode)node.getUserObject())));
     }
     return tasks;
   }
 
   @NotNull
-  private List<TaskActivationEntry> findTasksUnder(@NotNull SimpleNode[] nodes) {
-    List<TaskActivationEntry> tasks = ContainerUtil.newSmartList();
+  private List<TaskActivationEntry> findTasksUnder(SimpleNode @NotNull [] nodes) {
+    List<TaskActivationEntry> tasks = new SmartList<>();
     for (SimpleNode node : nodes) {
       if (node instanceof TaskNode) {
         final TaskNode taskNode = (TaskNode)node;
@@ -262,14 +246,14 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
         tasks.add(new TaskActivationEntry(myProjectSystemId, phaseNode.myPhase, phaseNode.myProjectPath, taskName));
       }
       else {
-        ContainerUtil.addAll(tasks, findTasksUnder(node.getChildren()));
+        tasks.addAll(findTasksUnder(node.getChildren()));
       }
     }
     return tasks;
   }
 
   private List<String> findSelectedProjects() {
-    List<String> tasks = ContainerUtil.newArrayList();
+    List<String> tasks = new ArrayList<>();
     for (DefaultMutableTreeNode node : myTree.getSelectedNodes(DefaultMutableTreeNode.class, null)) {
       if (node.getUserObject() instanceof ProjectNode) {
         final ProjectNode projectNode = (ProjectNode)node.getUserObject();
@@ -282,10 +266,10 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
   private MyNode[] buildProjectsNodes(final ExternalProjectSettings projectSettings,
                                       final ExternalProjectsStateProvider stateProvider,
                                       final RootNode parent) {
-    List<String> paths = ContainerUtil.newArrayList(stateProvider.getProjectsTasksActivationMap(myProjectSystemId).keySet());
+    List<String> paths = new ArrayList<>(stateProvider.getProjectsTasksActivationMap(myProjectSystemId).keySet());
     paths.retainAll(projectSettings.getModules());
 
-    return ContainerUtil.mapNotNull(ArrayUtil.toStringArray(paths), path -> {
+    return ContainerUtil.mapNotNull(ArrayUtilRt.toStringArray(paths), path -> {
       final MyNode node = new ProjectNode(parent, stateProvider, projectSettings.getExternalProjectPath(), path);
       return node.getChildren().length > 0 ? node : null;
     }, new MyNode[]{});
@@ -405,7 +389,7 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
           final String projectPath = projectPopupItem.myModuleData.getLinkedExternalProjectPath();
           final List<String> tasks = activationMap.get(projectPath).getTasks(selectedPhase);
 
-          final List<String> tasksToSuggest = ContainerUtil.newArrayList(projectPopupItem.myTasks);
+          final List<String> tasksToSuggest = new ArrayList<>(projectPopupItem.myTasks);
           tasksToSuggest.removeAll(tasks);
           return new BaseListPopupStep<String>("Choose task", tasksToSuggest) {
             @Override
@@ -489,7 +473,7 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
     @Override
     protected void update(@NotNull PresentationData presentation) {
       super.update(presentation);
-      presentation.setIcon(ExternalSystemIcons.TaskGroup);
+      presentation.setIcon(AllIcons.Nodes.ConfigFolder);
     }
 
     @Override
@@ -519,7 +503,7 @@ public class ConfigureTasksActivationDialog extends DialogWrapper {
     @Override
     protected void update(@NotNull PresentationData presentation) {
       super.update(presentation);
-      presentation.setIcon(ExternalSystemIcons.TaskGroup);
+      presentation.setIcon(AllIcons.Nodes.ConfigFolder);
     }
 
     @Override

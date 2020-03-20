@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util.text;
 
 import com.intellij.ReviseWhenPortedToJDK;
@@ -10,6 +10,9 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.util.*;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.*;
+import gnu.trove.TIntArrayList;
+import gnu.trove.TLongArrayList;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -26,17 +29,18 @@ import java.util.StringTokenizer;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 //TeamCity inherits StringUtil: do not add private constructors!!!
 @SuppressWarnings("MethodOverridesStaticMethodOfSuperclass")
 public class StringUtil extends StringUtilRt {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.util.text.StringUtil");
-
   @SuppressWarnings("SpellCheckingInspection") private static final String VOWELS = "aeiouy";
   private static final Pattern EOL_SPLIT_KEEP_SEPARATORS = Pattern.compile("(?<=(\r\n|\n))|(?<=\r)(?=[^\n])");
   private static final Pattern EOL_SPLIT_PATTERN = Pattern.compile(" *(\r|\n|\r\n)+ *");
   private static final Pattern EOL_SPLIT_PATTERN_WITH_EMPTY = Pattern.compile(" *(\r|\n|\r\n) *");
   private static final Pattern EOL_SPLIT_DONT_TRIM_PATTERN = Pattern.compile("(\r|\n|\r\n)+");
+  public static final String ELLIPSIS = "\u2026";
 
   /**
    * @return a lightweight CharSequence which results from replacing {@code [start, end)} range in the {@code charSeq} with {@code replacement}.
@@ -65,7 +69,7 @@ public class StringUtil extends StringUtilRt {
     }
 
     @Override
-    public void handleText(@NotNull char[] text, int pos) {
+    public void handleText(char @NotNull [] text, int pos) {
       if (!myIsStyleTagOpened) {
         myBuffer.append(text);
       }
@@ -292,8 +296,8 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(value = "null -> null; !null -> !null", pure = true)
-  public static String toLowerCase(@Nullable final String str) {
-    return str == null ? null : str.toLowerCase();
+  public static String toLowerCase(@Nullable String str) {
+    return str == null ? null : str.toLowerCase(Locale.ENGLISH);
   }
 
   @NotNull
@@ -463,7 +467,7 @@ public class StringUtil extends StringUtilRt {
   @NotNull
   @Contract(pure = true)
   public static String wordsToBeginFromUpperCase(@NotNull String s) {
-    return fixCapitalization(s, ourPrepositions, true);
+    return fixCapitalization(s, ArrayUtil.mergeArrays(ourPrepositions, ourOtherNonCapitalizableWords), true);
   }
 
   @NotNull
@@ -475,11 +479,11 @@ public class StringUtil extends StringUtilRt {
   @NotNull
   @Contract(pure = true)
   public static String toTitleCase(@NotNull String s) {
-    return fixCapitalization(s, ArrayUtil.EMPTY_STRING_ARRAY, true);
+    return fixCapitalization(s, ArrayUtilRt.EMPTY_STRING_ARRAY, true);
   }
 
   @NotNull
-  private static String fixCapitalization(@NotNull String s, @NotNull String[] prepositions, boolean title) {
+  private static String fixCapitalization(@NotNull String s, String @NotNull [] prepositions, boolean title) {
     StringBuilder buffer = null;
     for (int i = 0; i < s.length(); i++) {
       char prevChar = i == 0 ? ' ' : s.charAt(i - 1);
@@ -515,20 +519,30 @@ public class StringUtil extends StringUtilRt {
     "per", "nor", "the", "to", "up", "upon", "via", "with"
   };
 
+  private static final String[] ourOtherNonCapitalizableWords = {
+    "iOS", "iPhone", "iPad", "iMac"
+  };
+
+  /**
+   * @deprecated Use {@link #isPreposition(String, int, int, String[])}.
+   */
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.1")
+  @Deprecated
   @Contract(pure = true)
   public static boolean isPreposition(@NotNull String s, int firstChar, int lastChar) {
     return isPreposition(s, firstChar, lastChar, ourPrepositions);
   }
 
   @Contract(pure = true)
-  public static boolean isPreposition(@NotNull String s, int firstChar, int lastChar, @NotNull String[] prepositions) {
+  public static boolean isPreposition(@NotNull String s, int firstChar, int lastChar, String @NotNull [] prepositions) {
     for (String preposition : prepositions) {
       boolean found = false;
       if (lastChar - firstChar + 1 == preposition.length()) {
         found = true;
         for (int j = 0; j < preposition.length(); j++) {
-          if (toLowerCase(s.charAt(firstChar + j)) != preposition.charAt(j)) {
+          if (toLowerCase(s.charAt(firstChar + j)) != toLowerCase(preposition.charAt(j))) {
             found = false;
+            break;
           }
         }
       }
@@ -610,7 +624,7 @@ public class StringUtil extends StringUtilRt {
             buffer.append("\\").append(ch);
           }
           else if (escapeUnicode && !isPrintableUnicode(ch)) {
-            CharSequence hexCode = StringUtilRt.toUpperCase(Integer.toHexString(ch));
+            CharSequence hexCode = toUpperCase(Integer.toHexString(ch));
             buffer.append("\\u");
             int paddingCount = 4 - hexCode.length();
             while (paddingCount-- > 0) {
@@ -646,7 +660,7 @@ public class StringUtil extends StringUtilRt {
   @Contract(pure = true)
   public static String escapeCharCharacters(@NotNull String s) {
     StringBuilder buffer = new StringBuilder(s.length());
-    escapeStringCharacters(s.length(), s, "\'", buffer);
+    escapeStringCharacters(s.length(), s, "'", buffer);
     return buffer.toString();
   }
 
@@ -793,7 +807,7 @@ public class StringUtil extends StringUtilRt {
   @Contract(pure = true)
   public static String capitalizeWords(@NotNull String text,
                                        boolean allWords) {
-    return capitalizeWords(text, " \t\n\r\f", allWords, false);
+    return capitalizeWords(text, " \t\n\r\f([<", allWords, true);
   }
 
   @NotNull
@@ -836,7 +850,7 @@ public class StringUtil extends StringUtilRt {
   @Contract(pure = true)
   public static String capitalize(@NotNull String s) {
     if (s.isEmpty()) return s;
-    if (s.length() == 1) return StringUtilRt.toUpperCase(s).toString();
+    if (s.length() == 1) return toUpperCase(s);
 
     // Optimization
     if (Character.isUpperCase(s.charAt(0))) return s;
@@ -869,7 +883,12 @@ public class StringUtil extends StringUtilRt {
 
   @Contract(pure = true)
   public static int stringHashCode(@NotNull CharSequence chars, int from, int to) {
-    int h = 0;
+    return stringHashCode(chars, from, to, 0);
+  }
+
+  @Contract(pure = true)
+  public static int stringHashCode(@NotNull CharSequence chars, int from, int to, int prefixHash) {
+    int h = prefixHash;
     for (int off = from; off < to; off++) {
       h = 31 * h + chars.charAt(off);
     }
@@ -886,7 +905,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(pure = true)
-  public static int stringHashCodeInsensitive(@NotNull char[] chars, int from, int to) {
+  public static int stringHashCodeInsensitive(char @NotNull [] chars, int from, int to) {
     int h = 0;
     for (int off = from; off < to; off++) {
       h = 31 * h + toLowerCase(chars[off]);
@@ -896,7 +915,12 @@ public class StringUtil extends StringUtilRt {
 
   @Contract(pure = true)
   public static int stringHashCodeInsensitive(@NotNull CharSequence chars, int from, int to) {
-    int h = 0;
+    return stringHashCodeInsensitive(chars, from, to, 0);
+  }
+
+  @Contract(pure = true)
+  public static int stringHashCodeInsensitive(@NotNull CharSequence chars, int from, int to, int prefixHash) {
+    int h = prefixHash;
     for (int off = from; off < to; off++) {
       h = 31 * h + toLowerCase(chars.charAt(off));
     }
@@ -909,7 +933,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(pure = true)
-  public static int stringHashCodeIgnoreWhitespaces(@NotNull char[] chars, int from, int to) {
+  public static int stringHashCodeIgnoreWhitespaces(char @NotNull [] chars, int from, int to) {
     int h = 0;
     for (int off = from; off < to; off++) {
       char c = chars[off];
@@ -941,7 +965,7 @@ public class StringUtil extends StringUtilRt {
    * Equivalent to string.startsWith(prefixes[0] + prefixes[1] + ...) but avoids creating an object for concatenation.
    */
   @Contract(pure = true)
-  public static boolean startsWithConcatenation(@NotNull String string, @NotNull String... prefixes) {
+  public static boolean startsWithConcatenation(@NotNull String string, String @NotNull ... prefixes) {
     int offset = 0;
     for (String prefix : prefixes) {
       int prefixLen = prefix.length();
@@ -1092,7 +1116,7 @@ public class StringUtil extends StringUtilRt {
       }
     }
     catch (IOException e) {
-      LOG.error(e);
+      Logger.getInstance(StringUtil.class).error(e);
     }
   }
 
@@ -1179,12 +1203,6 @@ public class StringUtil extends StringUtilRt {
   @Contract(pure = true)
   public static String getThrowableText(@NotNull Throwable aThrowable) {
     return ExceptionUtil.getThrowableText(aThrowable);
-  }
-
-  @NotNull
-  @Contract(pure = true)
-  public static String getThrowableText(@NotNull Throwable aThrowable, @NotNull final String stackFrameSkipPattern) {
-    return ExceptionUtil.getThrowableText(aThrowable, stackFrameSkipPattern);
   }
 
   @Nullable
@@ -1382,13 +1400,13 @@ public class StringUtil extends StringUtilRt {
 
   @NotNull
   @Contract(pure = true)
-  public static String join(@NotNull final String[] strings, @NotNull final String separator) {
+  public static String join(final String @NotNull [] strings, @NotNull final String separator) {
     return join(strings, 0, strings.length, separator);
   }
 
   @NotNull
   @Contract(pure = true)
-  public static String join(@NotNull final String[] strings, int startIndex, int endIndex, @NotNull final String separator) {
+  public static String join(final String @NotNull [] strings, int startIndex, int endIndex, @NotNull final String separator) {
     final StringBuilder result = new StringBuilder();
     for (int i = startIndex; i < endIndex; i++) {
       if (i > startIndex) result.append(separator);
@@ -1397,9 +1415,8 @@ public class StringUtil extends StringUtilRt {
     return result.toString();
   }
 
-  @NotNull
   @Contract(pure = true)
-  public static String[] zip(@NotNull String[] strings1, @NotNull String[] strings2, String separator) {
+  public static String @NotNull [] zip(String @NotNull [] strings1, String @NotNull [] strings2, String separator) {
     if (strings1.length != strings2.length) throw new IllegalArgumentException();
 
     String[] result = ArrayUtil.newStringArray(strings1.length);
@@ -1410,9 +1427,8 @@ public class StringUtil extends StringUtilRt {
     return result;
   }
 
-  @NotNull
   @Contract(pure = true)
-  public static String[] surround(@NotNull String[] strings, @NotNull String prefix, @NotNull String suffix) {
+  public static String @NotNull [] surround(String @NotNull [] strings, @NotNull String prefix, @NotNull String suffix) {
     String[] result = ArrayUtil.newStringArray(strings.length);
     for (int i = 0; i < result.length; i++) {
       result[i] = prefix + strings[i] + suffix;
@@ -1422,7 +1438,7 @@ public class StringUtil extends StringUtilRt {
 
   @NotNull
   @Contract(pure = true)
-  public static <T> String join(@NotNull T[] items, @NotNull Function<? super T, String> f, @NotNull String separator) {
+  public static <T> String join(T @NotNull [] items, @NotNull Function<? super T, String> f, @NotNull String separator) {
     return join(Arrays.asList(items), f, separator);
   }
 
@@ -1436,6 +1452,7 @@ public class StringUtil extends StringUtilRt {
     return join((Iterable<? extends T>)items, f, separator);
   }
 
+  @NotNull
   @Contract(pure = true)
   public static String join(@NotNull Iterable<?> items, @NotNull String separator) {
     StringBuilder result = new StringBuilder();
@@ -1451,7 +1468,7 @@ public class StringUtil extends StringUtilRt {
   @NotNull
   @Contract(pure = true)
   public static <T> String join(@NotNull Iterable<? extends T> items,
-                                @NotNull Function<? super T, String> f,
+                                @NotNull Function<? super T, ? extends CharSequence> f,
                                 @NotNull String separator) {
     StringBuilder result = new StringBuilder();
     join(items, f, separator, result);
@@ -1459,12 +1476,12 @@ public class StringUtil extends StringUtilRt {
   }
 
   public static <T> void join(@NotNull Iterable<? extends T> items,
-                              @NotNull Function<? super T, String> f,
+                              @NotNull Function<? super T, ? extends CharSequence> f,
                               @NotNull String separator,
                               @NotNull StringBuilder result) {
     boolean isFirst = true;
     for (T item : items) {
-      String string = f.fun(item);
+      CharSequence string = f.fun(item);
       if (!isEmpty(string)) {
         if (isFirst) {
           isFirst = false;
@@ -1505,7 +1522,7 @@ public class StringUtil extends StringUtilRt {
 
   @NotNull
   @Contract(pure = true)
-  public static String join(@NotNull final int[] strings, @NotNull final String separator) {
+  public static String join(final int @NotNull [] strings, @NotNull final String separator) {
     final StringBuilder result = new StringBuilder();
     for (int i = 0; i < strings.length; i++) {
       if (i > 0) result.append(separator);
@@ -1516,7 +1533,7 @@ public class StringUtil extends StringUtilRt {
 
   @NotNull
   @Contract(pure = true)
-  public static String join(@NotNull final String... strings) {
+  public static String join(final String @NotNull ... strings) {
     if (strings.length == 0) return "";
 
     final StringBuilder builder = new StringBuilder();
@@ -1524,6 +1541,12 @@ public class StringUtil extends StringUtilRt {
       builder.append(string);
     }
     return builder.toString();
+  }
+
+  @NotNull
+  @Contract(pure = true)
+  public static Collector<CharSequence, ?, String> joining() {
+    return Collectors.joining(", ");
   }
 
   /**
@@ -1560,17 +1583,17 @@ public class StringUtil extends StringUtilRt {
     return StringUtilRt.formatFileSize(fileSize, unitSeparator);
   }
 
-  /** Formats given duration as a sum of time units (example: {@code formatDuration(123456) = "2 m 3 s 456 ms"}). */
+  /** Formats duration given in milliseconds as a sum of time units (example: {@code formatDuration(123456) = "2 m 3 s 456 ms"}). */
   @NotNull
   @Contract(pure = true)
   public static String formatDuration(long duration) {
     return formatDuration(duration, " ");
   }
 
-  private static final String[] TIME_UNITS = {"ms", "s", "m", "h", "d", "mo", "yr", "c", "ml", "ep"};
-  private static final long[] TIME_MULTIPLIERS = {1, 1000, 60, 60, 24, 30, 12, 100, 10, 10000};
+  private static final String[] TIME_UNITS = {"ms", "s", "m", "h", "d"};
+  private static final long[] TIME_MULTIPLIERS = {1, 1000, 60, 60, 24};
 
-  /** Formats given duration as a sum of time units (example: {@code formatDuration(123456, "") = "2m 3s 456ms"}). */
+  /** Formats duration given in milliseconds as a sum of time units (example: {@code formatDuration(123456, "") = "2m 3s 456ms"}). */
   @NotNull
   @Contract(pure = true)
   public static String formatDuration(long duration, @NotNull String unitSeparator) {
@@ -1580,36 +1603,87 @@ public class StringUtil extends StringUtilRt {
   @NotNull
   @Contract(pure = true)
   private static String formatDuration(long duration, @NotNull String unitSeparator, int maxFragments) {
-    String[] units = TIME_UNITS;
-
-    List<String> fragments = new ArrayList<>();
+    TLongArrayList unitValues = new TLongArrayList();
+    TIntArrayList unitIndices = new TIntArrayList();
 
     long count = duration;
     int i = 1;
-    for (; i < units.length && count > 0; i++) {
+    for (; i < TIME_UNITS.length && count > 0; i++) {
       long multiplier = TIME_MULTIPLIERS[i];
       if (count < multiplier) break;
       long remainder = count % multiplier;
       count /= multiplier;
-      if (remainder != 0 || fragments.size() > 0) {
-        fragments.add(0, remainder + unitSeparator + units [i - 1]);
+      if (remainder != 0 || !unitValues.isEmpty()) {
+        unitValues.insert(0, remainder);
+        unitIndices.insert(0, i - 1);
       }
       else {
         remainder = Math.round(remainder * 100 / (double)multiplier);
         count += remainder / 100;
       }
     }
-    fragments.add(0, count + unitSeparator + units [i - 1]);
-    if (fragments.size() > maxFragments) {
-      fragments = fragments.subList(0, maxFragments);
+    unitValues.insert(0, count);
+    unitIndices.insert(0, i - 1);
+
+    if (unitValues.size() > maxFragments) {
+      int lastUnitIndex = unitIndices.get(maxFragments - 1);
+      long lastMultiplier = TIME_MULTIPLIERS[lastUnitIndex];
+      // Round up if needed
+      if (unitValues.get(maxFragments) > lastMultiplier / 2) {
+        long increment = lastMultiplier - unitValues.get(maxFragments);
+        for (int unit = lastUnitIndex - 1; unit > 0; unit--) {
+          increment *= TIME_MULTIPLIERS[unit];
+        }
+        return formatDuration(duration + increment, unitSeparator, maxFragments);
+      }
     }
-    return join(fragments, " ");
+
+    StringBuilder result = new StringBuilder();
+    for (i = 0; i < unitValues.size() && i < maxFragments; i++) {
+      if (i > 0) result.append(" ");
+      result.append(unitValues.get(i)).append(unitSeparator).append(TIME_UNITS[unitIndices.get(i)]);
+    }
+    return result.toString();
+  }
+
+  private static final String[] PADDED_FORMATS = {"%03d", "%02d", "%02d", "%02d", "%d"};
+  /**
+   * Formats duration given in milliseconds as a sum of padded time units, except the most significant unit
+   * E.g. 234523598 padded as "2 d 03 h 11 min 04 sec 004 ms" accordingly with zeros except "days" here.
+   */
+  @NotNull
+  @Contract(pure = true)
+  public static String formatDurationPadded(long millis, @NotNull String unitSeparator) {
+    StringBuilder result = new StringBuilder();
+
+    long millisIn = 1;
+    int i;
+    for (i=1; i < TIME_MULTIPLIERS.length; i++) {
+      long multiplier = TIME_MULTIPLIERS[i];
+      millisIn *= multiplier;
+      if (millis < millisIn) {
+        break;
+      }
+    }
+    long d = millis;
+    for (i-=1; i >= 0; i--) {
+      long multiplier = i==TIME_MULTIPLIERS.length-1 ? 1 : TIME_MULTIPLIERS[i+1];
+      millisIn /= multiplier;
+      long value = d / millisIn;
+      d = d % millisIn;
+      String format = result.length() == 0 ? "%d" : PADDED_FORMATS[i]; // do not pad the most significant unit
+      if (result.length() != 0) result.append(" ");
+      result.append(String.format(format, value)).append(unitSeparator).append(TIME_UNITS[i]);
+    }
+    return result.toString();
   }
 
   /**
-   * Formats given duration as a sum of time units with at most two units
-   * (example: {@code formatDuration(123456, "") = "2m 3s"}).
+   * Formats duration given in milliseconds as a sum of time units with at most two units
+   * (example: {@code formatDuration(123456) = "2 m 3 s"}).
    */
+  @NotNull
+  @Contract(pure = true)
   public static String formatDurationApproximate(long duration) {
     return formatDuration(duration, " ", 2);
   }
@@ -1617,6 +1691,8 @@ public class StringUtil extends StringUtilRt {
   /**
    * Appends English ordinal suffix to the given number.
    */
+  @NotNull
+  @Contract(pure = true)
   public static String formatOrdinal(long num) {
     return OrdinalFormat.formatEnglish(num);
   }
@@ -1708,6 +1784,32 @@ public class StringUtil extends StringUtilRt {
     return result.toString();
   }
 
+  /**
+   * Trim all characters not accepted by given filter
+   *
+   * @param s      e.g. "/n    my string "
+   * @param filter e.g. {@link CharFilter#NOT_WHITESPACE_FILTER}
+   * @return trimmed string e.g. "my string"
+   */
+  @NotNull
+  @Contract(pure = true)
+  public static String trim(@NotNull final String s, @NotNull final CharFilter filter) {
+    int start = 0;
+    int end = s.length();
+
+    for (; start < end; start++) {
+      char ch = s.charAt(start);
+      if (filter.accept(ch)) break;
+    }
+
+    for (; start < end; end--) {
+      char ch = s.charAt(end - 1);
+      if (filter.accept(ch)) break;
+    }
+
+    return s.substring(start, end);
+  }
+
   @NotNull
   @Contract(pure = true)
   public static List<String> findMatches(@NotNull String s, @NotNull Pattern pattern) {
@@ -1795,6 +1897,18 @@ public class StringUtil extends StringUtilRt {
   @Contract(pure = true)
   public static boolean endsWith(@NotNull CharSequence text, @NotNull CharSequence suffix) {
     return StringUtilRt.endsWith(text, suffix);
+  }
+
+  @Contract(pure = true)
+  public static boolean endsWith(@NotNull CharSequence text, int start, int end, @NotNull CharSequence suffix) {
+    int suffixLen = suffix.length();
+    if (end < suffixLen) return false;
+
+    for (int i = end - 1; i >= end - suffixLen && i >= start; i--) {
+      if (text.charAt(i) != suffix.charAt(i + suffixLen - end)) return false;
+    }
+
+    return true;
   }
 
   @NotNull
@@ -1919,7 +2033,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(pure = true)
-  public static int indexOf(@NotNull char[] s, char c, int start, int end, boolean caseSensitive) {
+  public static int indexOf(char @NotNull [] s, char c, int start, int end, boolean caseSensitive) {
     end = Math.min(end, s.length);
     for (int i = Math.max(start, 0); i < end; i++) {
       if (charsMatch(s[i], c, !caseSensitive)) return i;
@@ -2047,7 +2161,7 @@ public class StringUtil extends StringUtilRt {
   @Contract(pure = true)
   public static String firstLast(@NotNull String text, int length) {
     return text.length() > length
-           ? text.subSequence(0, length / 2) + "\u2026" + text.subSequence(text.length() - length / 2 - 1, text.length())
+           ? text.subSequence(0, length / 2) + ELLIPSIS + text.subSequence(text.length() - length / 2 - 1, text.length())
            : text;
   }
 
@@ -2059,7 +2173,7 @@ public class StringUtil extends StringUtilRt {
 
   @NotNull
   @Contract(pure = true)
-  public static String escapeChars(@NotNull final String str, final char... character) {
+  public static String escapeChars(@NotNull final String str, final char @NotNull ... character) {
     final StringBuilder buf = new StringBuilder(str);
     for (char c : character) {
       escapeChar(buf, c);
@@ -2211,9 +2325,22 @@ public class StringUtil extends StringUtilRt {
       parser.parse(new StringReader(htmlString));
     }
     catch (IOException e) {
-      LOG.error(e);
+      Logger.getInstance(StringUtil.class).error(e);
     }
     return parser.getText();
+  }
+
+  @Contract(pure=true)
+  @NotNull
+  public static String removeEllipsisSuffix(@NotNull String s) {
+    String THREE_DOTS = "...";
+    if (s.endsWith(THREE_DOTS)) {
+      return s.substring(0, s.length() - THREE_DOTS.length());
+    }
+    if (s.endsWith(ELLIPSIS)) {
+      return s.substring(0, s.length() - ELLIPSIS.length());
+    }
+    return s;
   }
 
   private static final List<String> MN_QUOTED = Arrays.asList("&&", "__");
@@ -2253,7 +2380,12 @@ public class StringUtil extends StringUtilRt {
         builder.append("\\r");
       }
       else {
-        builder.append('\\').append(c);
+        final Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
+        if (block == Character.UnicodeBlock.HIGH_SURROGATES || block == Character.UnicodeBlock.LOW_SURROGATES) {
+          builder.append(c);
+        } else {
+          builder.append('\\').append(c);
+        }
       }
     }
 
@@ -2261,7 +2393,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(pure = true)
-  public static boolean isEscapedBackslash(@NotNull char[] chars, int startOffset, int backslashOffset) {
+  public static boolean isEscapedBackslash(char @NotNull [] chars, int startOffset, int backslashOffset) {
     if (chars[backslashOffset] != '\\') {
       return true;
     }
@@ -2300,7 +2432,7 @@ public class StringUtil extends StringUtilRt {
   @Deprecated
   @NotNull
   @Contract(pure = true)
-  public static String replace(@NotNull String text, @NotNull String[] from, @NotNull String[] to) {
+  public static String replace(@NotNull String text, String @NotNull [] from, String @NotNull [] to) {
     return replace(text, Arrays.asList(from), Arrays.asList(to));
   }
 
@@ -2316,6 +2448,7 @@ public class StringUtil extends StringUtilRt {
         String replaceWith = to.get(j);
 
         final int len = toReplace.length();
+        if (len == 0) continue;
         if (text.regionMatches(i, toReplace, 0, len)) {
           if (result == null) {
             result = new StringBuilder(text.length());
@@ -2335,9 +2468,8 @@ public class StringUtil extends StringUtilRt {
     return result == null ? text : result.toString();
   }
 
-  @NotNull
   @Contract(pure = true)
-  public static String[] filterEmptyStrings(@NotNull String[] strings) {
+  public static String @NotNull [] filterEmptyStrings(String @NotNull [] strings) {
     int emptyCount = 0;
     for (String string : strings) {
       if (string == null || string.isEmpty()) emptyCount++;
@@ -2405,7 +2537,7 @@ public class StringUtil extends StringUtilRt {
    */
   @Nullable
   @Contract(pure = true)
-  public static String joinOrNull(@NotNull String... args) {
+  public static String joinOrNull(String @NotNull ... args) {
     StringBuilder r = new StringBuilder();
     for (String arg : args) {
       if (arg == null) return null;
@@ -2692,9 +2824,8 @@ public class StringUtil extends StringUtilRt {
    * @param string String to split
    * @return array of strings
    */
-  @NotNull
   @Contract(pure = true)
-  public static String[] splitByLines(@NotNull String string) {
+  public static String @NotNull [] splitByLines(@NotNull String string) {
     return splitByLines(string, true);
   }
 
@@ -2705,15 +2836,13 @@ public class StringUtil extends StringUtilRt {
    * @param string String to split
    * @return array of strings
    */
-  @NotNull
   @Contract(pure = true)
-  public static String[] splitByLines(@NotNull String string, boolean excludeEmptyStrings) {
+  public static String @NotNull [] splitByLines(@NotNull String string, boolean excludeEmptyStrings) {
     return (excludeEmptyStrings ? EOL_SPLIT_PATTERN : EOL_SPLIT_PATTERN_WITH_EMPTY).split(string);
   }
 
-  @NotNull
   @Contract(pure = true)
-  public static String[] splitByLinesDontTrim(@NotNull String string) {
+  public static String @NotNull [] splitByLinesDontTrim(@NotNull String string) {
     return EOL_SPLIT_DONT_TRIM_PATTERN.split(string);
   }
 
@@ -2731,16 +2860,15 @@ public class StringUtil extends StringUtilRt {
    * will return the following array: foo\r\n, \n, bar\n, \r\n, baz\r, \r
    *
    */
-  @NotNull
   @Contract(pure = true)
-  public static String[] splitByLinesKeepSeparators(@NotNull String string) {
+  public static String @NotNull [] splitByLinesKeepSeparators(@NotNull String string) {
     return EOL_SPLIT_KEEP_SEPARATORS.split(string);
   }
 
   @NotNull
   @Contract(pure = true)
   public static List<Pair<String, Integer>> getWordsWithOffset(@NotNull String s) {
-    List<Pair<String, Integer>> res = ContainerUtil.newArrayList();
+    List<Pair<String, Integer>> res = new ArrayList<>();
     s += " ";
     StringBuilder name = new StringBuilder();
     int startInd = -1;
@@ -2795,56 +2923,37 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(pure = true)
+  public static int compare(@Nullable CharSequence s1, @Nullable CharSequence s2, boolean ignoreCase) {
+    if (s1 == s2) return 0;
+    if (s1 == null) return -1;
+    if (s2 == null) return 1;
+
+    int length1 = s1.length();
+    int length2 = s2.length();
+    int i = 0;
+    for (; i < length1 && i < length2; i++) {
+      int diff = compare(s1.charAt(i), s2.charAt(i), ignoreCase);
+      if (diff != 0) {
+        return diff;
+      }
+    }
+    return length1 - length2;
+  }
+
+  @Contract(pure = true)
   public static int comparePairs(@Nullable String s1, @Nullable String t1, @Nullable String s2, @Nullable String t2, boolean ignoreCase) {
     final int compare = compare(s1, s2, ignoreCase);
     return compare != 0 ? compare : compare(t1, t2, ignoreCase);
   }
 
   @Contract(pure = true)
-  public static int hashCode(@NotNull CharSequence s) {
-    return stringHashCode(s);
-  }
-
-  @Contract(pure = true)
   public static boolean equals(@Nullable CharSequence s1, @Nullable CharSequence s2) {
-    if (s1 == null ^ s2 == null) {
-      return false;
-    }
-
-    if (s1 == null) {
-      return true;
-    }
-
-    if (s1.length() != s2.length()) {
-      return false;
-    }
-    for (int i = 0; i < s1.length(); i++) {
-      if (s1.charAt(i) != s2.charAt(i)) {
-        return false;
-      }
-    }
-    return true;
+    return StringUtilRt.equal(s1, s2, true);
   }
 
   @Contract(pure = true)
   public static boolean equalsIgnoreCase(@Nullable CharSequence s1, @Nullable CharSequence s2) {
-    if (s1 == null ^ s2 == null) {
-      return false;
-    }
-
-    if (s1 == null) {
-      return true;
-    }
-
-    if (s1.length() != s2.length()) {
-      return false;
-    }
-    for (int i = 0; i < s1.length(); i++) {
-      if (!charsEqualIgnoreCase(s1.charAt(i), s2.charAt(i))) {
-        return false;
-      }
-    }
-    return true;
+    return StringUtilRt.equal(s1, s2, false);
   }
 
   @Contract(pure = true)
@@ -2933,6 +3042,7 @@ public class StringUtil extends StringUtilRt {
    * Collapses all white-space (including new lines) between non-white-space characters to a single space character.
    * Leading and trailing white space is removed.
    */
+  @NotNull
   public static String collapseWhiteSpace(@NotNull CharSequence s) {
     final StringBuilder result = new StringBuilder();
     boolean space = false;
@@ -2951,7 +3061,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(pure = true)
-  public static boolean findIgnoreCase(@Nullable String toFind, @NotNull String... where) {
+  public static boolean findIgnoreCase(@Nullable String toFind, String @NotNull ... where) {
     for (String string : where) {
       if (equalsIgnoreCase(toFind, string)) return true;
     }
@@ -3045,7 +3155,7 @@ public class StringUtil extends StringUtilRt {
                                                final int maxLength,
                                                final int suffixLength,
                                                boolean useEllipsisSymbol) {
-    String symbol = useEllipsisSymbol ? "\u2026" : "...";
+    String symbol = useEllipsisSymbol ? ELLIPSIS : "...";
     return shortenTextWithEllipsis(text, maxLength, suffixLength, symbol);
   }
 
@@ -3072,8 +3182,8 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(value = "null -> null; !null -> !null", pure = true)
-  public static String toUpperCase(String a) {
-    return a == null ? null : StringUtilRt.toUpperCase(a).toString();
+  public static String toUpperCase(String s) {
+    return s == null ? null : s.toUpperCase(Locale.ENGLISH);
   }
 
   @Contract(pure = true)
@@ -3131,7 +3241,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   @NotNull
-  public static String convertLineSeparators(@NotNull String text, @NotNull String newSeparator, @Nullable int[] offsetsToKeep) {
+  public static String convertLineSeparators(@NotNull String text, @NotNull String newSeparator, int @Nullable [] offsetsToKeep) {
     return StringUtilRt.convertLineSeparators(text, newSeparator, offsetsToKeep);
   }
 
@@ -3157,7 +3267,7 @@ public class StringUtil extends StringUtilRt {
 
   @NotNull
   @Contract(pure = true)
-  public static String getShortName(@NotNull Class aClass) {
+  public static String getShortName(@NotNull Class<?> aClass) {
     return StringUtilRt.getShortName(aClass);
   }
 
@@ -3233,10 +3343,9 @@ public class StringUtil extends StringUtilRt {
    * Say smallPart = "op" and bigPart="open". Method returns true for "Ope" and false for "ops"
    */
   @Contract(pure = true)
-  @SuppressWarnings("StringToUpperCaseOrToLowerCaseWithoutLocale")
   public static boolean isBetween(@NotNull String string, @NotNull String smallPart, @NotNull String bigPart) {
-    final String s = string.toLowerCase();
-    return s.startsWith(smallPart.toLowerCase()) && bigPart.toLowerCase().startsWith(s);
+    String s = toLowerCase(string);
+    return s.startsWith(toLowerCase(smallPart)) && toLowerCase(bigPart).startsWith(s);
   }
 
   /**
@@ -3244,7 +3353,7 @@ public class StringUtil extends StringUtilRt {
    * @param s  the string to test.
    * @return   true if the string has an uppercase character, false if not.
    */
-  public static boolean hasUpperCaseChar(String s) {
+  public static boolean hasUpperCaseChar(@NotNull String s) {
       char[] chars = s.toCharArray();
       for (char c : chars) {
           if (Character.isUpperCase(c)) {
@@ -3259,7 +3368,7 @@ public class StringUtil extends StringUtilRt {
    * @param s  the string to test.
    * @return   true if the string has a lowercase character, false if not.
    */
-  public static boolean hasLowerCaseChar(String s) {
+  public static boolean hasLowerCaseChar(@NotNull String s) {
       char[] chars = s.toCharArray();
       for (char c : chars) {
           if (Character.isLowerCase(c)) {
@@ -3347,7 +3456,7 @@ public class StringUtil extends StringUtilRt {
 
   @Contract(pure = true)
   @NotNull
-  public static String toHexString(@NotNull byte[] bytes) {
+  public static String toHexString(byte @NotNull [] bytes) {
     @SuppressWarnings("SpellCheckingInspection") String digits = "0123456789abcdef";
     StringBuilder sb = new StringBuilder(2 * bytes.length);
     for (byte b : bytes) sb.append(digits.charAt((b >> 4) & 0xf)).append(digits.charAt(b & 0xf));
@@ -3355,8 +3464,7 @@ public class StringUtil extends StringUtilRt {
   }
 
   @Contract(pure = true)
-  @NotNull
-  public static byte[] parseHexString(@NotNull String str) {
+  public static byte @NotNull [] parseHexString(@NotNull String str) {
     int len = str.length();
     if (len % 2 != 0) throw new IllegalArgumentException("Non-even-length: " + str);
     byte[] bytes = new byte[len / 2];
@@ -3366,8 +3474,9 @@ public class StringUtil extends StringUtilRt {
     return bytes;
   }
 
-  /** @deprecated use {@link #startsWithConcatenation(String, String...)} (to remove in IDEA 15) */
+  /** @deprecated use {@link #startsWithConcatenation(String, String...)} */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   public static boolean startsWithConcatenationOf(@NotNull String string, @NotNull String firstPrefix, @NotNull String secondPrefix) {
     return startsWithConcatenation(string, firstPrefix, secondPrefix);
   }
@@ -3389,5 +3498,43 @@ public class StringUtil extends StringUtilRt {
       return false;
     }
     return true;
+  }
+
+  @Contract(value = "null -> null; !null->!null", pure = true)
+  public static String internEmptyString(String s) {
+    return s == null ? null : s.isEmpty() ? "" : s;
+  }
+
+  /**
+   * Finds the next position in the supplied CharSequence which is neither a space nor a tab.
+   * @param text text
+   * @param pos starting position
+   * @return position of the first non-whitespace character after or equal to pos; or the length of the CharSequence
+   * if no non-whitespace character found
+   */
+  public static int skipWhitespaceForward(@NotNull CharSequence text, int pos) {
+    int length = text.length();
+    while (pos < length && isWhitespaceOrTab(text.charAt(pos))) {
+      pos++;
+    }
+    return pos;
+  }
+
+  /**
+   * Finds the previous position in the supplied CharSequence which is neither a space nor a tab.
+   * @param text text
+   * @param pos starting position
+   * @return position of the character before or equal to pos which has no space or tab before;
+   * or zero if no non-whitespace character found
+   */
+  public static int skipWhitespaceBackward(@NotNull CharSequence text, int pos) {
+    while (pos > 0 && isWhitespaceOrTab(text.charAt(pos - 1))) {
+      pos--;
+    }
+    return pos;
+  }
+
+  private static boolean isWhitespaceOrTab(char c) {
+    return c == ' ' || c == '\t';
   }
 }

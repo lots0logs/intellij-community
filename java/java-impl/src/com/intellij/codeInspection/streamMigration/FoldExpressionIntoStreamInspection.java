@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.streamMigration;
 
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.util.LambdaGenerationUtil;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static com.intellij.codeInsight.intention.impl.StreamRefactoringUtil.getMapOperationName;
+import static com.intellij.psi.CommonClassNames.JAVA_LANG_CHAR_SEQUENCE;
 import static com.intellij.util.ObjectUtils.tryCast;
 
 public class FoldExpressionIntoStreamInspection extends AbstractBaseJavaLocalInspectionTool {
@@ -44,7 +46,7 @@ public class FoldExpressionIntoStreamInspection extends AbstractBaseJavaLocalIns
         if (diff.isEmpty()) return;
         if (!LambdaGenerationUtil.canBeUncheckedLambda(expression)) return;
         boolean stringJoin = generator.isStringJoin(expression, diff);
-        String message = InspectionsBundle.message(stringJoin ?
+        String message = JavaBundle.message(stringJoin ?
                                                    "inspection.fold.expression.into.string.display.name" :
                                                    "inspection.fold.expression.into.stream.display.name");
         holder.registerProblem(expression, message,
@@ -137,7 +139,7 @@ public class FoldExpressionIntoStreamInspection extends AbstractBaseJavaLocalIns
       PsiExpression[] operands = polyadicExpression.getOperands();
       String mapToString;
       PsiType operandType = operands[0].getType();
-      if (!InheritanceUtil.isInheritor(operandType, "java.lang.CharSequence")) {
+      if (!InheritanceUtil.isInheritor(operandType, JAVA_LANG_CHAR_SEQUENCE)) {
         if (!StreamApiUtil.isSupportedStreamElement(operandType)) return null;
         mapToString = "."+getMapOperationName(operandType, type)+"(String::valueOf)";
       } else {
@@ -150,7 +152,7 @@ public class FoldExpressionIntoStreamInspection extends AbstractBaseJavaLocalIns
                      .pairMap(EquivalenceChecker.getCanonicalPsiEquivalence()::expressionsAreEquivalent)
                      .allMatch(Boolean.TRUE::equals)) {
         delimiter = operands[1];
-        if (!InheritanceUtil.isInheritor(delimiter.getType(), "java.lang.CharSequence") &&
+        if (!InheritanceUtil.isInheritor(delimiter.getType(), JAVA_LANG_CHAR_SEQUENCE) &&
             !(delimiter instanceof PsiLiteralExpression && PsiType.CHAR.equals(delimiter.getType()))) {
           return null;
         }
@@ -177,14 +179,14 @@ public class FoldExpressionIntoStreamInspection extends AbstractBaseJavaLocalIns
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.fold.expression.fix.family.name");
+      return JavaBundle.message("inspection.fold.expression.fix.family.name");
     }
 
     @Nls(capitalization = Nls.Capitalization.Sentence)
     @NotNull
     @Override
     public String getName() {
-      return InspectionsBundle.message(myStringJoin ?
+      return JavaBundle.message(myStringJoin ?
                                        "inspection.fold.expression.into.string.fix.name" :
                                        "inspection.fold.expression.into.stream.fix.name");
     }

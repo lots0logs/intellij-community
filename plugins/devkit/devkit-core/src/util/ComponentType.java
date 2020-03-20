@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.util;
 
 import com.intellij.openapi.components.BaseComponent;
@@ -12,6 +12,8 @@ import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.PropertyKey;
+import org.jetbrains.idea.devkit.DevKitBundle;
+import org.jetbrains.idea.devkit.dom.IdeaPlugin;
 
 public enum ComponentType {
   MODULE(ModuleComponent.class, "module-components", "new.menu.module.component.text"),
@@ -19,6 +21,7 @@ public enum ComponentType {
   APPLICATION(BaseComponent.class, "application-components", "new.menu.application.component.text");
 
   public final String myClassName;
+  @PropertyKey(resourceBundle = DevKitBundle.BUNDLE)
   public final String myPropertyKey;
   private final String myName;
 
@@ -27,8 +30,7 @@ public enum ComponentType {
   }
 
   ComponentType(Class<? extends BaseComponent> clazz, @NonNls String name,
-                @PropertyKey(resourceBundle = "org.jetbrains.idea.devkit.DevKitBundle") String propertyKey)
-  {
+                @PropertyKey(resourceBundle = DevKitBundle.BUNDLE) String propertyKey) {
     myPropertyKey = propertyKey;
     myClassName = clazz.getName();
     myName = name;
@@ -36,7 +38,7 @@ public enum ComponentType {
 
   public void patchPluginXml(XmlFile pluginXml, PsiClass klass) throws IncorrectOperationException {
     final XmlTag rootTag = pluginXml.getDocument().getRootTag();
-    if (rootTag != null && "idea-plugin".equals(rootTag.getName())) {
+    if (rootTag != null && IdeaPlugin.TAG_NAME.equals(rootTag.getName())) {
       XmlTag components = rootTag.findFirstSubTag(myName);
       if (components == null || !components.isPhysical()) {
         components = (XmlTag)rootTag.add(rootTag.createChildTag(myName, rootTag.getNamespace(), null, false));
@@ -70,9 +72,8 @@ public enum ComponentType {
         final XmlTag impl = component.findFirstSubTag("implementation-class");
         final XmlTag intf = component.findFirstSubTag("interface-class");
         if (!processor.process(this, component,
-                impl != null ? impl.getValue() : null,
-                intf != null ? intf.getValue() : null))
-        {
+                               impl != null ? impl.getValue() : null,
+                               intf != null ? intf.getValue() : null)) {
           return;
         }
       }

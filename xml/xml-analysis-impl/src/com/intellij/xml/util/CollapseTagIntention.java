@@ -15,28 +15,23 @@
  */
 package com.intellij.xml.util;
 
-import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.Language;
-import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.psi.FileViewProvider;
-import com.intellij.psi.PsiDocumentManager;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
+import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.XmlChildRole;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.xml.XmlBundle;
+import com.intellij.xml.analysis.XmlAnalysisBundle;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
@@ -48,7 +43,7 @@ public class CollapseTagIntention implements LocalQuickFix, IntentionAction {
   @Override
   @NotNull
   public String getFamilyName() {
-    return XmlBundle.message("xml.inspections.replace.tag.empty.body.with.empty.end");
+    return XmlAnalysisBundle.message("xml.inspections.replace.tag.empty.body.with.empty.end");
   }
 
   @Nls
@@ -95,27 +90,23 @@ public class CollapseTagIntention implements LocalQuickFix, IntentionAction {
 
   @Override
   public boolean startInWriteAction() {
-    return false;
+    return true;
   }
 
   protected static void applyFix(@NotNull final Project project, @NotNull final PsiElement tag) {
-    if (!FileModificationService.getInstance().prepareFileForWrite(tag.getContainingFile())) {
-      return;
-    }
-
     PsiDocumentManager.getInstance(project).commitAllDocuments();
-
     final ASTNode child = XmlChildRole.START_TAG_END_FINDER.findChild(tag.getNode());
     if (child == null) return;
     final int offset = child.getTextRange().getStartOffset();
     VirtualFile file = tag.getContainingFile().getVirtualFile();
     final Document document = FileDocumentManager.getInstance().getDocument(file);
-
-    WriteCommandAction.runWriteCommandAction(project, () -> {
-      assert document != null;
-      document.replaceString(offset, tag.getTextRange().getEndOffset(), "/>");
-      PsiDocumentManager.getInstance(project).commitDocument(document);
-      CodeStyleManager.getInstance(project).reformat(tag);
-    });
+    assert document != null;
+    document.replaceString(offset, tag.getTextRange().getEndOffset(), "/>");
+    SmartPsiElementPointer<PsiElement> pointer = SmartPointerManager.getInstance(project).createSmartPsiElementPointer(tag);
+    PsiDocumentManager.getInstance(project).commitDocument(document);
+    PsiElement restored = pointer.getElement();
+    if (restored != null) {
+      CodeStyleManager.getInstance(project).reformat(restored);
+    }
   }
 }

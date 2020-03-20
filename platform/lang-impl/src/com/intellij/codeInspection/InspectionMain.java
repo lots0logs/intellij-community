@@ -1,24 +1,10 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
 import com.intellij.openapi.application.ApplicationStarter;
+import org.jetbrains.annotations.NotNull;
 
-import java.util.Arrays;
+import java.util.List;
 
 public class InspectionMain implements ApplicationStarter {
   private InspectionApplication myApplication;
@@ -29,25 +15,19 @@ public class InspectionMain implements ApplicationStarter {
   }
 
   @Override
-  @SuppressWarnings({"HardCodedStringLiteral"})
-  public void premain(String[] args) {
-    if (args.length < 4) {
-      System.err.println("invalid args:" + Arrays.toString(args));
+  public void premain(@NotNull List<String> args) {
+    if (args.size() < 4) {
+      System.err.println("invalid args:" + args);
       printHelp();
     }
 
     //System.setProperty("idea.load.plugins.category", "inspection");
     myApplication = new InspectionApplication();
 
-    myApplication.myHelpProvider = new InspectionToolCmdlineOptionHelpProvider() {
-      @Override
-      public void printHelpAndExit() {
-        printHelp();
-      }
-    };
-    myApplication.myProjectPath = args[1];
-    myApplication.myStubProfile = args[2];
-    myApplication.myOutPath = args[3];
+    myApplication.myHelpProvider = () -> printHelp();
+    myApplication.myProjectPath = args.get(1);
+    myApplication.myStubProfile = args.get(2);
+    myApplication.myOutPath = args.get(3);
 
     if (myApplication.myProjectPath == null
         || myApplication.myOutPath == null
@@ -56,16 +36,20 @@ public class InspectionMain implements ApplicationStarter {
       printHelp();
     }
 
-
     try {
-      for (int i = 4; i < args.length; i++) {
-        String arg = args[i];
+      for (int i = 4; i < args.size(); i++) {
+        String arg = args.get(i);
         if ("-profileName".equals(arg)) {
-          myApplication.myProfileName = args[++i];
-        } else if ("-profilePath".equals(arg)) {
-          myApplication.myProfilePath = args[++i];
-        } else if ("-d".equals(arg)) {
-          myApplication.mySourceDirectory = args[++i];
+          myApplication.myProfileName = args.get(++i);
+        }
+        else if ("-profilePath".equals(arg)) {
+          myApplication.myProfilePath = args.get(++i);
+        }
+        else if ("-d".equals(arg)) {
+          myApplication.mySourceDirectory = args.get(++i);
+        }
+        else if ("-format".equals(arg)) {
+          myApplication.myOutputFormat = args.get(++i);
         }
         else if ("-v0".equals(arg)) {
           myApplication.setVerboseLevel(0);
@@ -79,11 +63,14 @@ public class InspectionMain implements ApplicationStarter {
         else if ("-v3".equals(arg)) {
           myApplication.setVerboseLevel(3);
         }
-        else if ("-e".equals(arg)){
+        else if ("-e".equals(arg)) {
           myApplication.myRunWithEditorSettings = true;
         }
         else if ("-t".equals(arg)) {
           myApplication.myErrorCodeRequired = false;
+        }
+        else if ("-changes".equals(arg)) {
+          myApplication.myAnalyzeChanges = true;
         }
         else {
           System.err.println("unexpected argument: " + arg);
@@ -100,11 +87,11 @@ public class InspectionMain implements ApplicationStarter {
   }
 
   @Override
-  public void main(String[] args) {
+  public void main(String @NotNull [] args) {
     myApplication.startup();
   }
 
-  public static void printHelp() {
+  private static void printHelp() {
     System.out.println(InspectionsBundle.message("inspection.command.line.explanation"));
     System.exit(1);
   }

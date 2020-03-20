@@ -127,8 +127,9 @@ public class SliceLeafAnalyzer {
 
     final Map<SliceNode, Collection<PsiElement>> map = createMap();
 
-    ProgressManager.getInstance().run(new Task.Backgroundable(root.getProject(),
-                                                              "Expanding All Nodes... (May Very Well Take the Whole Day)", true) {
+    String encouragementPiece = " (may very well take the whole day)";
+    ProgressManager.getInstance().run(new Task.Backgroundable(
+      root.getProject(), "Expanding All Nodes..." + encouragementPiece, true) {
       @Override
       public void run(@NotNull final ProgressIndicator indicator) {
         Collection<PsiElement> l = calcLeafExpressions(root, treeStructure, map);
@@ -161,7 +162,7 @@ public class SliceLeafAnalyzer {
   }
 
   public Map<SliceNode, Collection<PsiElement>> createMap() {
-    return ConcurrentFactoryMap.createMap(k -> ConcurrentCollectionFactory.createConcurrentSet(myLeafEquality),
+    return ConcurrentFactoryMap.create(k -> ConcurrentCollectionFactory.createConcurrentSet(myLeafEquality),
                                           () -> ConcurrentCollectionFactory.createMap(ContainerUtil.identityStrategy()));
   }
 

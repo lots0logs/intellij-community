@@ -1,5 +1,5 @@
 
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes;
 
 import com.intellij.openapi.vcs.FilePath;
@@ -13,9 +13,9 @@ import org.jetbrains.annotations.Nullable;
 public class SimpleContentRevision implements ContentRevision {
   private final String myContent;
   private final FilePath myNewFilePath;
-  private final String myRevision;
+  @NotNull private final String myRevision;
 
-  public SimpleContentRevision(final String content, final FilePath newFilePath, final String revision) {
+  public SimpleContentRevision(final String content, final FilePath newFilePath, @NotNull final String revision) {
     myContent = content;
     myNewFilePath = newFilePath;
     myRevision = revision;
@@ -37,6 +37,7 @@ public class SimpleContentRevision implements ContentRevision {
   @NotNull
   public VcsRevisionNumber getRevisionNumber() {
     return new VcsRevisionNumber() {
+      @NotNull
       @Override
       public String asString() {
         return myRevision;

@@ -24,8 +24,6 @@ import com.intellij.psi.xml.XmlTag;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.xml.DomFileElement;
-import com.intellij.util.xml.DomManager;
 import com.intellij.xml.util.IncludedXmlTag;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -47,10 +45,7 @@ import java.util.concurrent.Callable;
  * An base class for actions generating service classes (implementation and optionally interface) and registering new service in {@code plugin.xml}.
  */
 abstract class NewServiceActionBase extends CreateInDirectoryActionBase implements WriteActionAware {
-
-  NewServiceActionBase(String text, String description) {
-    super(text, description, null);
-  }
+  protected NewServiceActionBase() { }
 
   @Override
   public boolean startInWriteAction() {
@@ -87,8 +82,7 @@ abstract class NewServiceActionBase extends CreateInDirectoryActionBase implemen
     }
   }
 
-  @Nullable
-  private PsiClass[] invokeDialog(Project project, ServiceCreator serviceCreator, PsiDirectory dir) {
+  private PsiClass @Nullable [] invokeDialog(Project project, ServiceCreator serviceCreator, PsiDirectory dir) {
     DialogWrapper dialog = new NewServiceDialog(project, serviceCreator, dir);
     dialog.show();
     return serviceCreator.getCreatedClasses();
@@ -347,12 +341,11 @@ abstract class NewServiceActionBase extends CreateInDirectoryActionBase implemen
     private void patchPluginXml(@Nullable PsiClass createdInterface, @NotNull PsiClass createdImplementation, XmlFile pluginXml) {
       DescriptorUtil.checkPluginXmlsWritable(getProject(), pluginXml);
 
-      DomFileElement<IdeaPlugin> fileElement = DomManager.getDomManager(getProject()).getFileElement(pluginXml, IdeaPlugin.class);
-      if (fileElement == null) {
+      IdeaPlugin ideaPlugin = DescriptorUtil.getIdeaPlugin(pluginXml);
+      if (ideaPlugin == null) {
         throw new IncorrectOperationException(DevKitBundle.message("error.cannot.process.plugin.xml", pluginXml));
       }
 
-      IdeaPlugin ideaPlugin = fileElement.getRootElement();
       Extensions targetExtensions = ideaPlugin.getExtensions().stream()
         .filter(extensions -> !(extensions.getXmlTag() instanceof IncludedXmlTag))
         .filter(extensions -> Extensions.DEFAULT_PREFIX.equals(extensions.getDefaultExtensionNs().getStringValue()))

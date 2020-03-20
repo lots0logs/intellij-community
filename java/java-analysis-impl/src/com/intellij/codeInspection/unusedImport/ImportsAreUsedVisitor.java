@@ -50,7 +50,7 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
   }
 
   @Override
-  public void visitElement(PsiElement element) {
+  public void visitElement(@NotNull PsiElement element) {
     if (importStatements.isEmpty()) {
       return;
     }
@@ -92,7 +92,7 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
     }
   }
 
-  private PsiImportStatementBase findImport(PsiMember member, List<PsiImportStatementBase> importStatements) {
+  private PsiImportStatementBase findImport(PsiMember member, List<? extends PsiImportStatementBase> importStatements) {
     final String qualifiedName;
     final String packageName;
     final PsiClass containingClass = member.getContainingClass();
@@ -153,8 +153,7 @@ class ImportsAreUsedVisitor extends JavaRecursiveElementWalkingVisitor {
     return null;
   }
 
-  @NotNull
-  PsiImportStatementBase[] getUnusedImportStatements() {
+  PsiImportStatementBase @NotNull [] getUnusedImportStatements() {
     if (importStatements.isEmpty()) {
       return PsiImportStatementBase.EMPTY_ARRAY;
     }

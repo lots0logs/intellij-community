@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml.impl.schema;
 
 import com.intellij.codeInsight.daemon.Validator;
@@ -20,23 +6,21 @@ import com.intellij.javaee.ExternalResourceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.util.Pair;
-import com.intellij.openapi.util.RecursionGuard;
 import com.intellij.openapi.util.RecursionManager;
 import com.intellij.openapi.util.Trinity;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiReference;
+import com.intellij.psi.impl.source.resolve.reference.impl.providers.URLReference;
 import com.intellij.psi.meta.PsiMetaData;
 import com.intellij.psi.search.PsiElementProcessor;
 import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
-import com.intellij.psi.xml.XmlDocument;
-import com.intellij.psi.xml.XmlFile;
-import com.intellij.psi.xml.XmlTag;
+import com.intellij.psi.xml.*;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
@@ -53,9 +37,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/**
- * @author Mike
- */
 @SuppressWarnings({"HardCodedStringLiteral"})
 public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocument>, DumbAware, XsdNsDescriptor {
   @NonNls
@@ -66,14 +47,13 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
   @NonNls static final String ATTRIBUTE_TAG_NAME = "attribute";
   @NonNls static final String COMPLEX_TYPE_TAG_NAME = "complexType";
   @NonNls static final String SEQUENCE_TAG_NAME = "sequence";
-  private static final Logger LOG = Logger.getInstance("#com.intellij.xml.impl.schema.XmlNSDescriptorImpl");
+  private static final Logger LOG = Logger.getInstance(XmlNSDescriptorImpl.class);
   @NonNls private static final Set<String> STD_TYPES = new HashSet<>();
   private static final Set<String> UNDECLARED_STD_TYPES = new HashSet<>();
   @NonNls private static final String INCLUDE_TAG_NAME = "include";
   @NonNls private static final String REDEFINE_TAG_NAME = "redefine";
-  private static final RecursionGuard myRedefinedDescriptorsInProcessing = RecursionManager.createGuard("myRedefinedDescriptorsInProcessing");
-  private final Map<QNameKey, CachedValue<XmlElementDescriptor>> myDescriptorsMap = Collections.synchronizedMap(new HashMap<QNameKey, CachedValue<XmlElementDescriptor>>());
-  private final Map<Pair<QNameKey, XmlTag>, CachedValue<TypeDescriptor>> myTypesMap = Collections.synchronizedMap(new HashMap<Pair<QNameKey,XmlTag>, CachedValue<TypeDescriptor>>());
+  private final Map<QNameKey, CachedValue<XmlElementDescriptor>> myDescriptorsMap = Collections.synchronizedMap(new HashMap<>());
+  private final Map<Pair<QNameKey, XmlTag>, CachedValue<TypeDescriptor>> myTypesMap = Collections.synchronizedMap(new HashMap<>());
   private XmlFile myFile;
   private XmlTag myTag;
   private String myTargetNamespace;
@@ -104,7 +84,7 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
           addDependency(xmlFile, visited);
         }
       } else if (equalsToSchemaName(tag, REDEFINE_TAG_NAME)) {
-        myRedefinedDescriptorsInProcessing.doPreventingRecursion(tag, false, () -> {
+        RecursionManager.doPreventingRecursion(tag, false, () -> {
           final XmlFile file = getRedefinedElementDescriptorFile(tag);
           addDependency(file, visited);
           return null;
@@ -136,7 +116,7 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
     }
   }
 
-  private static boolean checkSchemaNamespace(String name, XmlTag context){
+  private static boolean checkSchemaNamespace(String name, @NotNull XmlTag context){
     final String namespace = context.getNamespaceByPrefix(XmlUtil.findPrefixByQualifiedName(name));
     if(namespace.length() > 0){
       return checkSchemaNamespace(namespace);
@@ -325,19 +305,14 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
     return null;
   }
 
-  public static XmlFile getRedefinedElementDescriptorFile(final XmlTag parentTag) {
-    final String schemaL = parentTag.getAttributeValue(XmlUtil.SCHEMA_LOCATION_ATT);
-
-    if (schemaL != null) {
-      final PsiReference[] references = parentTag.getAttribute(XmlUtil.SCHEMA_LOCATION_ATT, null).getValueElement().getReferences();
-
-      if (references.length > 0) {
-        final PsiElement psiElement = references[references.length - 1].resolve();
-
+  private static XmlFile getRedefinedElementDescriptorFile(final XmlTag parentTag) {
+    XmlAttribute attribute = parentTag.getAttribute(XmlUtil.SCHEMA_LOCATION_ATT);
+    if (attribute != null) {
+      XmlAttributeValue element = attribute.getValueElement();
+      PsiElement psiElement = new URLReference(element).resolve();
         if (psiElement instanceof XmlFile) {
           return ((XmlFile)psiElement);
         }
-      }
     }
     return null;
   }
@@ -426,7 +401,7 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
         if (nsDescriptor != null) {
           final XmlElementDescriptor xmlElementDescriptor = nsDescriptor.getElementDescriptor(localName, namespace, visited, reference);
           if (xmlElementDescriptor instanceof XmlElementDescriptorImpl) {
-            return new RedefinedElementDescriptor((XmlElementDescriptorImpl)xmlElementDescriptor, this);
+            return new RedefinedElementDescriptor((XmlElementDescriptorImpl)xmlElementDescriptor, this, nsDescriptor);
           }
         }
       }
@@ -577,7 +552,7 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
   }
 
   @Nullable
-  private TypeDescriptor findTypeDescriptor(final String qname, XmlTag context) {
+  private TypeDescriptor findTypeDescriptor(final String qname, @NotNull XmlTag context) {
     String namespace = context.getNamespaceByPrefix(XmlUtil.findPrefixByQualifiedName(qname));
     String localName = XmlUtil.findLocalNameByQualifiedName(qname);
     return findTypeDescriptorImpl(myTag, localName, namespace.isEmpty() ? getDefaultNamespace() : namespace);
@@ -716,7 +691,18 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
         if (nsDescriptor != null) {
           final XmlTag redefinedRootTag = ((XmlDocument)nsDescriptor.getDeclaration()).getRootTag();
           descriptor = doFindIn(redefinedRootTag.getSubTags(), name, namespace, pair, redefinedRootTag);
-          if (descriptor != null) return descriptor;
+          if (descriptor instanceof ComplexTypeDescriptor) {
+            TypeDescriptor finalDescriptor = descriptor;
+            CachedValue<TypeDescriptor> value = CachedValuesManager.getManager(tag.getProject()).createCachedValue(() -> {
+              RedefinedTypeDescriptor typeDescriptor = new RedefinedTypeDescriptor((ComplexTypeDescriptor)finalDescriptor, this, nsDescriptor);
+              return CachedValueProvider.Result.create(typeDescriptor, PsiModificationTracker.MODIFICATION_COUNT);
+            });
+            myTypesMap.put(pair, value);
+            return value.getValue();
+          }
+          if (descriptor != null) {
+            return descriptor;
+          }
         }
       }
     }
@@ -747,7 +733,7 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
   private CachedValue<TypeDescriptor> createAndPutTypesCachedValueSimpleType(final XmlTag tag, final Pair<QNameKey, XmlTag> pair) {
     final CachedValue<TypeDescriptor> value = CachedValuesManager.getManager(tag.getProject()).createCachedValue(() -> {
       final SimpleTypeDescriptor simpleTypeDescriptor = new SimpleTypeDescriptor(tag);
-      return new CachedValueProvider.Result<TypeDescriptor>(simpleTypeDescriptor, tag);
+      return new CachedValueProvider.Result<>(simpleTypeDescriptor, tag);
     }, false);
     myTypesMap.put(pair, value);
     return value;
@@ -811,8 +797,7 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
   }
 
   @Override
-  @NotNull
-  public XmlElementDescriptor[] getRootElementsDescriptors(@Nullable final XmlDocument doc) {
+  public XmlElementDescriptor @NotNull [] getRootElementsDescriptors(@Nullable final XmlDocument doc) {
     class CollectElementsProcessor implements PsiElementProcessor<XmlTag> {
       final List<XmlElementDescriptor> result = new ArrayList<>();
 
@@ -940,10 +925,9 @@ public class XmlNSDescriptorImpl implements XmlNSDescriptorEx,Validator<XmlDocum
     dependencies = ArrayUtil.toObjectArray(dependenciesSet);
   }
 
-  @NotNull
   @Override
-  public Object[] getDependencies() {
-    if (dependencies == null) dependencies = myFile == null ? ArrayUtil.EMPTY_OBJECT_ARRAY : new Object[] {myFile}; // init was not called
+  public Object @NotNull [] getDependencies() {
+    if (dependencies == null) dependencies = myFile == null ? ArrayUtilRt.EMPTY_OBJECT_ARRAY : new Object[] {myFile}; // init was not called
     return dependencies;
   }
   static {

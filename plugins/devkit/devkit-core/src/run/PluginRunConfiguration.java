@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.run;
 
 import com.intellij.diagnostic.logging.LogConfigurationPanel;
@@ -27,12 +25,14 @@ import com.intellij.openapi.roots.OrderEnumerator;
 import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.xml.XmlFile;
 import com.intellij.util.PlatformUtils;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.devkit.DevKitBundle;
+import org.jetbrains.idea.devkit.dom.IdeaPlugin;
 import org.jetbrains.idea.devkit.module.PluginModuleType;
 import org.jetbrains.idea.devkit.projectRoots.IdeaJdk;
 import org.jetbrains.idea.devkit.projectRoots.IntelliJPlatformProduct;
@@ -46,7 +46,7 @@ import java.util.Arrays;
 
 import static com.intellij.openapi.util.io.FileUtil.toSystemDependentName;
 
-public class PluginRunConfiguration extends RunConfigurationBase implements ModuleRunConfiguration {
+public class PluginRunConfiguration extends RunConfigurationBase<Element> implements ModuleRunConfiguration {
   private static final String IDEA_LOG = "idea.log";
   private Module myModule;
   private String myModuleName;
@@ -171,7 +171,7 @@ public class PluginRunConfiguration extends RunConfigurationBase implements Modu
         vm.defineProperty("idea.classpath.index.enabled", "false");
 
         if (!vm.hasProperty(JetBrainsProtocolHandler.REQUIRED_PLUGINS_KEY) && PluginModuleType.isOfType(module)) {
-          final String id = DescriptorUtil.getPluginId(module);
+          final String id = getPluginId(module);
           if (id != null) {
             vm.defineProperty(JetBrainsProtocolHandler.REQUIRED_PLUGINS_KEY, id);
           }
@@ -275,8 +275,7 @@ public class PluginRunConfiguration extends RunConfigurationBase implements Modu
 
 
   @Override
-  @NotNull
-  public Module[] getModules() {
+  public Module @NotNull [] getModules() {
     final Module module = getModule();
     return module != null ? new Module[]{module} : Module.EMPTY_ARRAY;
   }
@@ -336,5 +335,14 @@ public class PluginRunConfiguration extends RunConfigurationBase implements Modu
 
   public void setModule(Module module) {
     myModule = module;
+  }
+
+  @Nullable
+  private static String getPluginId(Module plugin) {
+    final XmlFile pluginXml = PluginModuleType.getPluginXml(plugin);
+    if (pluginXml == null) return null;
+
+    final IdeaPlugin ideaPlugin = DescriptorUtil.getIdeaPlugin(pluginXml);
+    return ideaPlugin == null ? null : ideaPlugin.getPluginId();
   }
 }

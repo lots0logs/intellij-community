@@ -1,7 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.console;
 
-import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.mock.MockApplication;
+import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.LightVirtualFile;
@@ -11,12 +14,14 @@ import com.jetbrains.python.*;
 import com.jetbrains.python.psi.LanguageLevel;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * @author traff
- */
+import java.nio.charset.StandardCharsets;
+
 @TestDataPath("$CONTENT_ROOT/../testData/ipython/")
 public class PythonConsoleParsingTest extends ParsingTestCase {
   private LanguageLevel myLanguageLevel = LanguageLevel.getDefault();
+
+  private Disposable myServiceDisposable = null;
+
 
   public PythonConsoleParsingTest() {
     super("psi", "py", new PythonParserDefinition());
@@ -26,6 +31,18 @@ public class PythonConsoleParsingTest extends ParsingTestCase {
   protected void setUp() throws Exception {
     super.setUp();
     registerExtension(PythonDialectsTokenSetContributor.EP_NAME, new PythonTokenSetContributor());
+
+    if (PythonRuntimeService.getInstance() == null) {
+      myServiceDisposable = new Disposable() {
+        @Override
+        public void dispose() {
+        }
+      };
+      ((MockApplication)ApplicationManager.getApplication()).registerService(PythonRuntimeService.class, new PythonRuntimeServiceImpl(), myServiceDisposable);
+    } else {
+      myServiceDisposable = null;
+    }
+
     PythonDialectsTokenSetProvider.reset();
   }
 
@@ -96,10 +113,25 @@ public class PythonConsoleParsingTest extends ParsingTestCase {
     LightVirtualFile virtualFile = new LightVirtualFile(name, myLanguage, text);
     virtualFile.setOriginalFile(originalFile);
 
-    originalFile.setCharset(CharsetToolkit.UTF8_CHARSET);
+    originalFile.setCharset(StandardCharsets.UTF_8);
     originalFile.putUserData(LanguageLevel.KEY, myLanguageLevel);
     PyConsoleUtil.markIPython(originalFile);
     return createFile(virtualFile);
+  }
+
+  @Override
+  public void tearDown() throws Exception {
+    try {
+      if (myServiceDisposable != null) {
+        Disposer.dispose(myServiceDisposable);
+      }
+    }
+    catch (Throwable e) {
+      addSuppressedException(e);
+    }
+    finally {
+      super.tearDown();
+    }
   }
 }
 

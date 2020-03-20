@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs;
 
 import com.intellij.ide.todo.TodoPanelSettings;
@@ -10,7 +10,6 @@ import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.versionBrowser.ChangeBrowserSettings;
 import com.intellij.util.PlatformUtils;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.XmlSerializerUtil;
 import com.intellij.util.xmlb.annotations.OptionTag;
 import com.intellij.util.xmlb.annotations.Property;
@@ -37,7 +36,8 @@ public final class VcsConfiguration implements PersistentStateComponent<VcsConfi
   @NonNls public static final String DIFF = "diff";
 
   public boolean OFFER_MOVE_TO_ANOTHER_CHANGELIST_ON_PARTIAL_COMMIT = false;
-  public boolean CHECK_CODE_SMELLS_BEFORE_PROJECT_COMMIT = !PlatformUtils.isPyCharm() && !PlatformUtils.isRubyMine();
+  public boolean CHECK_CODE_SMELLS_BEFORE_PROJECT_COMMIT =
+    !PlatformUtils.isPyCharm() && !PlatformUtils.isRubyMine() && !PlatformUtils.isCLion();
   public boolean CHECK_CODE_CLEANUP_BEFORE_PROJECT_COMMIT = false;
   public boolean CHECK_NEW_TODO = true;
   public TodoPanelSettings myTodoPanelSettings = new TodoPanelSettings();
@@ -70,13 +70,13 @@ public final class VcsConfiguration implements PersistentStateComponent<VcsConfi
   public boolean USE_COMMIT_MESSAGE_MARGIN = true;
   public boolean WRAP_WHEN_TYPING_REACHES_RIGHT_MARGIN = false;
   public boolean SHOW_UNVERSIONED_FILES_WHILE_COMMIT = true;
-  public boolean LOCAL_CHANGES_DETAILS_PREVIEW_SHOWN = false;
+  public boolean LOCAL_CHANGES_DETAILS_PREVIEW_SHOWN = true;
   public boolean SHELVE_DETAILS_PREVIEW_SHOWN = false;
-  public boolean VCS_LOG_DETAILS_PREVIEW_SHOWN = false;
   public boolean RELOAD_CONTEXT = true;
+  public boolean MARK_IGNORED_AS_EXCLUDED = false;
 
   @XCollection(elementName = "path", propertyElementName = "ignored-roots")
-  public List<String> IGNORED_UNREGISTERED_ROOTS = ContainerUtil.newArrayList();
+  public List<String> IGNORED_UNREGISTERED_ROOTS = new ArrayList<>();
 
   public enum StandardOption {
     ADD(VcsBundle.message("vcs.command.name.add")),

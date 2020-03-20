@@ -23,9 +23,12 @@ import com.intellij.openapi.externalSystem.service.notification.ExternalSystemNo
 import com.intellij.openapi.externalSystem.service.notification.NotificationData;
 import com.intellij.openapi.externalSystem.service.notification.callback.OpenExternalSystemSettingsCallback;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.io.FileUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
+
+import java.io.ObjectStreamException;
 
 /**
  * @author Vladislav.Soroka
@@ -35,6 +38,43 @@ public class GradleNotificationExtension implements ExternalSystemNotificationEx
   @Override
   public ProjectSystemId getTargetExternalSystemId() {
     return GradleConstants.SYSTEM_ID;
+  }
+
+  @Override
+  public boolean isInternalError(@NotNull Throwable error) {
+    Throwable unwrapped = RemoteUtil.unwrap(error);
+    String message = unwrapped.getMessage();
+    if ("Compilation failed; see the compiler error output for details.".equals(message)) {
+      // compiler errors should be handled by BuildOutputParsers
+      return true;
+    }
+    if (unwrapped.getCause() instanceof ObjectStreamException) {
+      // gradle tooling internal serialization issues
+      return true;
+    }
+    if (unwrapped instanceof ExternalSystemException) {
+      Throwable cause = unwrapped.getCause();
+      if (cause != null) {
+        String name = cause.getClass().getName();
+        if (name.startsWith("groovy.lang.") || // Gradle Groovy DSL errors should be handled by GradleBuildScriptErrorParser
+            name.startsWith("org.gradle.") &&
+            !name.startsWith("org.gradle.cli") // display Gradle CLI parser errors like "Unknown command-line option"
+        ) {
+          return ((ExternalSystemException)unwrapped).getQuickFixes().length == 0;
+        }
+      }
+
+      if (unwrapped instanceof LocationAwareExternalSystemException) {
+        String filePath = ((LocationAwareExternalSystemException)unwrapped).getFilePath();
+        // avoid build tw duplicating messages related to build script errors
+        // Gradle build script errors are better described by the build output and should be handled by GradleBuildScriptErrorParser
+        if (FileUtilRt.extensionEquals(filePath, GradleConstants.EXTENSION) ||
+            FileUtilRt.extensionEquals(filePath, GradleConstants.KOTLIN_DSL_SCRIPT_EXTENSION)) {
+          return ((LocationAwareExternalSystemException)unwrapped).getQuickFixes().length == 0;
+        }
+      }
+    }
+    return false;
   }
 
   @Override
@@ -49,9 +89,8 @@ public class GradleNotificationExtension implements ExternalSystemNotificationEx
   }
 
   protected void updateNotification(@NotNull final NotificationData notificationData,
-                                         @NotNull final Project project,
-                                         @NotNull ExternalSystemException e) {
-
+                                    @NotNull final Project project,
+                                    @NotNull ExternalSystemException e) {
     for (String fix : e.getQuickFixes()) {
       if (OpenGradleSettingsCallback.ID.equals(fix)) {
         notificationData.setListener(OpenGradleSettingsCallback.ID, new OpenGradleSettingsCallback(project));

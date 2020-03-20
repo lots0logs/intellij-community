@@ -41,8 +41,6 @@ import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 
-import static com.intellij.refactoring.extractMethod.ExtractMethodHandler.REFACTORING_NAME;
-
 /**
  * @author Pavel.Dolgov
  */
@@ -56,8 +54,7 @@ public class ParametrizedDuplicates {
   private PsiMethodCallExpression myParametrizedCall;
   private VariableData[] myVariableDatum;
 
-  private ParametrizedDuplicates(@NotNull PsiElement[] pattern,
-                                 @NotNull ExtractMethodProcessor originalProcessor) {
+  private ParametrizedDuplicates(PsiElement @NotNull [] pattern, @NotNull ExtractMethodProcessor originalProcessor) {
     PsiElement[] filteredPattern = getFilteredElements(pattern);
     PsiElement firstElement = filteredPattern.length != 0 ? filteredPattern[0] : null;
     if (firstElement instanceof PsiStatement) {
@@ -74,7 +71,7 @@ public class ParametrizedDuplicates {
     }
   }
 
-  private static PsiElement[] copyElements(@NotNull PsiElement[] pattern) {
+  private static PsiElement[] copyElements(PsiElement @NotNull [] pattern) {
     Project project = pattern[0].getProject();
     return IntroduceParameterHandler.getElementsInCopy(project, pattern[0].getContainingFile(), pattern, false);
   }
@@ -82,7 +79,7 @@ public class ParametrizedDuplicates {
   @Nullable
   public static ParametrizedDuplicates findDuplicates(@NotNull ExtractMethodProcessor originalProcessor,
                                                       @NotNull DuplicatesFinder.MatchType matchType,
-                                                      @Nullable Set<TextRange> textRanges) {
+                                                      @Nullable Set<? extends TextRange> textRanges) {
     DuplicatesFinder finder = createDuplicatesFinder(originalProcessor, matchType, textRanges);
     if (finder == null) {
       return null;
@@ -194,7 +191,7 @@ public class ParametrizedDuplicates {
   @Nullable
   private static DuplicatesFinder createDuplicatesFinder(@NotNull ExtractMethodProcessor processor,
                                                          @NotNull DuplicatesFinder.MatchType matchType,
-                                                         @Nullable Set<TextRange> textRanges) {
+                                                         @Nullable Set<? extends TextRange> textRanges) {
     PsiElement[] elements = getFilteredElements(processor.myElements);
     if (elements.length == 0) {
       return null;
@@ -209,7 +206,7 @@ public class ParametrizedDuplicates {
   }
 
   @NotNull
-  public PsiMethod replaceMethod(@NotNull PsiMethod originalMethod) {
+  PsiMethod replaceMethod(@NotNull PsiMethod originalMethod) {
     PsiElementFactory factory = JavaPsiFacade.getElementFactory(originalMethod.getProject());
     String text = myParametrizedMethod.getText();
     PsiMethod method = factory.createMethodFromText(text, originalMethod.getParent());
@@ -217,14 +214,14 @@ public class ParametrizedDuplicates {
   }
 
   @NotNull
-  public PsiMethodCallExpression replaceCall(@NotNull PsiMethodCallExpression originalCall) {
+  PsiMethodCallExpression replaceCall(@NotNull PsiMethodCallExpression originalCall) {
     PsiElementFactory factory = JavaPsiFacade.getElementFactory(originalCall.getProject());
     String text = myParametrizedCall.getText();
     PsiMethodCallExpression call = (PsiMethodCallExpression)factory.createExpressionFromText(text, originalCall.getParent());
     return (PsiMethodCallExpression)originalCall.replace(call);
   }
 
-  private boolean initMatches(@NotNull PsiElement[] pattern, @NotNull List<Match> matches) {
+  private boolean initMatches(PsiElement @NotNull [] pattern, @NotNull List<Match> matches) {
     if (myElements.length == 0) {
       return false;
     }
@@ -282,7 +279,7 @@ public class ParametrizedDuplicates {
     return true;
   }
 
-  private static void mergeDuplicateUsages(@NotNull List<ClusterOfUsages> usagesList, @NotNull List<Match> matches) {
+  private static void mergeDuplicateUsages(@NotNull List<? extends ClusterOfUsages> usagesList, @NotNull List<Match> matches) {
     Set<ClusterOfUsages> duplicateUsages = new THashSet<>();
     for (int i = 0; i < usagesList.size(); i++) {
       ClusterOfUsages usages = usagesList.get(i);
@@ -366,7 +363,8 @@ public class ParametrizedDuplicates {
       createParameterDeclarations(originalProcessor, expressionsMapping, predefinedNames);
     putMatchParameters(parameterDeclarations);
 
-    JavaDuplicatesExtractMethodProcessor parametrizedProcessor = new JavaDuplicatesExtractMethodProcessor(myElements, REFACTORING_NAME);
+    JavaDuplicatesExtractMethodProcessor parametrizedProcessor =
+      new JavaDuplicatesExtractMethodProcessor(myElements, ExtractMethodHandler.getRefactoringName());
     if (!parametrizedProcessor.prepare(false)) {
       return false;
     }
@@ -380,9 +378,8 @@ public class ParametrizedDuplicates {
     return true;
   }
 
-  @NotNull
-  private static VariableData[] unmapVariableData(@NotNull VariableData[] variableDatum,
-                                                  @NotNull Map<PsiVariable, PsiVariable> variablesMapping) {
+  private static VariableData @NotNull [] unmapVariableData(VariableData @NotNull [] variableDatum,
+                                                            @NotNull Map<PsiVariable, PsiVariable> variablesMapping) {
     Map<PsiVariable, PsiVariable> reverseMapping = ContainerUtil.reverseMap(variablesMapping);
     return StreamEx.of(variableDatum)
                    .map(data -> data.substitute(reverseMapping.get(data.variable)))
@@ -424,15 +421,15 @@ public class ParametrizedDuplicates {
     }
   }
 
-  public PsiMethod getParametrizedMethod() {
+  PsiMethod getParametrizedMethod() {
     return myParametrizedMethod;
   }
 
-  public PsiMethodCallExpression getParametrizedCall() {
+  PsiMethodCallExpression getParametrizedCall() {
     return myParametrizedCall;
   }
 
-  public VariableData[] getVariableDatum() {
+  VariableData[] getVariableDatum() {
     return myVariableDatum;
   }
 
@@ -448,8 +445,7 @@ public class ParametrizedDuplicates {
     return ContainerUtil.isEmpty(myMatches);
   }
 
-  @NotNull
-  private static PsiElement[] wrapWithCodeBlock(@NotNull PsiElement[] elements, @NotNull InputVariables inputVariables) {
+  private static PsiElement @NotNull [] wrapWithCodeBlock(PsiElement @NotNull [] elements, @NotNull InputVariables inputVariables) {
     PsiElement fragmentStart = elements[0];
     PsiElement fragmentEnd = elements[elements.length - 1];
     List<ReusedLocalVariable> reusedLocalVariables =
@@ -468,8 +464,7 @@ public class ParametrizedDuplicates {
     return elementsInBlock;
   }
 
-  @NotNull
-  private static PsiElement[] trimBracesAndWhitespaces(@NotNull PsiCodeBlock codeBlock) {
+  private static PsiElement @NotNull [] trimBracesAndWhitespaces(@NotNull PsiCodeBlock codeBlock) {
     PsiElement[] elements = codeBlock.getChildren();
     int start = 1;
     while (start < elements.length && elements[start] instanceof PsiWhiteSpace) {
@@ -483,7 +478,7 @@ public class ParametrizedDuplicates {
     return Arrays.copyOfRange(elements, start, end);
   }
 
-  private static void declareReusedLocalVariables(@NotNull List<ReusedLocalVariable> reusedLocalVariables,
+  private static void declareReusedLocalVariables(@NotNull List<? extends ReusedLocalVariable> reusedLocalVariables,
                                                   @NotNull PsiBlockStatement statement,
                                                   @NotNull PsiElementFactory factory) {
     PsiElement parent = statement.getParent();
@@ -504,7 +499,7 @@ public class ParametrizedDuplicates {
   }
 
   @Nullable
-  private static PsiExpression wrapExpressionWithCodeBlock(@NotNull PsiElement[] copy,
+  private static PsiExpression wrapExpressionWithCodeBlock(PsiElement @NotNull [] copy,
                                                            @NotNull ExtractMethodProcessor originalProcessor) {
     if (copy.length != 1 || !(copy[0] instanceof PsiExpression)) return null;
 
@@ -605,9 +600,9 @@ public class ParametrizedDuplicates {
     return parameterDeclarations;
   }
 
-  private static void collectCopyMapping(@NotNull PsiElement[] pattern,
-                                         @NotNull PsiElement[] copy,
-                                         @NotNull List<ClusterOfUsages> patternUsages,
+  private static void collectCopyMapping(PsiElement @NotNull [] pattern,
+                                         PsiElement @NotNull [] copy,
+                                         @NotNull List<? extends ClusterOfUsages> patternUsages,
                                          @NotNull Map<PsiExpression, PsiExpression> expressions,
                                          @NotNull Map<PsiVariable, PsiVariable> variables) {
     Set<PsiExpression> patternExpressions = new THashSet<>();
@@ -618,11 +613,11 @@ public class ParametrizedDuplicates {
     collectCopyMapping(pattern, copy, patternExpressions::contains, expressions::put, variables::put);
   }
 
-  public static void collectCopyMapping(@NotNull PsiElement[] pattern,
-                                        @NotNull PsiElement[] copy,
-                                        @NotNull Predicate<PsiExpression> isReplaceablePattern,
-                                        @NotNull BiConsumer<PsiExpression, PsiExpression> expressionsMapping,
-                                        @NotNull BiConsumer<PsiVariable, PsiVariable> variablesMapping) {
+  public static void collectCopyMapping(PsiElement @NotNull [] pattern,
+                                        PsiElement @NotNull [] copy,
+                                        @NotNull Predicate<? super PsiExpression> isReplaceablePattern,
+                                        @NotNull BiConsumer<? super PsiExpression, ? super PsiExpression> expressionsMapping,
+                                        @NotNull BiConsumer<? super PsiVariable, ? super PsiVariable> variablesMapping) {
     pattern = DuplicatesFinder.getDeeplyFilteredElements(pattern);
     copy = DuplicatesFinder.getDeeplyFilteredElements(copy);
     if (copy.length != pattern.length) {
@@ -635,9 +630,9 @@ public class ParametrizedDuplicates {
 
   private static void collectCopyMapping(@NotNull PsiElement pattern,
                                          @NotNull PsiElement copy,
-                                         @NotNull Predicate<PsiExpression> isReplaceablePattern,
-                                         @NotNull BiConsumer<PsiExpression, PsiExpression> expressionsMapping,
-                                         @NotNull BiConsumer<PsiVariable, PsiVariable> variablesMapping) {
+                                         @NotNull Predicate<? super PsiExpression> isReplaceablePattern,
+                                         @NotNull BiConsumer<? super PsiExpression, ? super PsiExpression> expressionsMapping,
+                                         @NotNull BiConsumer<? super PsiVariable, ? super PsiVariable> variablesMapping) {
     if (pattern == copy) return;
     if (pattern instanceof PsiExpression && copy instanceof PsiExpression && isReplaceablePattern.test((PsiExpression)pattern)) {
       expressionsMapping.accept((PsiExpression)pattern, (PsiExpression)copy);
@@ -665,8 +660,7 @@ public class ParametrizedDuplicates {
     collectCopyMapping(pattern.getChildren(), copy.getChildren(), isReplaceablePattern, expressionsMapping, variablesMapping);
   }
 
-  @NotNull
-  private static PsiElement[] getFilteredElements(@NotNull PsiElement[] elements) {
+  private static PsiElement @NotNull [] getFilteredElements(PsiElement @NotNull [] elements) {
     if (elements.length == 0) {
       return elements;
     }

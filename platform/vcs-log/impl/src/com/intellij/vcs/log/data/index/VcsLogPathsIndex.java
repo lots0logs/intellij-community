@@ -1,45 +1,40 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.data.index;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Couple;
-import com.intellij.openapi.util.Pair;
-import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.changes.Change;
-import com.intellij.util.BooleanFunction;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
-import com.intellij.util.PathUtil;
 import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.DataIndexer;
-import com.intellij.util.indexing.IndexExtension;
 import com.intellij.util.indexing.StorageException;
-import com.intellij.util.indexing.impl.ForwardIndex;
-import com.intellij.util.indexing.impl.KeyCollectionBasedForwardIndex;
 import com.intellij.util.io.*;
-import com.intellij.vcs.log.VcsLogIndexService;
 import com.intellij.vcs.log.data.VcsLogStorage;
+import com.intellij.vcs.log.history.EdgeData;
 import com.intellij.vcs.log.impl.FatalErrorHandler;
-import com.intellij.vcs.log.impl.VcsIndexableDetails;
+import com.intellij.vcs.log.impl.VcsLogIndexer;
 import com.intellij.vcs.log.util.StorageId;
+import com.intellij.vcsUtil.VcsFileUtil;
 import com.intellij.vcsUtil.VcsUtil;
 import gnu.trove.TByteObjectHashMap;
 import gnu.trove.THashMap;
-import gnu.trove.THashSet;
+import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.function.ObjIntConsumer;
 
-public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsIndex.ChangeKind>, VcsIndexableDetails> {
+public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsIndex.ChangeKind>, VcsLogIndexer.CompressedDetails> {
   private static final Logger LOG = Logger.getInstance(VcsLogPathsIndex.class);
   public static final String PATHS = "paths";
   public static final String INDEX_PATHS_IDS = "paths-ids";
@@ -47,52 +42,30 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
 
   @NotNull private final PathsIndexer myPathsIndexer;
 
-  public VcsLogPathsIndex(@NotNull StorageId storageId, @NotNull VcsLogStorage storage, @NotNull FatalErrorHandler fatalErrorHandler,
+  public VcsLogPathsIndex(@NotNull StorageId storageId,
+                          @NotNull VcsLogStorage storage,
+                          @NotNull Set<VirtualFile> roots,
+                          @NotNull FatalErrorHandler fatalErrorHandler,
                           @NotNull Disposable disposableParent) throws IOException {
-    super(storageId, PATHS, new PathsIndexer(storage, createPathsEnumerator(storageId), createRenamesMap(storageId)),
+    super(storageId, PATHS, new PathsIndexer(storage, createPathsEnumerator(roots, storageId), createRenamesMap(storageId)),
           new ChangeKindListKeyDescriptor(), fatalErrorHandler, disposableParent);
 
     myPathsIndexer = (PathsIndexer)myIndexer;
     myPathsIndexer.setFatalErrorConsumer(e -> fatalErrorHandler.consume(this, e));
   }
 
-  @Nullable
-  @Override
-  protected ForwardIndex<Integer, List<VcsLogPathsIndex.ChangeKind>> createForwardIndex(@NotNull IndexExtension<Integer, List<ChangeKind>, VcsIndexableDetails> extension)
-    throws IOException {
-    if (!VcsLogIndexService.isPathsForwardIndexRequired()) return super.createForwardIndex(extension);
-    return new KeyCollectionBasedForwardIndex<Integer, List<ChangeKind>>(extension) {
-      @NotNull
-      @Override
-      public PersistentHashMap<Integer, Collection<Integer>> createMap() throws IOException {
-        File storageFile = myStorageId.getStorageFile(myName + ".idx");
-        return new PersistentHashMap<>(storageFile, EnumeratorIntegerDescriptor.INSTANCE, new IntCollectionDataExternalizer(),
-                                       Page.PAGE_SIZE);
-      }
-
-      @NotNull
-      @Override
-      protected Collection<Integer> convertToMapValueType(int inputId, @NotNull Map<Integer, List<ChangeKind>> map) {
-        if (!map.isEmpty()) {
-          List<ChangeKind> changesToParents = ContainerUtil.getFirstItem(map.values());
-          if (changesToParents.size() > 1) return Collections.emptySet();
-        }
-        return super.convertToMapValueType(inputId, map);
-      }
-    };
-  }
-
   @NotNull
-  private static PersistentEnumeratorBase<LightFilePath> createPathsEnumerator(@NotNull StorageId storageId) throws IOException {
-    File storageFile = storageId.getStorageFile(INDEX_PATHS_IDS);
-    return new PersistentBTreeEnumerator<>(storageFile, new LightFilePathKeyDescriptor(),
+  private static PersistentEnumeratorBase<LightFilePath> createPathsEnumerator(@NotNull Collection<VirtualFile> roots,
+                                                                               @NotNull StorageId storageId) throws IOException {
+    Path storageFile = storageId.getStorageFile(INDEX_PATHS_IDS);
+    return new PersistentBTreeEnumerator<>(storageFile, new LightFilePathKeyDescriptor(roots),
                                            Page.PAGE_SIZE, null, storageId.getVersion());
   }
 
   @NotNull
   private static PersistentHashMap<Couple<Integer>, Collection<Couple<Integer>>> createRenamesMap(@NotNull StorageId storageId)
     throws IOException {
-    File storageFile = storageId.getStorageFile(RENAMES_MAP);
+    Path storageFile = storageId.getStorageFile(RENAMES_MAP);
     return new PersistentHashMap<>(storageFile, new CoupleKeyDescriptor(), new CollectionDataExternalizer(), Page.PAGE_SIZE,
                                    storageId.getVersion());
   }
@@ -116,41 +89,43 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
   }
 
   @Nullable
-  public Couple<FilePath> iterateRenames(int parent, int child, @NotNull BooleanFunction<? super Couple<FilePath>> accept)
+  public EdgeData<FilePath> findRename(int parent, int child, @NotNull VirtualFile root, @NotNull FilePath path, boolean isChildPath)
     throws IOException {
     Collection<Couple<Integer>> renames = myPathsIndexer.myRenamesMap.get(Couple.of(parent, child));
     if (renames == null) return null;
+    int pathId = myPathsIndexer.myPathsEnumerator.enumerate(new LightFilePath(root, path));
     for (Couple<Integer> rename : renames) {
-      FilePath path1 = getPath(rename.first);
-      FilePath path2 = getPath(rename.second);
-      Couple<FilePath> paths = Couple.of(path1, path2);
-      if (accept.fun(paths)) {
-        return paths;
+      if ((isChildPath && rename.second == pathId) ||
+          (!isChildPath && rename.first == pathId)) {
+        FilePath path1 = getPath(rename.first);
+        FilePath path2 = getPath(rename.second);
+        return new EdgeData<>(path1, path2);
       }
     }
     return null;
   }
 
-  @NotNull
-  public Set<FilePath> getPathsChangedInCommit(int commit) throws IOException {
-    Collection<Integer> keysForCommit = getKeysForCommit(commit);
-    if (keysForCommit == null) return Collections.emptySet();
-
-    Set<FilePath> paths = ContainerUtil.newHashSet();
-    for (Integer pathId : keysForCommit) {
-      LightFilePath lightFilePath = myPathsIndexer.getPathsEnumerator().valueOf(pathId);
-      if (lightFilePath.isDirectory()) continue;
-      paths.add(toFilePath(lightFilePath));
-    }
-
-    return paths;
-  }
-
-  public void iterateCommits(@NotNull FilePath path,
+  public void iterateCommits(@NotNull VirtualFile root, @NotNull FilePath path,
                              @NotNull ObjIntConsumer<? super List<ChangeKind>> consumer)
     throws IOException, StorageException {
-    int pathId = myPathsIndexer.myPathsEnumerator.enumerate(new LightFilePath(path));
+    int pathId = myPathsIndexer.myPathsEnumerator.enumerate(new LightFilePath(root, path));
     iterateCommitIdsAndValues(pathId, consumer);
+  }
+
+  @NotNull
+  VcsLogIndexer.PathsEncoder getPathsEncoder() {
+    return new VcsLogIndexer.PathsEncoder() {
+      @Override
+      public int encode(@NotNull VirtualFile root, @NotNull String relativePath, boolean isDirectory) {
+        try {
+          return myPathsIndexer.myPathsEnumerator.enumerate(new LightFilePath(root, relativePath, isDirectory));
+        }
+        catch (IOException e) {
+          myPathsIndexer.myFatalErrorConsumer.consume(e);
+          return 0;
+        }
+      }
+    };
   }
 
   @Override
@@ -169,10 +144,11 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
   @Nullable
   private static FilePath toFilePath(@Nullable LightFilePath lightFilePath) {
     if (lightFilePath == null) return null;
-    return VcsUtil.getFilePath(lightFilePath.getPath(), lightFilePath.isDirectory());
+    return VcsUtil.getFilePath(lightFilePath.getRoot().getPath() + "/" + lightFilePath.getRelativePath(),
+                               lightFilePath.isDirectory());
   }
 
-  private static class PathsIndexer implements DataIndexer<Integer, List<ChangeKind>, VcsIndexableDetails> {
+  private static class PathsIndexer implements DataIndexer<Integer, List<ChangeKind>, VcsLogIndexer.CompressedDetails> {
     @NotNull private final VcsLogStorage myStorage;
     @NotNull private final PersistentEnumeratorBase<LightFilePath> myPathsEnumerator;
     @NotNull private final PersistentHashMap<Couple<Integer>, Collection<Couple<Integer>>> myRenamesMap;
@@ -191,25 +167,21 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
 
     @NotNull
     @Override
-    public Map<Integer, List<ChangeKind>> map(@NotNull VcsIndexableDetails inputData) {
+    public Map<Integer, List<ChangeKind>> map(@NotNull VcsLogIndexer.CompressedDetails inputData) {
       Map<Integer, List<ChangeKind>> result = new THashMap<>();
 
-      String rootPath = inputData.getRoot().getPath();
       // its not exactly parents count since it is very convenient to assume that initial commit has one parent
       int parentsCount = inputData.getParents().isEmpty() ? 1 : inputData.getParents().size();
       for (int parentIndex = 0; parentIndex < parentsCount; parentIndex++) {
         try {
-          Set<String> processedParents = new THashSet<>();
+          int finalParentIndex = parentIndex;
           Collection<Couple<Integer>> renames = new SmartList<>();
-          for (Pair<String, String> renamedPath : inputData.getRenamedPaths(parentIndex)) {
-            int beforeId = myPathsEnumerator.enumerate(new LightFilePath(renamedPath.first, false));
-            int afterId = myPathsEnumerator.enumerate(new LightFilePath(renamedPath.second, false));
+          inputData.getRenamedPaths(parentIndex).forEachEntry((beforeId, afterId) -> {
             renames.add(Couple.of(beforeId, afterId));
-            getOrCreateChangeKindList(result, beforeId, parentsCount).set(parentIndex, ChangeKind.REMOVED);
-            getOrCreateChangeKindList(result, afterId, parentsCount).set(parentIndex, ChangeKind.ADDED);
-            addParentsToResult(result, parentIndex, parentsCount, renamedPath.second, rootPath, processedParents);
-            addParentsToResult(result, parentIndex, parentsCount, renamedPath.first, rootPath, processedParents);
-          }
+            getOrCreateChangeKindList(result, beforeId, parentsCount).set(finalParentIndex, ChangeKind.REMOVED);
+            getOrCreateChangeKindList(result, afterId, parentsCount).set(finalParentIndex, ChangeKind.ADDED);
+            return true;
+          });
 
           if (renames.size() > 0) {
             int commit = myStorage.getCommitIndex(inputData.getId(), inputData.getRoot());
@@ -217,11 +189,10 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
             myRenamesMap.put(Couple.of(parent, commit), renames);
           }
 
-          for (Map.Entry<String, Change.Type> modifiedPath : inputData.getModifiedPaths(parentIndex).entrySet()) {
-            getOrCreateChangeKindList(result, new LightFilePath(modifiedPath.getKey(), false), parentsCount)
-              .set(parentIndex, createChangeData(modifiedPath.getValue()));
-            addParentsToResult(result, parentIndex, parentsCount, modifiedPath.getKey(), rootPath, processedParents);
-          }
+          inputData.getModifiedPaths(parentIndex).forEachEntry((pathId, changeType) -> {
+            getOrCreateChangeKindList(result, pathId, parentsCount).set(finalParentIndex, createChangeData(changeType));
+            return true;
+          });
         }
         catch (IOException e) {
           myFatalErrorConsumer.consume(e);
@@ -231,33 +202,12 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
       return result;
     }
 
-    private void addParentsToResult(@NotNull Map<Integer, List<ChangeKind>> result,
-                                    int parent, int parentsCount,
-                                    @NotNull String path, @NotNull String rootPath,
-                                    @NotNull Set<? super String> processedParents) throws IOException {
-      String parentPath = PathUtil.getParentPath(path);
-      while (!processedParents.contains(parentPath)) {
-        if (FileUtil.PATH_HASHING_STRATEGY.equals(rootPath, parentPath)) break;
-
-        processedParents.add(parentPath);
-        getOrCreateChangeKindList(result, new LightFilePath(parentPath, true), parentsCount).set(parent, ChangeKind.MODIFIED);
-        parentPath = PathUtil.getParentPath(parentPath);
-      }
-    }
-
-    @NotNull
-    private List<ChangeKind> getOrCreateChangeKindList(@NotNull Map<Integer, List<ChangeKind>> pathIdToChangeDataListsMap,
-                                                       @NotNull LightFilePath path, int parentsCount) throws IOException {
-      int pathId = myPathsEnumerator.enumerate(path);
-      return getOrCreateChangeKindList(pathIdToChangeDataListsMap, pathId, parentsCount);
-    }
-
     @NotNull
     private static List<ChangeKind> getOrCreateChangeKindList(@NotNull Map<Integer, List<ChangeKind>> pathIdToChangeDataListsMap,
                                                               int pathId, int parentsCount) {
       List<ChangeKind> changeDataList = pathIdToChangeDataListsMap.get(pathId);
       if (changeDataList == null) {
-        changeDataList = ContainerUtil.newSmartList();
+        changeDataList = new SmartList<>();
         for (int i = 0; i < parentsCount; i++) {
           changeDataList.add(ChangeKind.NOT_CHANGED);
         }
@@ -295,7 +245,7 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
 
     @Override
     public List<ChangeKind> read(@NotNull DataInput in) throws IOException {
-      List<ChangeKind> value = ContainerUtil.newSmartList();
+      List<ChangeKind> value = new SmartList<>();
 
       int size = DataInputOutputUtil.readINT(in);
       for (int i = 0; i < size; i++) {
@@ -335,21 +285,28 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
   }
 
   private static class LightFilePath {
-    @NotNull private final String myPath;
+    @NotNull private final VirtualFile myRoot;
+    @NotNull private final String myRelativePath;
     private final boolean myIsDirectory;
 
-    private LightFilePath(@NotNull String path, boolean directory) {
-      myPath = path;
+    private LightFilePath(@NotNull VirtualFile root, @NotNull String relativePath, boolean directory) {
+      myRoot = root;
+      myRelativePath = relativePath;
       myIsDirectory = directory;
     }
 
-    private LightFilePath(@NotNull FilePath filePath) {
-      this(filePath.getPath(), filePath.isDirectory());
+    private LightFilePath(@NotNull VirtualFile root, @NotNull FilePath filePath) {
+      this(root, VcsFileUtil.relativePath(root, filePath), filePath.isDirectory());
     }
 
     @NotNull
-    public String getPath() {
-      return myPath;
+    public VirtualFile getRoot() {
+      return myRoot;
+    }
+
+    @NotNull
+    public String getRelativePath() {
+      return myRelativePath;
     }
 
     public boolean isDirectory() {
@@ -361,18 +318,30 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       LightFilePath path = (LightFilePath)o;
-      return myIsDirectory == path.myIsDirectory && myPath.equals(path.myPath);
+      return myIsDirectory == path.myIsDirectory &&
+             myRoot.equals(path.myRoot) &&
+             myRelativePath.equals(path.myRelativePath);
     }
 
     @Override
     public int hashCode() {
-      int result = myPath.hashCode();
-      result = 31 * result + (myIsDirectory ? 1 : 0);
-      return result;
+      return Objects.hash(myRoot, myRelativePath, myIsDirectory);
     }
   }
 
   private static class LightFilePathKeyDescriptor implements KeyDescriptor<LightFilePath> {
+    @NotNull private final List<VirtualFile> myRoots;
+    @NotNull private final TObjectIntHashMap<VirtualFile> myRootsReversed;
+
+    private LightFilePathKeyDescriptor(@NotNull Collection<VirtualFile> roots) {
+      myRoots = ContainerUtil.sorted(roots, Comparator.comparing(VirtualFile::getPath));
+
+      myRootsReversed = new TObjectIntHashMap<>();
+      for (int i = 0; i < myRoots.size(); i++) {
+        myRootsReversed.put(myRoots.get(i), i);
+      }
+    }
+
     @Override
     public int getHashCode(LightFilePath path) {
       return path.hashCode();
@@ -385,15 +354,19 @@ public class VcsLogPathsIndex extends VcsLogFullDetailsIndex<List<VcsLogPathsInd
 
     @Override
     public void save(@NotNull DataOutput out, LightFilePath value) throws IOException {
-      IOUtil.writeUTF(out, value.getPath());
-      out.writeBoolean(value.myIsDirectory);
+      out.writeInt(myRootsReversed.get(value.getRoot()));
+      IOUtil.writeUTF(out, value.getRelativePath());
+      out.writeBoolean(value.isDirectory());
     }
 
     @Override
     public LightFilePath read(@NotNull DataInput in) throws IOException {
+      int rootIndex = in.readInt();
+      VirtualFile root = myRoots.get(rootIndex);
+      if (root == null) throw new IOException("Can not read root for index " + rootIndex + ". All roots " + myRoots);
       String path = IOUtil.readUTF(in);
       boolean isDirectory = in.readBoolean();
-      return new LightFilePath(path, isDirectory);
+      return new LightFilePath(root, path, isDirectory);
     }
   }
 

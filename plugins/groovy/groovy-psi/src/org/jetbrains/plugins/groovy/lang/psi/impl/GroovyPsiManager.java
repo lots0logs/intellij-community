@@ -12,7 +12,6 @@ import com.intellij.psi.impl.PsiManagerEx;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.ConcurrencyUtil;
-import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -30,12 +29,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Function;
 
 /**
  * @author ven
  */
 public class GroovyPsiManager {
-  private static final Logger LOG = Logger.getInstance("org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager");
+  private static final Logger LOG = Logger.getInstance(GroovyPsiManager.class);
+
   private static final Set<String> ourPopularClasses = ContainerUtil.newHashSet(GroovyCommonClassNames.GROOVY_LANG_CLOSURE,
                                                                                 GroovyCommonClassNames.GROOVY_OBJECT,
                                                                                 GroovyCommonClassNames.GROOVY_OBJECT_SUPPORT,
@@ -51,7 +52,7 @@ public class GroovyPsiManager {
   private final ConcurrentMap<GrExpression, PsiType> topLevelTypes = ContainerUtil.createConcurrentWeakMap();
   private final ConcurrentMap<PsiMember, Boolean> myCompileStatic = ContainerUtil.createConcurrentWeakMap();
 
-  private static final RecursionGuard ourGuard = RecursionManager.createGuard("groovyPsiManager");
+  private static final RecursionGuard<PsiElement> ourGuard = RecursionManager.createGuard("groovyPsiManager");
 
   public GroovyPsiManager(Project project) {
     myProject = project;
@@ -130,8 +131,8 @@ public class GroovyPsiManager {
   private static <K extends GroovyPsiElement> PsiType getTypeWithCaching(@NotNull K key, @NotNull ConcurrentMap<? super K, PsiType> map, @NotNull Function<? super K, ? extends PsiType> calculator) {
     PsiType type = map.get(key);
     if (type == null) {
-      RecursionGuard.StackStamp stamp = ourGuard.markStack();
-      type = calculator.fun(key);
+      RecursionGuard.StackStamp stamp = RecursionManager.markStack();
+      type = calculator.apply(key);
       if (type == null) {
         type = UNKNOWN_TYPE;
       }
@@ -174,7 +175,7 @@ public class GroovyPsiManager {
 
   @Nullable
   public static PsiType inferType(@NotNull PsiElement element, @NotNull Computable<? extends PsiType> computable) {
-    List<Object> stack = ourGuard.currentStack();
+    List<? extends PsiElement> stack = ourGuard.currentStack();
     if (stack.size() > 7) { //don't end up walking the whole project PSI
       ourGuard.prohibitResultCaching(stack.get(0));
       return null;

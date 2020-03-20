@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.patch.tool;
 
 import com.intellij.diff.DiffContentFactory;
@@ -44,12 +30,14 @@ import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.event.VisibleAreaListener;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.ex.EditorMarkupModel;
+import com.intellij.openapi.editor.impl.LineNumberConverterAdapter;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.BooleanGetter;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vcs.changes.patch.AppliedTextPatch;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.TIntArrayList;
@@ -57,10 +45,8 @@ import org.jetbrains.annotations.*;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.Iterator;
 import java.util.List;
+import java.util.*;
 
 class ApplyPatchViewer implements DataProvider, Disposable {
   private static final Logger LOG = Logger.getInstance(ApplyPatchViewer.class);
@@ -123,13 +109,14 @@ class ApplyPatchViewer implements DataProvider, Disposable {
     ((EditorMarkupModel)myPatchEditor.getMarkupModel()).setErrorStripeVisible(false);
 
 
-    List<TextEditorHolder> holders = ContainerUtil.list(myResultHolder, myPatchHolder);
-    List<EditorEx> editors = ContainerUtil.list(myResultEditor, myPatchEditor);
+    List<TextEditorHolder> holders = Arrays.asList(myResultHolder, myPatchHolder);
+    List<EditorEx> editors = Arrays.asList(myResultEditor, myPatchEditor);
     JComponent resultTitle = DiffUtil.createTitle(myPatchRequest.getResultTitle());
     JComponent patchTitle = DiffUtil.createTitle(myPatchRequest.getPatchTitle());
-    List<JComponent> titleComponents = DiffUtil.createSyncHeightComponents(ContainerUtil.list(resultTitle, patchTitle));
+    List<JComponent> titleComponents = DiffUtil.createSyncHeightComponents(Arrays.asList(resultTitle, patchTitle));
 
-    myContentPanel = new TwosideContentPanel(holders, titleComponents);
+    myContentPanel = TwosideContentPanel.createFromHolders(holders);
+    myContentPanel.setTitles(titleComponents);
     myPanel = new SimpleDiffPanel(myContentPanel, this, myContext);
 
     myModel = new MyModel(myProject, myResultEditor.getDocument());
@@ -138,23 +125,18 @@ class ApplyPatchViewer implements DataProvider, Disposable {
     myFocusTrackerSupport.setCurrentSide(Side.LEFT);
     myPrevNextDifferenceIterable = new MyPrevNextDifferenceIterable();
     myStatusPanel = new MyStatusPanel();
-    myFoldingModel = new MyFoldingModel(myResultEditor, this);
+    myFoldingModel = new MyFoldingModel(myProject, myResultEditor, this);
 
 
     DiffUtil.installLineConvertor(myResultEditor, myFoldingModel);
 
     new MyFocusOppositePaneAction().install(myPanel);
-    new TextDiffViewerUtil.EditorActionsPopup(createEditorPopupActions()).install(editors);
+    new TextDiffViewerUtil.EditorActionsPopup(createEditorPopupActions()).install(editors, myPanel);
 
     new TextDiffViewerUtil.EditorFontSizeSynchronizer(editors).install(this);
 
     myEditorSettingsAction = new SetEditorSettingsAction(getTextSettings(), editors);
     myEditorSettingsAction.applyDefaults();
-
-    if (!isReadOnly()) {
-      DiffUtil.registerAction(new ApplySelectedChangesAction(true), myPanel);
-      DiffUtil.registerAction(new IgnoreSelectedChangesAction(true), myPanel);
-    }
 
     ProxyUndoRedoAction.register(myProject, myResultEditor, myContentPanel);
   }
@@ -179,8 +161,8 @@ class ApplyPatchViewer implements DataProvider, Disposable {
     List<AnAction> group = new ArrayList<>();
 
     if (!isReadOnly()) {
-      group.add(new ApplySelectedChangesAction(false));
-      group.add(new IgnoreSelectedChangesAction(false));
+      group.add(new ApplySelectedChangesAction());
+      group.add(new IgnoreSelectedChangesAction());
     }
 
     group.add(Separator.getInstance());
@@ -273,7 +255,7 @@ class ApplyPatchViewer implements DataProvider, Disposable {
 
   @NotNull
   public TextDiffSettings getTextSettings() {
-    return TextDiffSettings.getSettings("ApplyPatch");
+    return TextDiffSettings.getSettings("ApplyPatch"); //NON-NLS
   }
 
   @NotNull
@@ -289,12 +271,13 @@ class ApplyPatchViewer implements DataProvider, Disposable {
   protected void initPatchViewer() {
   myPanel.setPersistentNotifications(DiffUtil.getCustomNotifications(myContext, myPatchRequest));
     final Document outputDocument = myResultEditor.getDocument();
-    boolean success = DiffUtil.executeWriteCommand(outputDocument, myProject, "Init merge content", () -> {
-      outputDocument.setText(myPatchRequest.getLocalContent());
-      if (!isReadOnly()) DiffUtil.putNonundoableOperation(myProject, outputDocument);
-    });
+    boolean success =
+      DiffUtil.executeWriteCommand(outputDocument, myProject, DiffBundle.message("message.init.merge.content.command"), () -> {
+        outputDocument.setText(myPatchRequest.getLocalContent());
+        if (!isReadOnly()) DiffUtil.putNonundoableOperation(myProject, outputDocument);
+      });
     if (!success && !StringUtil.equals(outputDocument.getText(), myPatchRequest.getLocalContent())) {
-      myPanel.setErrorContent("Failed to display patch applier - local content was modified");
+      myPanel.setErrorContent(VcsBundle.message("patch.apply.display.local.content.was.modified.error"));
       return;
     }
 
@@ -308,7 +291,8 @@ class ApplyPatchViewer implements DataProvider, Disposable {
 
     LineNumberConvertor convertor1 = builder.getLineConvertor1();
     LineNumberConvertor convertor2 = builder.getLineConvertor2();
-    myPatchEditor.getGutterComponentEx().setLineNumberConvertor(convertor1.createConvertor(), convertor2.createConvertor());
+    myPatchEditor.getGutter().setLineNumberConverter(new LineNumberConverterAdapter(convertor1.createConvertor()),
+                                                     new LineNumberConverterAdapter(convertor2.createConvertor()));
 
     TIntArrayList lines = builder.getSeparatorLines();
     for (int i = 0; i < lines.size(); i++) {
@@ -470,9 +454,8 @@ class ApplyPatchViewer implements DataProvider, Disposable {
   }
 
   private class ApplySelectedChangesAction extends ApplySelectedChangesActionBase {
-    private ApplySelectedChangesAction(boolean shortcut) {
-      super(shortcut);
-      getTemplatePresentation().setText("Accept");
+    private ApplySelectedChangesAction() {
+      getTemplatePresentation().setText(VcsBundle.messagePointer("action.presentation.ApplySelectedChangesAction.text"));
       getTemplatePresentation().setIcon(AllIcons.Actions.Checked);
       copyShortcutFrom(ActionManager.getInstance().getAction("Diff.ApplyRightSide"));
     }
@@ -491,9 +474,8 @@ class ApplyPatchViewer implements DataProvider, Disposable {
   }
 
   private class IgnoreSelectedChangesAction extends ApplySelectedChangesActionBase {
-    private IgnoreSelectedChangesAction(boolean shortcut) {
-      super(shortcut);
-      getTemplatePresentation().setText("Ignore");
+    private IgnoreSelectedChangesAction() {
+      getTemplatePresentation().setText(VcsBundle.messagePointer("action.presentation.IgnoreSelectedChangesAction.text"));
       getTemplatePresentation().setIcon(AllIcons.Diff.Remove);
       setShortcutSet(new CompositeShortcutSet(ActionManager.getInstance().getAction("Diff.IgnoreRightSide").getShortcutSet(),
                                               ActionManager.getInstance().getAction("Diff.ApplyLeftSide").getShortcutSet()));
@@ -513,15 +495,9 @@ class ApplyPatchViewer implements DataProvider, Disposable {
   }
 
   private abstract class ApplySelectedChangesActionBase extends DumbAwareAction {
-    private final boolean myShortcut;
-
-    ApplySelectedChangesActionBase(boolean shortcut) {
-      myShortcut = shortcut;
-    }
-
     @Override
     public void update(@NotNull AnActionEvent e) {
-      if (myShortcut) {
+      if (DiffUtil.isFromShortcut(e)) {
         // consume shortcut even if there are nothing to do - avoid calling some other action
         e.getPresentation().setEnabledAndVisible(true);
         return;
@@ -530,7 +506,7 @@ class ApplyPatchViewer implements DataProvider, Disposable {
       Presentation presentation = e.getPresentation();
       Editor editor = e.getData(CommonDataKeys.EDITOR);
 
-      Side side = Side.fromValue(ContainerUtil.list(myResultEditor, myPatchEditor), editor);
+      Side side = Side.fromValue(Arrays.asList(myResultEditor, myPatchEditor), editor);
       if (side == null) {
         presentation.setEnabledAndVisible(false);
         return;
@@ -543,13 +519,13 @@ class ApplyPatchViewer implements DataProvider, Disposable {
     @Override
     public void actionPerformed(@NotNull final AnActionEvent e) {
       Editor editor = e.getData(CommonDataKeys.EDITOR);
-      final Side side = Side.fromValue(ContainerUtil.list(myResultEditor, myPatchEditor), editor);
+      final Side side = Side.fromValue(Arrays.asList(myResultEditor, myPatchEditor), editor);
       if (editor == null || side == null) return;
 
       final List<ApplyPatchChange> selectedChanges = getSelectedChanges(side);
       if (selectedChanges.isEmpty()) return;
 
-      String title = e.getPresentation().getText() + " in patch resolve";
+      String title = VcsBundle.message("patch.apply.changes.in.patch.resolve", e.getPresentation().getText());
 
       executeCommand(title, () -> apply(selectedChanges));
     }
@@ -583,7 +559,7 @@ class ApplyPatchViewer implements DataProvider, Disposable {
 
   private class ApplyNonConflictsAction extends DumbAwareAction {
     ApplyNonConflictsAction() {
-      ActionUtil.copyFrom(this, "Diff.ApplyNonConflicts");
+      ActionUtil.copyFrom(this, "Diff.ApplyNonConflicts"); //NON-NLS
     }
 
     @Override
@@ -601,7 +577,7 @@ class ApplyPatchViewer implements DataProvider, Disposable {
       List<ApplyPatchChange> changes = myModelChanges;
       if (changes.isEmpty()) return;
 
-      executeCommand("Apply Non Conflicted Changes", () -> {
+      executeCommand(DiffBundle.message("merge.dialog.apply.non.conflicted.changes.command"), () -> {
         for (int i = changes.size() - 1; i >= 0; i--) {
           ApplyPatchChange change = changes.get(i);
           switch (change.getStatus()) {
@@ -648,7 +624,7 @@ class ApplyPatchViewer implements DataProvider, Disposable {
 
   private class ShowDiffWithLocalAction extends DumbAwareAction {
     ShowDiffWithLocalAction() {
-      super("Compare with local content", null, AllIcons.Actions.Diff);
+      super(VcsBundle.messagePointer("action.DumbAwareAction.text.compare.with.local.content"), AllIcons.Actions.Diff);
     }
 
     @Override
@@ -730,8 +706,8 @@ class ApplyPatchViewer implements DataProvider, Disposable {
   }
 
   private static class MyFoldingModel extends FoldingModelSupport {
-    MyFoldingModel(@NotNull EditorEx editor, @NotNull Disposable disposable) {
-      super(new EditorEx[]{editor}, disposable);
+    MyFoldingModel(@Nullable Project project, @NotNull EditorEx editor, @NotNull Disposable disposable) {
+      super(project, new EditorEx[]{editor}, disposable);
     }
 
     public void install(@Nullable List<ApplyPatchChange> changes,

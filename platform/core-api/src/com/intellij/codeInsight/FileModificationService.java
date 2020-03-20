@@ -39,9 +39,9 @@ public abstract class FileModificationService {
     return prepareFileForWrite(file);
   }
 
-  public boolean preparePsiElementsForWrite(@NotNull PsiElement... elements) {
+  public boolean preparePsiElementsForWrite(PsiElement @NotNull ... elements) {
     return preparePsiElementsForWrite(Arrays.asList(elements));
   }
 
-  public abstract boolean prepareVirtualFilesForWrite(@NotNull Project project, @NotNull Collection<VirtualFile> files);
+  public abstract boolean prepareVirtualFilesForWrite(@NotNull Project project, @NotNull Collection<? extends VirtualFile> files);
 }

@@ -18,7 +18,7 @@ import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.roots.libraries.LibraryTablesRegistrar;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vcs.VcsConfiguration;
-import com.intellij.openapi.vcs.changes.ChangeListManager;
+import com.intellij.openapi.vcs.changes.VcsIgnoreManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -27,7 +27,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFileCreateEvent;
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.openapi.vfs.pointers.VirtualFilePointerManager;
 import com.intellij.testFramework.IdeaTestUtil;
-import com.intellij.testFramework.ModuleTestCase;
+import com.intellij.testFramework.JavaModuleTestCase;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.VfsTestUtil;
 import com.intellij.util.TimeoutUtil;
@@ -45,7 +45,7 @@ import java.util.List;
 /**
  * @author dsl
  */
-public class RootsChangedTest extends ModuleTestCase {
+public class RootsChangedTest extends JavaModuleTestCase {
   private MyModuleRootListener myModuleRootListener;
 
   @Override
@@ -330,21 +330,25 @@ public class RootsChangedTest extends ModuleTestCase {
     assertNoEvents(false);
   }
 
-  private void assertNoEvents(boolean modificationCountMustBeIncremented) {
-    assertEventsCountAndIncrementModificationCount(0, modificationCountMustBeIncremented);
+  private void assertNoEvents(boolean modificationCountMayBeIncremented) {
+    assertEventsCountAndIncrementModificationCount(0, false, modificationCountMayBeIncremented);
   }
 
   private void assertEventsCount(int count) {
-    assertEventsCountAndIncrementModificationCount(count, count != 0);
+    assertEventsCountAndIncrementModificationCount(count, count != 0, false);
   }
 
-  private void assertEventsCountAndIncrementModificationCount(int eventsCount, boolean modificationCountMustBeIncremented) {
+  private void assertEventsCountAndIncrementModificationCount(int eventsCount, boolean modificationCountMustBeIncremented,
+                                                              boolean modificationCountMayBeIncremented) {
     final int beforeCount = myModuleRootListener.beforeCount;
     final int afterCount = myModuleRootListener.afterCount;
     assertEquals("beforeCount = " + beforeCount + ", afterCount = " + afterCount, beforeCount, afterCount);
     assertEquals(eventsCount, beforeCount);
     long currentModificationCount = ProjectRootManager.getInstance(myProject).getModificationCount();
-    if (modificationCountMustBeIncremented) {
+    if (modificationCountMayBeIncremented) {
+      assertTrue(currentModificationCount >= myModuleRootListener.modificationCount);
+    }
+    else if (modificationCountMustBeIncremented) {
       assertTrue(currentModificationCount > myModuleRootListener.modificationCount);
     }
     else {
@@ -408,11 +412,12 @@ public class RootsChangedTest extends ModuleTestCase {
     // create .idea
     StateStorageManagerKt.saveComponentManager(getProject());
     VirtualFile shelf = createChildDirectory(getProject().getProjectFile().getParent(), "shelf");
+    VcsIgnoreManager vcsIgnoreManager = VcsIgnoreManager.getInstance(myProject);
 
     myModuleRootListener.reset();
 
     VirtualFile xxx = createChildData(shelf, "shelf1.dat");
-    assertTrue(ChangeListManager.getInstance(myProject).isPotentiallyIgnoredFile(xxx));
+    assertTrue(vcsIgnoreManager.isPotentiallyIgnoredFile(xxx));
 
     assertEquals(myModuleRootListener.modificationCount, ProjectRootManager.getInstance(myProject).getModificationCount());
 
@@ -423,7 +428,7 @@ public class RootsChangedTest extends ModuleTestCase {
     myModuleRootListener.reset();
 
     VirtualFile xxx2 = createChildData(newShelf, "shelf1.dat");
-    assertTrue(ChangeListManager.getInstance(myProject).isPotentiallyIgnoredFile(xxx2));
+    assertTrue(vcsIgnoreManager.isPotentiallyIgnoredFile(xxx2));
   }
 
   public void testCreationDeletionOfRootDirectoriesMustLeadToRootsChanged() {

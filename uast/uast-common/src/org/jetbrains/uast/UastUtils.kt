@@ -22,6 +22,8 @@ import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.psi.*
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.util.ArrayUtil
+import org.jetbrains.annotations.ApiStatus
 import java.io.File
 
 inline fun <reified T : UElement> UElement.getParentOfType(strict: Boolean = true): T? = getParentOfType(T::class.java, strict)
@@ -48,6 +50,7 @@ fun UElement.skipParentOfType(strict: Boolean, vararg parentClasses: Class<out U
   }
 }
 
+@SafeVarargs
 fun <T : UElement> UElement.getParentOfType(
   parentClass: Class<out UElement>,
   strict: Boolean = true,
@@ -95,25 +98,11 @@ fun UElement?.getUCallExpression(searchLimit: Int = Int.MAX_VALUE): UCallExpress
     }
   }?.firstOrNull()
 
-@Deprecated(message = "This function is deprecated, use getContainingUFile, will be removed in IDEA 2019.2",
-            replaceWith = ReplaceWith("getContainingUFile()"))
-fun UElement.getContainingFile(): UFile? = getContainingUFile()
-
 fun UElement.getContainingUFile(): UFile? = getParentOfType(UFile::class.java)
 
 fun UElement.getContainingUClass(): UClass? = getParentOfType(UClass::class.java)
 fun UElement.getContainingUMethod(): UMethod? = getParentOfType(UMethod::class.java)
 fun UElement.getContainingUVariable(): UVariable? = getParentOfType(UVariable::class.java)
-
-@Deprecated(message = "Useless function, will be removed in IDEA 2019.1", replaceWith = ReplaceWith("getContainingMethod()?.javaPsi"))
-fun UElement.getContainingMethod(): PsiMethod? = getContainingUMethod()?.psi
-
-@Deprecated(message = "Useless function, will be removed in IDEA 2019.1", replaceWith = ReplaceWith("getContainingUClass()?.javaPsi"))
-fun UElement.getContainingClass(): PsiClass? = getContainingUClass()?.psi
-
-@Deprecated(message = "Useless function, will be removed in IDEA 2019.1",
-            replaceWith = ReplaceWith("PsiTreeUtil.getParentOfType(this, PsiClass::class.java)"))
-fun PsiElement?.getContainingClass(): PsiClass? = this?.let { PsiTreeUtil.getParentOfType(it, PsiClass::class.java) }
 
 fun <T : UElement> PsiElement?.findContaining(clazz: Class<T>): T? {
   var element = this
@@ -122,6 +111,12 @@ fun <T : UElement> PsiElement?.findContaining(clazz: Class<T>): T? {
     element = element.parent
   }
   return null
+}
+
+fun isPsiAncestor(ancestor: UElement, child: UElement): Boolean {
+  val ancestorPsi = ancestor.sourcePsi ?: return false
+  val childPsi = child.sourcePsi ?: return false
+  return PsiTreeUtil.isAncestor(ancestorPsi, childPsi, false)
 }
 
 fun UElement.isUastChildOf(probablyParent: UElement?, strict: Boolean = false): Boolean {
@@ -137,10 +132,6 @@ fun UElement.isUastChildOf(probablyParent: UElement?, strict: Boolean = false): 
   return isChildOf(if (strict) uastParent else this, probablyParent)
 }
 
-@Deprecated("contains a bug in negation of `strict` parameter, will be removed in IDEA 2019.2",
-            replaceWith = ReplaceWith("isUastChildOf(probablyElement, strict)"))
-fun UElement.isChildOf(probablyParent: UElement?, strict: Boolean = false) = isUastChildOf(probablyParent, !strict)
-
 /**
  * Resolves the receiver element if it implements [UResolvable].
  *
@@ -150,10 +141,6 @@ fun UElement.tryResolve(): PsiElement? = (this as? UResolvable)?.resolve()
 
 fun UElement.tryResolveNamed(): PsiNamedElement? = (this as? UResolvable)?.resolve() as? PsiNamedElement
 
-fun UElement.tryResolveUDeclaration(context: UastContext): UDeclaration? {
-  return (this as? UResolvable)?.resolve()?.let { context.convertElementWithParent(it, null) as? UDeclaration }
-}
-
 fun UReferenceExpression?.getQualifiedName(): String? = (this?.resolve() as? PsiClass)?.qualifiedName
 
 /**
@@ -161,13 +148,32 @@ fun UReferenceExpression?.getQualifiedName(): String? = (this?.resolve() as? Psi
  */
 fun UExpression.evaluateString(): String? = evaluate() as? String
 
+fun UExpression.skipParenthesizedExprDown(): UExpression? {
+  var expression = this
+  while (expression is UParenthesizedExpression) {
+    expression = expression.expression
+  }
+  return expression
+}
+
+fun skipParenthesizedExprUp(elem: UElement?): UElement? {
+  var parent = elem
+  while (parent is UParenthesizedExpression) {
+    parent = parent.uastParent
+  }
+  return parent
+}
+
+
 /**
  * Get a physical [File] for this file, or null if there is no such file on disk.
  */
-fun UFile.getIoFile(): File? = psi.virtualFile?.let { VfsUtilCore.virtualToIoFile(it) }
+fun UFile.getIoFile(): File? = sourcePsi.virtualFile?.let { VfsUtilCore.virtualToIoFile(it) }
 
+@Deprecated("use UastFacade", ReplaceWith("UastFacade"))
+@Suppress("Deprecation")
 tailrec fun UElement.getUastContext(): UastContext {
-  val psi = this.psi
+  val psi = this.sourcePsi
   if (psi != null) {
     return ServiceManager.getService(psi.project, UastContext::class.java) ?: error("UastContext not found")
   }
@@ -175,17 +181,17 @@ tailrec fun UElement.getUastContext(): UastContext {
   return (uastParent ?: error("PsiElement should exist at least for UFile")).getUastContext()
 }
 
+@Deprecated("could unexpectedly throw exception", ReplaceWith("UastFacade.findPlugin"))
 tailrec fun UElement.getLanguagePlugin(): UastLanguagePlugin {
-  val psi = this.psi
+  val psi = this.sourcePsi
   if (psi != null) {
-    val uastContext = ServiceManager.getService(psi.project, UastContext::class.java) ?: error("UastContext not found")
-    return uastContext.findPlugin(psi) ?: error("Language plugin was not found for $this (${this.javaClass.name})")
+    return UastFacade.findPlugin(psi) ?: error("Language plugin was not found for $this (${this.javaClass.name})")
   }
 
   return (uastParent ?: error("PsiElement should exist at least for UFile")).getLanguagePlugin()
 }
 
-fun Collection<UElement?>.toPsiElements(): List<PsiElement> = mapNotNull { it?.psi }
+fun Collection<UElement?>.toPsiElements(): List<PsiElement> = mapNotNull { it?.sourcePsi }
 
 /**
  * A helper function for getting parents for given [PsiElement] that could be considered as identifier.
@@ -206,29 +212,31 @@ fun UCallExpression.getParameterForArgument(arg: UExpression): PsiParameter? {
   val psiMethod = resolve() ?: return null
   val parameters = psiMethod.parameterList.parameters
 
-  if (this is UCallExpressionEx)
-    return parameters.withIndex().find { (i, p) ->
-      val argumentForParameter = getArgumentForParameter(i) ?: return@find false
-      if (argumentForParameter == arg) return@find true
-      if (arg is ULambdaExpression && arg.sourcePsi?.parent == argumentForParameter.sourcePsi) return@find true // workaround for KT-25297
-      if (p.isVarArgs && argumentForParameter is UExpressionList) return@find argumentForParameter.expressions.contains(arg)
-      return@find false
-    }?.value
+  return parameters.withIndex().find { (i, p) ->
+    val argumentForParameter = getArgumentForParameter(i) ?: return@find false
+    if (wrapULiteral(argumentForParameter) == wrapULiteral(arg)) return@find true
+    if (arg is ULambdaExpression && arg.sourcePsi?.parent == argumentForParameter.sourcePsi) return@find true // workaround for KT-25297
+    if (p.isVarArgs && argumentForParameter is UExpressionList) return@find argumentForParameter.expressions.contains(arg)
+    return@find false
+  }?.value
+}
 
-  // not everyone implements UCallExpressionEx, lets try to guess
-  val indexInArguments = valueArguments.indexOf(arg)
-  if (parameters.size == valueArguments.count()) {
-    return parameters.getOrNull(indexInArguments)
+@ApiStatus.Experimental
+tailrec fun UElement.isLastElementInControlFlow(scopeElement: UElement? = null): Boolean =
+  when (val parent = this.uastParent) {
+    scopeElement -> if (scopeElement is UBlockExpression) scopeElement.expressions.lastOrNull() == this else true
+    is UBlockExpression -> if (parent.expressions.lastOrNull() == this) parent.isLastElementInControlFlow(scopeElement) else false
+    is UElement -> parent.isLastElementInControlFlow(scopeElement)
+    else -> false
   }
-  // probably it is a kotlin extension method
-  if (parameters.size - 1 == valueArguments.count()) {
-    val parameter = parameters.firstOrNull() ?: return null
-    val receiverType = receiverType ?: return null
-    if (!parameter.type.isAssignableFrom(receiverType)) return null
-    if (!parameters.drop(1).zip(valueArguments)
-        .all { (param, arg) -> arg.getExpressionType()?.let { param.type.isAssignableFrom(it) } == true }) return null
-    return parameters.getOrNull(indexInArguments + 1)
+
+fun UNamedExpression.getAnnotationMethod(): PsiMethod? {
+  if (sourcePsi == null) return null
+  val annotation : UAnnotation? = getParentOfType(UAnnotation::class.java, true)
+  val fqn = annotation?.qualifiedName ?: return null
+  val psiClass = JavaPsiFacade.getInstance(sourcePsi!!.project).findClass(fqn, sourcePsi!!.resolveScope)
+  if (psiClass != null && psiClass.isAnnotationType) {
+    return ArrayUtil.getFirstElement(psiClass.findMethodsByName(this.name ?: "value", false))
   }
-  //named parameters are not processed
   return null
 }

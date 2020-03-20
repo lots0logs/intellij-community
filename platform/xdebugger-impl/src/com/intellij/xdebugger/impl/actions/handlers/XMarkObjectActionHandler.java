@@ -1,10 +1,9 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger.impl.actions.handlers;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.project.Project;
+import com.intellij.ui.ComponentUtil;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebuggerManager;
 import com.intellij.xdebugger.frame.XValue;
@@ -20,11 +19,11 @@ import com.intellij.xdebugger.impl.ui.tree.nodes.XValueNodeImpl;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.*;
+import java.awt.*;
+
 import static com.intellij.openapi.actionSystem.PlatformDataKeys.CONTEXT_COMPONENT;
 
-/**
- * @author nik
- */
 public class XMarkObjectActionHandler extends MarkObjectActionHandler {
   @Override
   public void perform(@NotNull Project project, AnActionEvent event) {
@@ -44,8 +43,13 @@ public class XMarkObjectActionHandler extends MarkObjectActionHandler {
       markers.unmarkValue(value);
     }
     else {
+      Component component = event.getData(CONTEXT_COMPONENT);
+      Window window = ComponentUtil.getWindow(component);
+      if (!(window instanceof JFrame) && !(window instanceof JDialog)) {
+        component = window.getOwner();
+      }
       ValueMarkerPresentationDialog dialog = new ValueMarkerPresentationDialog(
-        event.getData(CONTEXT_COMPONENT), node.getName(), markers.getAllMarkers().values());
+        component, node.getName(), markers.getAllMarkers().values());
       dialog.show();
       ValueMarkup markup = dialog.getConfiguredMarkup();
       if (dialog.isOK() && markup != null) {

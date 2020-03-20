@@ -1,3 +1,4 @@
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.coverage;
 
 import com.intellij.execution.configurations.RunConfigurationBase;
@@ -5,13 +6,9 @@ import com.intellij.execution.configurations.RunnerSettings;
 import com.intellij.execution.configurations.coverage.CoverageEnabledConfiguration;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.openapi.util.InvalidDataException;
-import com.intellij.openapi.util.WriteExternalException;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * @author traff
- */
 public class CoverageHelper {
   private CoverageHelper() {
   }
@@ -43,9 +40,7 @@ public class CoverageHelper {
     covConf.readExternal(element);
   }
 
-  public static void doWriteExternal(RunConfigurationBase runConfiguration, Element element) throws WriteExternalException {
-    final CoverageEnabledConfiguration covConf = CoverageEnabledConfiguration.getOrCreate(runConfiguration);
-
-    covConf.writeExternal(element);
+  public static void doWriteExternal(RunConfigurationBase runConfiguration, Element element) {
+    CoverageEnabledConfiguration.getOrCreate(runConfiguration).writeExternal(element);
   }
 }

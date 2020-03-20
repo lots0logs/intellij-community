@@ -16,6 +16,7 @@ import com.intellij.openapi.project.ProjectBundle;
 import com.intellij.openapi.ui.*;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.packageDependencies.DependencyValidationManager;
+import com.intellij.psi.search.scope.impl.CustomScopesAggregator;
 import com.intellij.psi.search.scope.packageSet.*;
 import com.intellij.ui.CommonActionsPanel;
 import com.intellij.ui.TreeSpeedSearch;
@@ -124,10 +125,8 @@ public class ScopeChooserConfigurable extends MasterDetailsComponent implements 
 
   private void checkForPredefinedNames() throws ConfigurationException {
     final Set<String> predefinedScopes = new HashSet<>();
-    for (CustomScopesProvider scopesProvider : CustomScopesProvider.CUSTOM_SCOPES_PROVIDER.getExtensions(myProject)) {
-      for (NamedScope namedScope : scopesProvider.getFilteredScopes()) {
-        predefinedScopes.add(namedScope.getName());
-      }
+    for (NamedScope scope : CustomScopesAggregator.getAllCustomScopes(myProject)) {
+      predefinedScopes.add(scope.getName());
     }
     for (int i = 0; i < myRoot.getChildCount(); i++) {
       final MyNode node = (MyNode)myRoot.getChildAt(i);
@@ -266,7 +265,7 @@ public class ScopeChooserConfigurable extends MasterDetailsComponent implements 
   protected
   @Nullable
   String getEmptySelectionString() {
-    return "Select a scope to view or edit its details here";
+    return IdeBundle.message("scope.chooser.select.scope.text");
   }
 
   private String createUniqueName() {
@@ -281,7 +280,7 @@ public class ScopeChooserConfigurable extends MasterDetailsComponent implements 
     }
   }
 
-  private void obtainCurrentScopes(final HashSet<String> scopes) {
+  private void obtainCurrentScopes(final HashSet<? super String> scopes) {
     for (int i = 0; i < myRoot.getChildCount(); i++) {
       final MyNode node = (MyNode)myRoot.getChildAt(i);
       final NamedScope scope = (NamedScope)node.getConfigurable().getEditableObject();
@@ -350,8 +349,7 @@ public class ScopeChooserConfigurable extends MasterDetailsComponent implements 
     }
 
     @Override
-    @NotNull
-    public AnAction[] getChildren(@Nullable AnActionEvent e) {
+    public AnAction @NotNull [] getChildren(@Nullable AnActionEvent e) {
       if (myChildren == null) {
         myChildren = new AnAction[2];
         myChildren[0] = new DumbAwareAction(IdeBundle.message("add.local.scope.action.text"), IdeBundle.message("add.local.scope.action.text"),
@@ -464,8 +462,8 @@ public class ScopeChooserConfigurable extends MasterDetailsComponent implements 
 
   private class MySaveAsAction extends AnAction {
     MySaveAsAction() {
-      super(ExecutionBundle.message("action.name.save.as.configuration"), ExecutionBundle.message("action.name.save.as.configuration"),
-            AllIcons.Actions.Menu_saveall);
+      super(ExecutionBundle.messagePointer("action.name.save.as.configuration"),
+            ExecutionBundle.messagePointer("action.name.save.as.configuration"), AllIcons.Actions.Menu_saveall);
     }
 
     @Override

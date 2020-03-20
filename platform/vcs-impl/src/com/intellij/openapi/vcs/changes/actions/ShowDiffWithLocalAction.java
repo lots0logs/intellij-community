@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.actions;
 
 import com.intellij.icons.AllIcons;
@@ -11,13 +11,16 @@ import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FilePath;
+import com.intellij.openapi.vcs.VcsActions;
 import com.intellij.openapi.vcs.VcsDataKeys;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.CurrentContentRevision;
 import com.intellij.openapi.vcs.changes.committed.CommittedChangesBrowserUseCase;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,9 +28,12 @@ import java.util.List;
 
 import static com.intellij.openapi.vcs.changes.actions.diff.ShowDiffAction.showDiffForChange;
 
+// via openapi.vcs.history.actions.ShowDiffBeforeWithLocalAction.ExtensionProvider
+// Extending AnAction is left for compatibility with plugins that instantiate this class directly (instead of using ActionManager).
 public class ShowDiffWithLocalAction extends AnAction implements DumbAware, AnActionExtensionProvider {
   private final boolean myUseBeforeVersion;
 
+  @SuppressWarnings("unused")
   public ShowDiffWithLocalAction() {
     this(false);
     getTemplatePresentation().setIcon(AllIcons.Actions.Diff);
@@ -35,7 +41,7 @@ public class ShowDiffWithLocalAction extends AnAction implements DumbAware, AnAc
 
   public ShowDiffWithLocalAction(boolean useBeforeVersion) {
     myUseBeforeVersion = useBeforeVersion;
-    ActionUtil.copyFrom(this, useBeforeVersion ? "Vcs.ShowDiffWithLocal.Before" : "Vcs.ShowDiffWithLocal");
+    ActionUtil.copyFrom(this, useBeforeVersion ? VcsActions.DIFF_BEFORE_WITH_LOCAL : VcsActions.DIFF_AFTER_WITH_LOCAL);
   }
 
   @Override
@@ -60,7 +66,7 @@ public class ShowDiffWithLocalAction extends AnAction implements DumbAware, AnAc
   public void update(@NotNull final AnActionEvent e) {
     Project project = e.getData(CommonDataKeys.PROJECT);
     ListSelection<Change> selection = e.getData(VcsDataKeys.CHANGES_SELECTION);
-    boolean isInAir = CommittedChangesBrowserUseCase.IN_AIR.equals(CommittedChangesBrowserUseCase.DATA_KEY.getData(e.getDataContext()));
+    boolean isInAir = CommittedChangesBrowserUseCase.IN_AIR.equals(e.getData(CommittedChangesBrowserUseCase.DATA_KEY));
 
     e.getPresentation().setEnabled(project != null && selection != null && !isInAir && canShowDiff(selection.getList()));
   }
@@ -69,28 +75,29 @@ public class ShowDiffWithLocalAction extends AnAction implements DumbAware, AnAc
   private Change getChangeWithLocal(@NotNull Change c) {
     ContentRevision revision = myUseBeforeVersion ? c.getBeforeRevision() : c.getAfterRevision();
     ContentRevision otherRevision = myUseBeforeVersion ? c.getAfterRevision() : c.getBeforeRevision();
-    if (!isValidRevision(revision)) return null;
 
-    FilePath filePath = revision.getFile();
-    if (filePath.getVirtualFile() == null && otherRevision != null) {
-      FilePath otherFile = otherRevision.getFile();
-      if (otherFile.getVirtualFile() != null) {
-        filePath = otherFile;
-      }
-    }
+    VirtualFile file = getLocalVirtualFileFor(revision);
+    if (file == null) file = getLocalVirtualFileFor(otherRevision); // handle renames gracefully
 
-    ContentRevision contentRevision = CurrentContentRevision.create(filePath);
-    return new Change(revision, contentRevision);
+    ContentRevision localRevision = file != null ? CurrentContentRevision.create(VcsUtil.getFilePath(file)) : null;
+    if (revision == null && localRevision == null) return null;
+
+    return new Change(revision, localRevision);
   }
 
   private boolean canShowDiff(@NotNull List<? extends Change> changes) {
     return ContainerUtil.exists(changes, c -> getChangeWithLocal(c) != null);
   }
 
-  private static boolean isValidRevision(@Nullable ContentRevision revision) {
-    return revision != null && !revision.getFile().isNonLocal() && !revision.getFile().isDirectory();
+  @Nullable
+  private static VirtualFile getLocalVirtualFileFor(@Nullable ContentRevision revision) {
+    if (revision == null) return null;
+    FilePath filePath = revision.getFile();
+    if (filePath.isNonLocal() || filePath.isDirectory()) return null;
+    return filePath.getVirtualFile();
   }
 
+  @SuppressWarnings("ComponentNotRegistered") // via openapi.vcs.history.actions.ShowDiffBeforeWithLocalAction.ExtensionProvider
   public static class ShowDiffBeforeWithLocalAction extends ShowDiffWithLocalAction {
     public ShowDiffBeforeWithLocalAction() {
       super(true);

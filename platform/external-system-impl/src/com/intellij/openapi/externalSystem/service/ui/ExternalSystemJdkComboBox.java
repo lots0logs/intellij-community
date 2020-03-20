@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service.ui;
 
 import com.intellij.icons.AllIcons;
@@ -20,12 +6,12 @@ import com.intellij.ide.DataManager;
 import com.intellij.ide.util.projectWizard.WizardContext;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkException;
+import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkProvider;
 import com.intellij.openapi.externalSystem.service.execution.ExternalSystemJdkUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemBundle;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.*;
-import com.intellij.openapi.projectRoots.impl.JavaAwareProjectJdkTableImpl;
 import com.intellij.openapi.projectRoots.impl.SdkConfigurationUtil;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.roots.ui.configuration.projectRoot.ProjectSdksModel;
@@ -39,7 +25,7 @@ import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.util.Consumer;
-import com.intellij.util.EnvironmentUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -57,7 +43,7 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
 
   @Nullable
   private Project myProject;
-  private boolean suggestJre = true;
+  private @Nullable Sdk myProjectJdk;
 
   public ExternalSystemJdkComboBox() {
     this(null);
@@ -105,17 +91,21 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
     myProject = project;
   }
 
+  public void setProjectJdk(@Nullable Sdk projectJdk) {
+    myProjectJdk = projectJdk;
+  }
+
   public void setSetupButton(@NotNull JButton setUpButton,
                              @NotNull ProjectSdksModel jdksModel,
                              @Nullable String actionGroupTitle,
-                             @Nullable Condition<SdkTypeId> creationFilter) {
+                             @Nullable Condition<? super SdkTypeId> creationFilter) {
     setSetupButton(setUpButton, jdksModel, actionGroupTitle, creationFilter, null);
   }
 
   public void setSetupButton(@NotNull JButton setUpButton,
                              @NotNull ProjectSdksModel jdksModel,
                              @Nullable String actionGroupTitle,
-                             @Nullable Condition<SdkTypeId> creationFilter,
+                             @Nullable Condition<? super SdkTypeId> creationFilter,
                              @Nullable WizardContext wizardContext) {
     Arrays.stream(setUpButton.getActionListeners()).forEach(setUpButton::removeActionListener);
 
@@ -137,6 +127,7 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
         }
         refreshData(jdkName, wizardContext != null ? wizardContext.getProjectJdk() : null);
       };
+      jdksModel.reset(getProject());
       jdksModel.createAddActions(group, this, selectedJdk, updateTree, creationFilter);
 
       if (group.getChildrenCount() == 0) {
@@ -169,16 +160,20 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
     String jdkName = getSelectedValue();
     Sdk jdk = null;
     try {
-      jdk = ExternalSystemJdkUtil.getJdk(myProject, jdkName);
+      jdk = ExternalSystemJdkUtil.resolveJdkName(myProjectJdk, jdkName);
     }
     catch (ExternalSystemJdkException ignore) {
     }
     return jdk;
   }
 
-  @NotNull
-  public ExternalSystemJdkComboBox withoutJre() {
-    suggestJre = false;
+
+  /**
+   * @deprecated because it do nothing
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.2")
+  public @NotNull ExternalSystemJdkComboBox withoutJre() {
     return this;
   }
 
@@ -187,8 +182,12 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
   }
 
   public void refreshData(@Nullable String selectedValue, @Nullable Sdk projectJdk) {
-    Map<String, JdkComboBoxItem> jdkMap = collectComboBoxItem(projectJdk);
-    if (selectedValue != null && !jdkMap.containsKey(selectedValue)) {
+    myProjectJdk = projectJdk;
+    Map<String, JdkComboBoxItem> jdkMap = collectComboBoxItem();
+    if (ExternalSystemJdkUtil.USE_INTERNAL_JAVA.equals(selectedValue)) {
+      jdkMap.put(selectedValue, getInternalJdkItem());
+    }
+    else if (selectedValue != null && !jdkMap.containsKey(selectedValue)) {
       assert selectedValue.length() > 0;
       jdkMap.put(selectedValue, new JdkComboBoxItem(selectedValue, selectedValue, "", false));
     }
@@ -200,20 +199,37 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
       ((MutableComboBoxModel<JdkComboBoxItem>)comboBoxModel).addElement(entry.getValue());
     }
 
-    select(comboBoxModel, selectedValue);
+    select(selectedValue);
   }
 
-  private static void select(ComboBoxModel<JdkComboBoxItem> model, Object value) {
+  @ApiStatus.Experimental
+  public void select(@Nullable String selectedValue) {
+    ComboBoxModel<JdkComboBoxItem> model = getModel();
     for (int i = 0; i < model.getSize(); i++) {
       JdkComboBoxItem item = model.getElementAt(i);
-      if (item.jdkName.equals(value)) {
+      if (item.jdkName.equals(selectedValue)) {
         model.setSelectedItem(item);
         return;
       }
     }
+    if (ExternalSystemJdkUtil.USE_INTERNAL_JAVA.equals(selectedValue)) {
+      JdkComboBoxItem item = getInternalJdkItem();
+      ((MutableComboBoxModel<JdkComboBoxItem>)model).addElement(item);
+    }
     if (model.getSize() != 0) {
       model.setSelectedItem(model.getElementAt(0));
     }
+  }
+
+  private static JdkComboBoxItem getInternalJdkItem() {
+    ExternalSystemJdkProvider jdkProvider = ExternalSystemJdkProvider.getInstance();
+    Sdk internalJdk = jdkProvider.getInternalJdk();
+    return new JdkComboBoxItem(
+      ExternalSystemJdkUtil.USE_INTERNAL_JAVA,
+      ExternalSystemBundle.message("external.system.java.internal.jre"),
+      buildComment(internalJdk),
+      true
+    );
   }
 
   @Nullable
@@ -223,7 +239,7 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
     return item != null ? ((JdkComboBoxItem)item).jdkName : null;
   }
 
-  private Map<String, JdkComboBoxItem> collectComboBoxItem(@Nullable Sdk projectSdk) {
+  private Map<String, JdkComboBoxItem> collectComboBoxItem() {
     Map<String, JdkComboBoxItem> result = new LinkedHashMap<>();
     for (Sdk sdk : ProjectJdkTable.getInstance().getAllJdks()) {
       SdkTypeId sdkType = sdk.getSdkType();
@@ -236,31 +252,18 @@ public class ExternalSystemJdkComboBox extends ComboBoxWithWidePopup<ExternalSys
       result.put(name, new JdkComboBoxItem(name, name, comment, true));
     }
 
-    if (suggestJre) {
-      final Sdk internalJdk = ExternalSystemJdkUtil.getJdk(null, ExternalSystemJdkUtil.USE_INTERNAL_JAVA);
-      assert internalJdk != null;
-      assert internalJdk.getHomePath() != null;
-      result.put(ExternalSystemJdkUtil.USE_INTERNAL_JAVA,
-                 new JdkComboBoxItem(
-                   ExternalSystemJdkUtil.USE_INTERNAL_JAVA,
-                   ExternalSystemBundle.message("external.system.java.internal.jre"),
-                   buildComment(internalJdk),
-                   true
-                 ));
-    }
-
-    if (projectSdk == null) {
+    if (myProjectJdk == null) {
       if (myProject != null && !myProject.isDisposed()) {
-        projectSdk = ProjectRootManager.getInstance(myProject).getProjectSdk();
+        myProjectJdk = ProjectRootManager.getInstance(myProject).getProjectSdk();
       }
     }
 
-    if (projectSdk != null) {
+    if (myProjectJdk != null) {
       result.put(ExternalSystemJdkUtil.USE_PROJECT_JDK,
-                 new JdkComboBoxItem(ExternalSystemJdkUtil.USE_PROJECT_JDK, "Use Project JDK", buildComment(projectSdk), true));
+                 new JdkComboBoxItem(ExternalSystemJdkUtil.USE_PROJECT_JDK, "Use Project JDK", buildComment(myProjectJdk), true));
     }
 
-    String javaHomePath = EnvironmentUtil.getEnvironmentMap().get("JAVA_HOME");
+    String javaHomePath = ExternalSystemJdkUtil.getJavaHome();
     if (ExternalSystemJdkUtil.isValidJdk(javaHomePath)) {
       result.put(ExternalSystemJdkUtil.USE_JAVA_HOME,
                  new JdkComboBoxItem(

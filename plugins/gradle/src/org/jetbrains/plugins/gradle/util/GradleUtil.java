@@ -1,42 +1,34 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.util;
 
 import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.openapi.externalSystem.model.DataNode;
 import com.intellij.openapi.externalSystem.model.ExternalSystemException;
+import com.intellij.openapi.externalSystem.model.ProjectKeys;
+import com.intellij.openapi.externalSystem.model.project.ModuleData;
+import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemConstants;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
 import com.intellij.openapi.fileChooser.FileTypeDescriptor;
+import com.intellij.openapi.module.Module;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileFilters;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.util.containers.ContainerUtilRt;
+import com.intellij.util.BooleanFunction;
 import com.intellij.util.containers.Stack;
 import org.gradle.tooling.model.GradleProject;
 import org.gradle.tooling.model.gradle.GradleScript;
+import org.gradle.util.GUtil;
 import org.gradle.wrapper.WrapperConfiguration;
 import org.gradle.wrapper.WrapperExecutor;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -79,7 +71,9 @@ public class GradleUtil {
 
   @NotNull
   public static FileChooserDescriptor getGradleHomeFileChooserDescriptor() {
-    return FileChooserDescriptorFactory.createSingleFolderDescriptor();
+    // allow selecting files to avoid confusion:
+    // on macOS a user can select any file but after clicking OK, dialog is closed, but IDEA doesnt' receive the file and doesn't react
+    return FileChooserDescriptorFactory.createSingleFileOrFolderDescriptor();
   }
 
   public static boolean isGradleDefaultWrapperFilesExist(@Nullable String gradleProjectPath) {
@@ -99,11 +93,8 @@ public class GradleUtil {
     if (wrapperPropertiesFile == null) return null;
 
     final WrapperConfiguration wrapperConfiguration = new WrapperConfiguration();
-    final Properties props = new Properties();
-    BufferedReader reader = null;
     try {
-      reader = new BufferedReader(new FileReader(wrapperPropertiesFile));
-      props.load(reader);
+      final Properties props = GUtil.loadProperties(wrapperPropertiesFile);
       String distributionUrl = props.getProperty(WrapperExecutor.DISTRIBUTION_URL_PROPERTY);
       if(isEmpty(distributionUrl)) {
         throw new ExternalSystemException("Wrapper 'distributionUrl' property does not exist!");
@@ -118,21 +109,19 @@ public class GradleUtil {
       if(!isEmpty(distPathBase)) {
         wrapperConfiguration.setDistributionBase(distPathBase);
       }
+      String zipStorePath = props.getProperty(WrapperExecutor.ZIP_STORE_PATH_PROPERTY);
+      if(!isEmpty(zipStorePath)) {
+        wrapperConfiguration.setZipPath(zipStorePath);
+      }
+      String zipStoreBase = props.getProperty(WrapperExecutor.ZIP_STORE_BASE_PROPERTY);
+      if(!isEmpty(zipStoreBase)) {
+        wrapperConfiguration.setZipBase(zipStoreBase);
+      }
       return wrapperConfiguration;
     }
     catch (Exception e) {
       GradleLog.LOG.warn(
         String.format("I/O exception on reading gradle wrapper properties file at '%s'", wrapperPropertiesFile.getAbsolutePath()), e);
-    }
-    finally {
-      if (reader != null) {
-        try {
-          reader.close();
-        }
-        catch (IOException e) {
-          // Ignore
-        }
-      }
     }
     return null;
   }
@@ -174,7 +163,7 @@ public class GradleUtil {
     }
     File rootProjectParent = new File(rootProjectPath);
     StringBuilder buffer = new StringBuilder(FileUtil.toCanonicalPath(rootProjectParent.getAbsolutePath()));
-    Stack<String> stack = ContainerUtilRt.newStack();
+    Stack<String> stack = new Stack<>();
     for (GradleProject p = subProject; p != null; p = p.getParent()) {
       stack.push(p.getName());
     }
@@ -260,5 +249,30 @@ public class GradleUtil {
       .filter(Objects::nonNull)
       .map(Path::toString)
       .anyMatch(name -> name.startsWith("settings.gradle"));
+  }
+
+  /**
+   * Finds real external module data by ide module
+   *
+   * Module 'module' -> ModuleData 'module'
+   * Module 'module.main' -> ModuleData 'module' instead of GradleSourceSetData 'module.main'
+   * Module 'module.test' -> ModuleData 'module' instead of GradleSourceSetData 'module.test'
+   */
+  @ApiStatus.Experimental
+  @Nullable
+  public static DataNode<ModuleData> findGradleModuleData(@NotNull Module module) {
+    String projectPath = ExternalSystemApiUtil.getExternalProjectPath(module);
+    if (projectPath == null) return null;
+    Project project = module.getProject();
+    return findGradleModuleData(project, projectPath);
+  }
+
+  @ApiStatus.Experimental
+  @Nullable
+  public static DataNode<ModuleData> findGradleModuleData(@NotNull Project project, @NotNull String projectPath) {
+    DataNode<ProjectData> projectNode = ExternalSystemApiUtil.findProjectData(project, GradleConstants.SYSTEM_ID, projectPath);
+    if (projectNode == null) return null;
+    BooleanFunction<DataNode<ModuleData>> predicate = node -> projectPath.equals(node.getData().getLinkedExternalProjectPath());
+    return ExternalSystemApiUtil.find(projectNode, ProjectKeys.MODULE, predicate);
   }
 }

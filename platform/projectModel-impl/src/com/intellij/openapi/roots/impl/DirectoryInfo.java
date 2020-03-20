@@ -5,6 +5,7 @@ package com.intellij.openapi.roots.impl;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.roots.SourceFolder;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.util.Processor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -23,7 +24,7 @@ public abstract class DirectoryInfo {
 
   /**
    * Returns {@code true} if {@code file} located under this directory is excluded from the project. If {@code file} is a directory it means
-   * that all of its content is recursively excluded from the project.
+   * that all of its content is recursively excluded from the project (except the sub-directories which are explicitly included back, e.g. module roots)
    *
    * @param file a file under the directory described by this instance.
    */
@@ -65,4 +66,10 @@ public abstract class DirectoryInfo {
    */
   @Nullable
   public abstract String getUnloadedModuleName();
+
+  /**
+   * if {@code dir} is excluded and there are content entries under the {@code dir}, process them all (as long as {@code processor} returns true) and
+   * @return true if all called processors returned true, and false otherwise
+   */
+  public abstract boolean processContentBeneathExcluded(@NotNull VirtualFile dir, @NotNull Processor<? super VirtualFile> processor);
 }

@@ -3,7 +3,6 @@ package org.jetbrains.settingsRepository.test
 
 import com.intellij.configurationStore.ApplicationStoreImpl
 import com.intellij.configurationStore.write
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vcs.merge.MergeSession
 import com.intellij.testFramework.file
 import com.intellij.util.PathUtilRt
@@ -20,7 +19,6 @@ import org.jetbrains.settingsRepository.git.computeIndexDiff
 import org.jetbrains.settingsRepository.git.deletePath
 import org.jetbrains.settingsRepository.git.writePath
 import org.junit.Test
-import java.nio.charset.StandardCharsets
 import java.util.*
 
 val MARKER_ACCEPT_MY = "__accept my__".toByteArray()
@@ -189,7 +187,7 @@ internal class GitTest : GitTestCase() {
     sync(SyncType.MERGE)
 
     restoreRemoteAfterPush()
-    fs.file(SAMPLE_FILE_NAME, data.toString(StandardCharsets.UTF_8)).compare()
+    fs.file(SAMPLE_FILE_NAME, data.toString(Charsets.UTF_8)).compare()
   }
 
   @Test fun `merge - theirs file deleted, my modified, accept theirs`() = runBlocking<Unit> {
@@ -368,10 +366,10 @@ internal class GitTest : GitTestCase() {
   }
 
   private suspend fun testInitialCopy(addLocalFiles: Boolean, syncType: SyncType = SyncType.MERGE) {
-    repositoryManager.createRepositoryIfNeed()
+    repositoryManager.createRepositoryIfNeeded()
     repositoryManager.setUpstream(remoteRepository.workTree.absolutePath)
 
-    val store = ApplicationStoreImpl(ApplicationManager.getApplication()!!)
+    val store = ApplicationStoreImpl()
     val localConfigPath = tempDirManager.newPath("local_config", refreshVfs = true)
 
     val lafData = """<application>

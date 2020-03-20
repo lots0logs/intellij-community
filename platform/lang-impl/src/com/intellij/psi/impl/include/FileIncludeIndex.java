@@ -3,16 +3,17 @@
 package com.intellij.psi.impl.include;
 
 import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.util.Consumer;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.FactoryMap;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.indexing.*;
-import com.intellij.util.io.DataExternalizer;
-import com.intellij.util.io.IOUtil;
-import com.intellij.util.io.KeyDescriptor;
+import com.intellij.util.io.*;
+import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.DataInput;
@@ -21,66 +22,76 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * @author Dmitry Avdeev
  */
-public class FileIncludeIndex extends FileBasedIndexExtension<FileIncludeIndex.Key, List<FileIncludeInfoImpl>> {
+public class FileIncludeIndex extends FileBasedIndexExtension<String, List<FileIncludeInfoImpl>> {
 
-  public static final ID<Key,List<FileIncludeInfoImpl>> INDEX_ID = ID.create("fileIncludes");
+  public static final ID<String,List<FileIncludeInfoImpl>> INDEX_ID = ID.create("fileIncludes");
 
-  private static final int BASE_VERSION = 5;
+  private static final int BASE_VERSION = 6;
 
   @NotNull
-  public static List<FileIncludeInfo> getIncludes(@NotNull VirtualFile file, @NotNull GlobalSearchScope scope) {
-    final List<FileIncludeInfo> result = new ArrayList<>();
-    FileBasedIndex.getInstance().processValues(INDEX_ID, new FileKey(file), file, (file1, value) -> {
-      result.addAll(value);
-      return true;
-    }, scope);
-    return result;
+  public static List<FileIncludeInfo> getIncludes(@NotNull VirtualFile file, @NotNull Project project) {
+    Map<String, List<FileIncludeInfoImpl>> data = FileBasedIndex.getInstance().getFileData(INDEX_ID, file, project);
+    return ContainerUtil.flatten(data.values());
   }
 
   @NotNull
   public static MultiMap<VirtualFile, FileIncludeInfoImpl> getIncludingFileCandidates(String fileName, @NotNull GlobalSearchScope scope) {
     final MultiMap<VirtualFile, FileIncludeInfoImpl> result = new MultiMap<>();
-    FileBasedIndex.getInstance().processValues(INDEX_ID, new IncludeKey(fileName), null, (file, value) -> {
+    FileBasedIndex.getInstance().processValues(INDEX_ID, fileName, null, (file, value) -> {
       result.put(file, value);
       return true;
     }, scope);
     return result;
   }
 
-  private static class Holder {
-    private static final List<FileIncludeProvider> myProviders = FileIncludeProvider.EP_NAME.getExtensionList();
-  }
-
   @NotNull
   @Override
-  public ID<Key, List<FileIncludeInfoImpl>> getName() {
+  public ID<String, List<FileIncludeInfoImpl>> getName() {
     return INDEX_ID;
   }
 
   @NotNull
   @Override
-  public DataIndexer<Key, List<FileIncludeInfoImpl>, FileContent> getIndexer() {
-    return new DataIndexer<Key, List<FileIncludeInfoImpl>, FileContent>() {
-      @Override
+  public DataIndexer<String, List<FileIncludeInfoImpl>, FileContent> getIndexer() {
+    return new CompositeDataIndexer<String, List<FileIncludeInfoImpl>, Set<FileIncludeProvider>, Set<String>>() {
       @NotNull
-      public Map<Key, List<FileIncludeInfoImpl>> map(@NotNull FileContent inputData) {
+      @Override
+      public Set<FileIncludeProvider> calculateSubIndexer(@NotNull IndexedFile file) {
+        return
+          FileIncludeProvider
+            .EP_NAME
+            .getExtensionList()
+            .stream()
+            .filter(provider -> provider.acceptFile(file.getFile()))
+            .collect(Collectors.toSet());
+      }
 
-        Map<Key, List<FileIncludeInfoImpl>> map = FactoryMap.create(key -> new ArrayList<>());
+      @NotNull
+      @Override
+      public Set<String> getSubIndexerVersion(@NotNull Set<FileIncludeProvider> providers) {
+        return ContainerUtil.map2Set(providers, provider -> provider.getId() + ":" + provider.getVersion());
+      }
 
-        for (FileIncludeProvider provider : Holder.myProviders) {
-          if (!provider.acceptFile(inputData.getFile())) continue;
-          FileIncludeInfo[] infos = provider.getIncludeInfos(inputData);
-          if (infos.length  == 0) continue;
-          List<FileIncludeInfoImpl> infoList = map.get(new FileKey(inputData.getFile()));
+      @NotNull
+      @Override
+      public KeyDescriptor<Set<String>> getSubIndexerVersionDescriptor() {
+        return new StringSetDescriptor();
+      }
 
-          for (FileIncludeInfo info : infos) {
+      @NotNull
+      @Override
+      public Map<String, List<FileIncludeInfoImpl>> map(@NotNull FileContent inputData, @NotNull Set<FileIncludeProvider> providers) {
+        Map<String, List<FileIncludeInfoImpl>> map = FactoryMap.create(key -> new ArrayList<>());
+        for (FileIncludeProvider provider : providers) {
+          for (FileIncludeInfo info : provider.getIncludeInfos(inputData)) {
             FileIncludeInfoImpl impl = new FileIncludeInfoImpl(info.path, info.offset, info.runtimeOnly, provider.getId());
-            map.get(new IncludeKey(info.fileName)).add(impl);
-            infoList.add(impl);
+            map.get(info.fileName).add(impl);
           }
         }
         return map;
@@ -90,30 +101,8 @@ public class FileIncludeIndex extends FileBasedIndexExtension<FileIncludeIndex.K
 
   @NotNull
   @Override
-  public KeyDescriptor<Key> getKeyDescriptor() {
-    return new KeyDescriptor<Key>() {
-      @Override
-      public int getHashCode(Key value) {
-        return value.hashCode();
-      }
-
-      @Override
-      public boolean isEqual(Key val1, Key val2) {
-        return val1.equals(val2);
-      }
-
-      @Override
-      public void save(@NotNull DataOutput out, Key value) throws IOException {
-        out.writeBoolean(value.isInclude());
-        value.writeValue(out);
-      }
-
-      @Override
-      public Key read(@NotNull DataInput in) throws IOException {
-        boolean isInclude = in.readBoolean();
-        return isInclude ? new IncludeKey(IOUtil.readUTF(in)) : new FileKey(in.readInt());
-      }
-    };
+  public KeyDescriptor<String> getKeyDescriptor() {
+    return EnumeratorStringDescriptor.INSTANCE;
   }
 
   @NotNull
@@ -152,7 +141,7 @@ public class FileIncludeIndex extends FileBasedIndexExtension<FileIncludeIndex.K
         if (file.getFileSystem() == JarFileSystem.getInstance()) {
           return false;
         }
-        for (FileIncludeProvider provider : Holder.myProviders) {
+        for (FileIncludeProvider provider : FileIncludeProvider.EP_NAME.getExtensionList()) {
           if (provider.acceptFile(file)) {
             return true;
           }
@@ -162,7 +151,7 @@ public class FileIncludeIndex extends FileBasedIndexExtension<FileIncludeIndex.K
 
       @Override
       public void registerFileTypesUsedForIndexing(@NotNull Consumer<FileType> fileTypeSink) {
-        for (FileIncludeProvider provider : Holder.myProviders) {
+        for (FileIncludeProvider provider : FileIncludeProvider.EP_NAME.getExtensionList()) {
           provider.registerFileTypesUsedForIndexing(fileTypeSink);
         }
       }
@@ -177,77 +166,46 @@ public class FileIncludeIndex extends FileBasedIndexExtension<FileIncludeIndex.K
   @Override
   public int getVersion() {
     int version = BASE_VERSION;
-    for (FileIncludeProvider provider : Holder.myProviders) {
-      version = version * 31 + (provider.getVersion() ^ provider.getClass().getName().hashCode());
+
+    if (!InvertedIndex.ARE_COMPOSITE_INDEXERS_ENABLED) {
+      for (FileIncludeProvider provider : FileIncludeProvider.EP_NAME.getExtensionList()) {
+        version = version * 31 + (provider.getVersion() ^ provider.getClass().getName().hashCode());
+      }
     }
+
     return version;
   }
 
-  interface Key {
-    boolean isInclude();
-
-    void writeValue(DataOutput out) throws IOException;
-  }
-
-  private static class IncludeKey implements Key {
-    private final String myFileName;
-
-    IncludeKey(String fileName) {
-      myFileName = fileName;
+  private static class StringSetDescriptor implements KeyDescriptor<Set<String>> {
+    @Override
+    public int getHashCode(Set<String> value) {
+      return value.hashCode();
     }
 
     @Override
-    public boolean isInclude() {
-      return true;
+    public boolean isEqual(Set<String> val1, Set<String> val2) {
+      return val1.equals(val2);
     }
 
     @Override
-    public void writeValue(DataOutput out) throws IOException {
-      IOUtil.writeUTF(out, myFileName);
+    public void save(@NotNull DataOutput out, Set<String> value) throws IOException {
+      DataInputOutputUtil.writeINT(out, value.size());
+      for (String s : value) {
+        IOUtil.writeUTF(out, s);
+      }
     }
 
     @Override
-    public int hashCode() {
-      return myFileName.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      return obj instanceof IncludeKey && ((IncludeKey)obj).myFileName.equals(myFileName);
+    public Set<String> read(@NotNull DataInput in) throws IOException {
+      int size = DataInputOutputUtil.readINT(in);
+      THashSet<String> result = new THashSet<>(size);
+      for (int i = 0; i < size; i++) {
+        result.add(IOUtil.readUTF(in));
+      }
+      return result;
     }
   }
 
-  private static class FileKey implements Key {
-    private final int myFileId;
-
-    private FileKey(int fileId) {
-      myFileId = fileId;
-    }
-
-    private FileKey(VirtualFile file) {
-      myFileId = FileBasedIndex.getFileId(file);
-    }
-
-    @Override
-    public boolean isInclude() {
-      return false;
-    }
-
-    @Override
-    public void writeValue(DataOutput out) throws IOException {
-      out.writeInt(myFileId);
-    }
-
-    @Override
-    public int hashCode() {
-      return myFileId;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      return obj instanceof FileKey && ((FileKey)obj).myFileId == myFileId;
-    }
-  }
 }
 
 

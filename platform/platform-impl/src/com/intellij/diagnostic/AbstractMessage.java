@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diagnostic;
 
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.SubmittedReportInfo;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -20,6 +21,9 @@ public abstract class AbstractMessage {
   private SubmittedReportInfo mySubmissionInfo;
   private String myAdditionalInfo;
   private Integer myAssigneeId;
+  private boolean myAssigneeVisible;
+  private Long myDevelopersTimestamp;
+  private String myAppInfo;
 
   public abstract @NotNull Throwable getThrowable();
   public abstract @NotNull String getThrowableText();
@@ -96,9 +100,34 @@ public abstract class AbstractMessage {
     myAssigneeId = assigneeId;
   }
 
-  /** @deprecated use {@link #getIncludedAttachments()} instead (to be removed in IDEA 2020) */
+  boolean isAssigneeVisible() {
+    return myAssigneeVisible;
+  }
+
+  void setAssigneeVisible(boolean assigneeVisible) {
+    myAssigneeVisible = assigneeVisible;
+  }
+
+  @Nullable Long getDevelopersTimestamp() {
+    return myDevelopersTimestamp;
+  }
+
+  void setDevelopersTimestamp(@Nullable Long developersTimestamp) {
+    myDevelopersTimestamp = developersTimestamp;
+  }
+
+  /** @deprecated use {@link #getIncludedAttachments()} instead */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.3")
   public List<Attachment> getAttachments() {
     return getIncludedAttachments();
+  }
+
+  protected @Nullable String getAppInfo() {
+    return myAppInfo;
+  }
+
+  protected void setAppInfo(String appInfo) {
+    myAppInfo = appInfo;
   }
 }

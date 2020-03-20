@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service.project;
 
 import com.intellij.openapi.externalSystem.model.DataNode;
@@ -7,6 +7,7 @@ import com.intellij.openapi.externalSystem.model.project.*;
 import com.intellij.openapi.roots.DependencyScope;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import org.gradle.util.GradleVersion;
@@ -18,10 +19,7 @@ import org.jetbrains.plugins.gradle.model.ExternalSourceSet;
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData;
 
 import java.io.File;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil.find;
 import static org.jetbrains.plugins.gradle.service.project.GradleProjectResolverUtil.attachGradleSdkSources;
@@ -31,8 +29,9 @@ import static org.jetbrains.plugins.gradle.service.project.GradleProjectResolver
  * {@link LibraryDataNodeSubstitutor} provides the facility to replace library dependencies with the related module dependencies
  * based on artifacts and source compilation output mapping
  */
-@ApiStatus.Experimental
+@ApiStatus.Internal
 public class LibraryDataNodeSubstitutor {
+  private @NotNull final ProjectResolverContext resolverContext;
   private @Nullable final File gradleUserHomeDir;
   private @Nullable final File gradleHomeDir;
   private @Nullable final GradleVersion gradleVersion;
@@ -40,12 +39,14 @@ public class LibraryDataNodeSubstitutor {
   private @NotNull final Map<String, Pair<String, ExternalSystemSourceType>> moduleOutputsMap;
   private @NotNull final Map<String, String> artifactsMap;
 
-  public LibraryDataNodeSubstitutor(@Nullable File gradleUserHomeDir,
+  public LibraryDataNodeSubstitutor(@NotNull ProjectResolverContext context,
+                                    @Nullable File gradleUserHomeDir,
                                     @Nullable File gradleHomeDir,
                                     @Nullable GradleVersion gradleVersion,
                                     @NotNull Map<String, Pair<DataNode<GradleSourceSetData>, ExternalSourceSet>> sourceSetMap,
                                     @NotNull Map<String, Pair<String, ExternalSystemSourceType>> moduleOutputsMap,
                                     @NotNull Map<String, String> artifactsMap) {
+    resolverContext = context;
     this.gradleUserHomeDir = gradleUserHomeDir;
     this.gradleHomeDir = gradleHomeDir;
     this.gradleVersion = gradleVersion;
@@ -64,14 +65,14 @@ public class LibraryDataNodeSubstitutor {
     if (libraryPaths.isEmpty()) return;
     if (StringUtil.isNotEmpty(libraryData.getExternalName())) {
       if (gradleUserHomeDir != null) {
-        attachSourcesAndJavadocFromGradleCacheIfNeeded(gradleUserHomeDir, libraryData);
+        attachSourcesAndJavadocFromGradleCacheIfNeeded(resolverContext, gradleUserHomeDir, libraryData);
       }
       return;
     }
 
     boolean shouldKeepTransitiveDependencies = libraryPaths.size() > 0 && !libraryDependencyDataNode.getChildren().isEmpty();
 
-    final LinkedList<String> unprocessedPaths = ContainerUtil.newLinkedList(libraryPaths);
+    final LinkedList<String> unprocessedPaths = new LinkedList<>(libraryPaths);
     while (!unprocessedPaths.isEmpty()) {
       final String path = unprocessedPaths.remove();
 
@@ -97,7 +98,7 @@ public class LibraryDataNodeSubstitutor {
 
       final ModuleData moduleData = pair.first.getData();
       if (targetModuleOutputPaths == null) {
-        final Set<String> compileSet = ContainerUtil.newHashSet();
+        final Set<String> compileSet = new HashSet<>();
         MultiMap<ExternalSystemSourceType, String> gradleOutputs = pair.first.getUserData(GradleProjectResolver.GRADLE_OUTPUTS);
         if (gradleOutputs != null) {
           ContainerUtil.addAllNotNull(compileSet,
@@ -109,7 +110,7 @@ public class LibraryDataNodeSubstitutor {
           targetModuleOutputPaths = compileSet;
         }
         else {
-          final Set<String> testSet = ContainerUtil.newHashSet();
+          final Set<String> testSet = new HashSet<>();
           if (gradleOutputs != null) {
             ContainerUtil.addAllNotNull(testSet,
                                         gradleOutputs.get(ExternalSystemSourceType.TEST));
@@ -187,7 +188,7 @@ public class LibraryDataNodeSubstitutor {
 
     if (libraryDependencyDataNode.getParent() != null) {
       if (libraryPaths.size() > 1) {
-        List<String> toRemove = ContainerUtil.newSmartList();
+        List<String> toRemove = new SmartList<>();
         for (String path : libraryPaths) {
           final File binaryPath = new File(path);
           if (binaryPath.isFile()) {

@@ -20,8 +20,12 @@ import com.intellij.openapi.fileChooser.FileChooserFactory;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComponentWithBrowseButton;
 import com.intellij.openapi.ui.TextComponentAccessor;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import static com.intellij.util.nls.NlsContexts.FileChooserDescription;
+import static com.intellij.util.nls.NlsContexts.FileChooserTitle;
 
 public class TextFieldWithHistoryWithBrowseButton extends ComponentWithBrowseButton<TextFieldWithHistory> {
   public TextFieldWithHistoryWithBrowseButton() {
@@ -29,21 +33,21 @@ public class TextFieldWithHistoryWithBrowseButton extends ComponentWithBrowseBut
   }
 
   @Override
-  public void addBrowseFolderListener(@Nullable String title,
-                                      @Nullable String description,
+  public void addBrowseFolderListener(@Nullable @Nls @FileChooserTitle String title,
+                                      @Nullable @Nls @FileChooserDescription String description,
                                       @Nullable Project project,
                                       FileChooserDescriptor fileChooserDescriptor,
-                                      TextComponentAccessor<TextFieldWithHistory> accessor) {
+                                      TextComponentAccessor<? super TextFieldWithHistory> accessor) {
     super.addBrowseFolderListener(title, description, project, fileChooserDescriptor, accessor);
     FileChooserFactory.getInstance().installFileCompletion(getChildComponent().getTextEditor(), fileChooserDescriptor, false, project);
   }
 
   @Override
-  public void addBrowseFolderListener(@Nullable String title,
-                                      @Nullable String description,
+  public void addBrowseFolderListener(@Nullable @Nls @FileChooserTitle String title,
+                                      @Nullable @Nls @FileChooserDescription String description,
                                       @Nullable Project project,
                                       FileChooserDescriptor fileChooserDescriptor,
-                                      TextComponentAccessor<TextFieldWithHistory> accessor,
+                                      TextComponentAccessor<? super TextFieldWithHistory> accessor,
                                       boolean autoRemoveOnHide) {
     addBrowseFolderListener(title, description, project, fileChooserDescriptor, accessor);
     FileChooserFactory.getInstance().installFileCompletion(getChildComponent().getTextEditor(), fileChooserDescriptor, false, project);

@@ -35,12 +35,10 @@ import com.intellij.ui.PopupHandler;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.components.JBLayeredPane;
 import com.intellij.ui.components.Magnificator;
+import com.intellij.ui.scale.ScaleContext;
 import com.intellij.util.LazyInitializer.NotNullValue;
 import com.intellij.util.SVGLoader;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.JBUIScale;
-import com.intellij.util.ui.JBUIScale.ScaleContext;
-import com.intellij.util.ui.UIUtil;
 import org.intellij.images.ImagesBundle;
 import org.intellij.images.editor.ImageDocument;
 import org.intellij.images.editor.ImageDocument.ScaledImageProvider;
@@ -71,7 +69,6 @@ import java.beans.PropertyChangeListener;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.net.URL;
-import java.util.Locale;
 
 /**
  * Image editor UI
@@ -96,18 +93,23 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
   private final ChangeListener changeListener = new DocumentChangeListener();
   private final ImageComponent imageComponent = new ImageComponent();
   private final JPanel contentPanel;
-  private final JLabel infoLabel;
+  private JLabel infoLabel = null;
 
-  private final PropertyChangeListener optionsChangeListener = new OptionsChangeListener();
   private final JScrollPane myScrollPane;
+  private final boolean isEmbedded;
 
   ImageEditorUI(@Nullable ImageEditor editor) {
+    this(editor, false);
+  }
+
+  ImageEditorUI(@Nullable ImageEditor editor, boolean isEmbedded) {
     this.editor = editor;
+    this.isEmbedded = isEmbedded;
 
     imageComponent.addPropertyChangeListener(ZOOM_FACTOR_PROP, e -> imageComponent.setZoomFactor(getZoomModel().getZoomFactor()));
     Options options = OptionsManager.getInstance().getOptions();
     EditorOptions editorOptions = options.getEditorOptions();
-    options.addPropertyChangeListener(optionsChangeListener);
+    options.addPropertyChangeListener(new OptionsChangeListener(), this);
 
     copyPasteSupport = editor != null ? new CopyPasteDelegator(editor.getProject(), this) : null;
     deleteProvider = new DeleteHandler.DefaultDeleteProvider();
@@ -140,20 +142,25 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
     // Construct UI
     setLayout(new BorderLayout());
 
-    ActionManager actionManager = ActionManager.getInstance();
-    ActionGroup actionGroup = (ActionGroup)actionManager.getAction(ImageEditorActions.GROUP_TOOLBAR);
-    ActionToolbar actionToolbar = actionManager.createActionToolbar(
-      ImageEditorActions.ACTION_PLACE, actionGroup, true
-    );
 
-    // Make sure toolbar is 'ready' before it's added to component hierarchy
-    // to prevent ActionToolbarImpl.updateActionsImpl(boolean, boolean) from increasing popup size unnecessarily
-    actionToolbar.updateActionsImmediately();
+    // toolbar is disabled in embedded mode
+    JComponent toolbarPanel = null;
+    if (!isEmbedded) {
+      ActionManager actionManager = ActionManager.getInstance();
+      ActionGroup actionGroup = (ActionGroup)actionManager.getAction(ImageEditorActions.GROUP_TOOLBAR);
+      ActionToolbar actionToolbar = actionManager.createActionToolbar(
+        ImageEditorActions.ACTION_PLACE, actionGroup, true
+      );
 
-    actionToolbar.setTargetComponent(this);
+      // Make sure toolbar is 'ready' before it's added to component hierarchy
+      // to prevent ActionToolbarImpl.updateActionsImpl(boolean, boolean) from increasing popup size unnecessarily
+      actionToolbar.updateActionsImmediately();
 
-    JComponent toolbarPanel = actionToolbar.getComponent();
-    toolbarPanel.addMouseListener(new FocusRequester());
+      actionToolbar.setTargetComponent(this);
+
+      toolbarPanel = actionToolbar.getComponent();
+      toolbarPanel.addMouseListener(new FocusRequester());
+    }
 
     JLabel errorLabel = new JLabel(
       ImagesBundle.message("error.broken.image.file.format"),
@@ -168,10 +175,12 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
     contentPanel.add(errorPanel, ERROR_PANEL);
 
     JPanel topPanel = new JPanel(new BorderLayout());
-    topPanel.add(toolbarPanel, BorderLayout.WEST);
-    infoLabel = new JLabel((String)null, SwingConstants.RIGHT);
-    infoLabel.setBorder(JBUI.Borders.emptyRight(2));
-    topPanel.add(infoLabel, BorderLayout.EAST);
+    if (!isEmbedded) {
+      topPanel.add(toolbarPanel, BorderLayout.WEST);
+      infoLabel = new JLabel((String)null, SwingConstants.RIGHT);
+      infoLabel.setBorder(JBUI.Borders.emptyRight(2));
+      topPanel.add(infoLabel, BorderLayout.EAST);
+    }
 
     add(topPanel, BorderLayout.NORTH);
     add(contentPanel, BorderLayout.CENTER);
@@ -187,6 +196,7 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
   }
 
   private void updateInfo() {
+    if (isEmbedded) return;
     ImageDocument document = imageComponent.getDocument();
     BufferedImage image = document.getValue();
     if (image != null) {
@@ -195,7 +205,7 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
       if (format == null) {
         format = editor != null ? ImagesBundle.message("unknown.format") : "";
       } else {
-        format = format.toUpperCase(Locale.ENGLISH);
+        format = StringUtil.toUpperCase(format);
       }
       VirtualFile file = editor != null ? editor.getFile() : null;
       infoLabel.setText(
@@ -218,9 +228,6 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
 
   @Override
   public void dispose() {
-    Options options = OptionsManager.getInstance().getOptions();
-    options.removePropertyChangeListener(optionsChangeListener);
-
     imageComponent.removeMouseWheelListener(wheelAdapter);
     imageComponent.getDocument().removeChangeListener(changeListener);
 
@@ -314,7 +321,8 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
     private void centerComponents() {
       Rectangle bounds = getBounds();
       Point point = imageComponent.getLocation();
-      point.x = (bounds.width - imageComponent.getWidth()) / 2;
+      // in embedded mode images should be left-side aligned
+      point.x = isEmbedded ? 0 : (bounds.width - imageComponent.getWidth()) / 2;
       point.y = (bounds.height - imageComponent.getHeight()) / 2;
       imageComponent.setLocation(point);
     }
@@ -328,15 +336,6 @@ final class ImageEditorUI extends JPanel implements DataProvider, CopyProvider, 
     @Override
     public Dimension getPreferredSize() {
       return imageComponent.getSize();
-    }
-
-    @Override
-    protected void paintComponent(@NotNull Graphics g) {
-      super.paintComponent(g);
-      if (UIUtil.isUnderDarcula()) {
-        g.setColor(UIUtil.getControlColor().brighter());
-        g.fillRect(0, 0, getWidth(), getHeight());
-      }
     }
   }
 

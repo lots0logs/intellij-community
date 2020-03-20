@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.dom.impl;
 
 import com.intellij.ide.plugins.PluginManagerCore;
@@ -20,14 +6,18 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiField;
 import com.intellij.util.SmartList;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xml.DomUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.idea.devkit.dom.Extension;
 import org.jetbrains.idea.devkit.dom.ExtensionPoint;
 import org.jetbrains.idea.devkit.dom.IdeaPlugin;
+import org.jetbrains.idea.devkit.dom.With;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public abstract class ExtensionPointImpl implements ExtensionPoint {
 
@@ -38,6 +28,40 @@ public abstract class ExtensionPointImpl implements ExtensionPoint {
       return StringUtil.notNullize(getName().getRawText());
     }
     return StringUtil.notNullize(getQualifiedName().getRawText());
+  }
+
+  @Nullable
+  @Override
+  public PsiClass getEffectiveClass() {
+    return DomUtil.hasXml(getInterface()) ? getInterface().getValue() : getBeanClass().getValue();
+  }
+
+  private static final Set<String> EXTENSION_POINT_CLASS_ATTRIBUTE_NAMES = ContainerUtil.immutableSet(
+    "implementationClass", "implementation", "instance",
+    "factoryClass", // ToolWindowEP
+    "extenderClass" // DomExtenderEP
+  );
+
+  @Nullable
+  @Override
+  public PsiClass getExtensionPointClass() {
+    if (DomUtil.hasXml(getInterface())) {
+      return getInterface().getValue();
+    }
+
+    final List<With> elements = getWithElements();
+    if (elements.size() == 1) {
+      return elements.get(0).getImplements().getValue();
+    }
+
+    for (With element : elements) {
+      final String attributeName = element.getAttribute().getStringValue();
+      if (EXTENSION_POINT_CLASS_ATTRIBUTE_NAMES.contains(attributeName)) {
+        return element.getImplements().getValue();
+      }
+    }
+
+    return null;
   }
 
   @Nullable
@@ -72,7 +96,9 @@ public abstract class ExtensionPointImpl implements ExtensionPoint {
 
     final List<PsiField> result = new SmartList<>();
     for (PsiField field : beanClass.getAllFields()) {
-      if (ExtensionDomExtender.isClassField(field.getName()) &&
+      final String fieldName = field.getName();
+
+      if (Extension.isClassField(fieldName) &&
           ExtensionDomExtender.findWithElement(getWithElements(), field) == null) {
         result.add(field);
       }

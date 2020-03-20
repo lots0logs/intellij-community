@@ -1,11 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service.resolve
 
 import com.intellij.patterns.PsiJavaPatterns.psiElement
-import com.intellij.psi.JavaPsiFacade
-import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiElement
-import com.intellij.psi.ResolveState
+import com.intellij.psi.*
 import com.intellij.psi.scope.PsiScopeProcessor
 import groovy.lang.Closure
 import org.jetbrains.plugins.gradle.service.resolve.GradleCommonClassNames.*
@@ -21,7 +18,7 @@ import org.jetbrains.plugins.groovy.lang.psi.patterns.groovyClosure
 import org.jetbrains.plugins.groovy.lang.psi.patterns.psiMethod
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames.GROOVY_LANG_CLOSURE
 import org.jetbrains.plugins.groovy.lang.resolve.ResolveUtil
-import org.jetbrains.plugins.groovy.lang.resolve.delegatesTo.DELEGATES_TO_KEY
+import org.jetbrains.plugins.groovy.lang.resolve.delegatesTo.DELEGATES_TO_TYPE_KEY
 import org.jetbrains.plugins.groovy.lang.resolve.delegatesTo.DelegatesToInfo
 
 /**
@@ -70,7 +67,9 @@ class GradleMiscContributor : GradleMethodContextContributor {
     // FlatDirectoryArtifactRepository flatDir(Closure configureClosure)
     if (parent is GrMethodCall) {
       parent.resolveMethod()?.returnType?.let { type ->
-        return DelegatesToInfo(type, Closure.DELEGATE_FIRST)
+        if (type !is PsiPrimitiveType) {
+          return DelegatesToInfo(type, Closure.DELEGATE_FIRST)
+        }
       }
     }
     return null
@@ -91,8 +90,7 @@ class GradleMiscContributor : GradleMethodContextContributor {
         containingClass = pluginsDependenciesClass
         returnType = returnClass
       }
-      methodBuilder.addAndGetParameter("configuration", GROOVY_LANG_CLOSURE).putUserData(DELEGATES_TO_KEY, pluginDependenciesSpecFqn)
-      place.putUserData(RESOLVED_CODE, true)
+      methodBuilder.addAndGetParameter("configuration", GROOVY_LANG_CLOSURE).putUserData(DELEGATES_TO_TYPE_KEY, pluginDependenciesSpecFqn)
       if (!processor.execute(methodBuilder, state)) return false
     }
 

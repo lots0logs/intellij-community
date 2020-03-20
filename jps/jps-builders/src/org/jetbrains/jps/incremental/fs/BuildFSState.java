@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2012 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.incremental.fs;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -22,12 +8,14 @@ import com.intellij.util.SmartList;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.io.IOUtil;
 import gnu.trove.TObjectLongHashMap;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.ModuleChunk;
 import org.jetbrains.jps.builders.*;
 import org.jetbrains.jps.builders.impl.BuildTargetChunk;
 import org.jetbrains.jps.incremental.*;
+import org.jetbrains.jps.incremental.storage.StampsStorage;
 import org.jetbrains.jps.incremental.storage.Timestamps;
 import org.jetbrains.jps.model.JpsModel;
 
@@ -42,7 +30,7 @@ import java.util.*;
  */
 public class BuildFSState {
   public static final int VERSION = 3;
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.incremental.fs.BuildFSState");
+  private static final Logger LOG = Logger.getInstance(BuildFSState.class);
   private static final Key<Set<? extends BuildTarget<?>>> CONTEXT_TARGETS_KEY = Key.create("_fssfate_context_targets_");
   private static final Key<FilesDelta> NEXT_ROUND_DELTA_KEY = Key.create("_next_round_delta_");
   private static final Key<FilesDelta> CURRENT_ROUND_DELTA_KEY = Key.create("_current_round_delta_");
@@ -50,9 +38,9 @@ public class BuildFSState {
   // when true, will always determine dirty files by scanning FS and comparing timestamps
   // alternatively, when false, after first scan will rely on external notifications about changes
   private final boolean myAlwaysScanFS;
-  private final Set<BuildTarget<?>> myInitialScanPerformed = Collections.synchronizedSet(new HashSet<BuildTarget<?>>());
+  private final Set<BuildTarget<?>> myInitialScanPerformed = Collections.synchronizedSet(new HashSet<>());
   private final TObjectLongHashMap<File> myRegistrationStamps = new TObjectLongHashMap<>(FileUtil.FILE_HASHING_STRATEGY);
-  private final Map<BuildTarget<?>, FilesDelta> myDeltas = Collections.synchronizedMap(new HashMap<BuildTarget<?>, FilesDelta>());
+  private final Map<BuildTarget<?>, FilesDelta> myDeltas = Collections.synchronizedMap(new HashMap<>());
 
   public BuildFSState(boolean alwaysScanFS) {
     myAlwaysScanFS = alwaysScanFS;
@@ -171,10 +159,13 @@ public class BuildFSState {
     myInitialScanPerformed.add(target);
   }
 
-  public void registerDeleted(@Nullable CompileContext context, BuildTarget<?> target, final File file, @Nullable Timestamps tsStorage) throws IOException {
+  public void registerDeleted(@Nullable CompileContext context,
+                              BuildTarget<?> target,
+                              File file,
+                              @Nullable StampsStorage<? extends StampsStorage.Stamp> stampStorage) throws IOException {
     registerDeleted(context, target, file);
-    if (tsStorage != null) {
-      tsStorage.removeStamp(file, target);
+    if (stampStorage != null) {
+      stampStorage.removeStamp(file, target);
     }
   }
 
@@ -239,19 +230,38 @@ public class BuildFSState {
     if (delta == null) {
       delta = getDelta(rd.getTarget());
     }
-    
+
     return delta.isMarkedRecompile(rd, file);
+  }
+
+  /**
+   * @deprecated use {@link #markDirty(CompileContext, CompilationRound, File, BuildRootDescriptor, StampsStorage, boolean)} instead
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.1")
+  public boolean markDirty(@Nullable CompileContext context, CompilationRound round, File file, final BuildRootDescriptor rd,
+                           @Nullable Timestamps tsStorage, boolean saveEventStamp) throws IOException {
+    return markDirty(context, round, file, rd, (StampsStorage<? extends StampsStorage.Stamp>)tsStorage, saveEventStamp);
   }
 
   /**
    * Note: marked file will well be visible as "dirty" only on the next compilation round!
    * @throws IOException
    */
-  public final boolean markDirty(@Nullable CompileContext context, File file, final BuildRootDescriptor rd, @Nullable Timestamps tsStorage, boolean saveEventStamp) throws IOException {
-    return markDirty(context, CompilationRound.NEXT, file, rd, tsStorage, saveEventStamp);
+  public final boolean markDirty(@Nullable CompileContext context,
+                                 File file,
+                                 final BuildRootDescriptor rd,
+                                 @Nullable StampsStorage<? extends StampsStorage.Stamp> stampStorage,
+                                 boolean saveEventStamp) throws IOException {
+    return markDirty(context, CompilationRound.NEXT, file, rd, stampStorage, saveEventStamp);
   }
 
-  public boolean markDirty(@Nullable CompileContext context, CompilationRound round, File file, final BuildRootDescriptor rd, @Nullable Timestamps tsStorage, boolean saveEventStamp) throws IOException {
+  public boolean markDirty(@Nullable CompileContext context,
+                           CompilationRound round,
+                           File file,
+                           final BuildRootDescriptor rd,
+                           @Nullable StampsStorage<? extends StampsStorage.Stamp> stampStorage,
+                           boolean saveEventStamp) throws IOException {
     final FilesDelta roundDelta = getRoundDelta(round == CompilationRound.NEXT? NEXT_ROUND_DELTA_KEY : CURRENT_ROUND_DELTA_KEY, context);
     if (roundDelta != null && isInCurrentContextTargets(context, rd)) {
       roundDelta.markRecompile(rd, file);
@@ -271,8 +281,8 @@ public class BuildFSState {
             myRegistrationStamps.put(file, eventStamp);
           }
         }
-        if (tsStorage != null) {
-          tsStorage.removeStamp(file, rd.getTarget());
+        if (stampStorage != null) {
+          stampStorage.removeStamp(file, rd.getTarget());
         }
       }
       else {
@@ -295,10 +305,14 @@ public class BuildFSState {
     return targets.contains(rd.getTarget());
   }
 
-  public boolean markDirtyIfNotDeleted(@Nullable CompileContext context, CompilationRound round, File file, final BuildRootDescriptor rd, @Nullable Timestamps tsStorage) throws IOException {
+  public boolean markDirtyIfNotDeleted(@Nullable CompileContext context,
+                                       CompilationRound round,
+                                       File file,
+                                       final BuildRootDescriptor rd,
+                                       @Nullable StampsStorage<? extends StampsStorage.Stamp> stampStorage) throws IOException {
     final boolean marked = getDelta(rd.getTarget()).markRecompileIfNotDeleted(rd, file);
-    if (marked && tsStorage != null) {
-      tsStorage.removeStamp(file, rd.getTarget());
+    if (marked && stampStorage != null) {
+      stampStorage.removeStamp(file, rd.getTarget());
     }
     if (marked) {
       final FilesDelta roundDelta = getRoundDelta(round == CompilationRound.NEXT? NEXT_ROUND_DELTA_KEY : CURRENT_ROUND_DELTA_KEY, context);
@@ -380,7 +394,7 @@ public class BuildFSState {
   /**
    * @return true if marked something, false otherwise
    */
-  public boolean markAllUpToDate(CompileContext context, final BuildRootDescriptor rd, final Timestamps stamps) throws IOException {
+  public boolean markAllUpToDate(CompileContext context, final BuildRootDescriptor rd, final StampsStorage stampsStorage) throws IOException {
     boolean marked = false;
     final BuildTarget<?> target = rd.getTarget();
     final FilesDelta delta = getDelta(target);
@@ -393,8 +407,9 @@ public class BuildFSState {
         CompileScope scope = context.getScope();
         for (File file : files) {
           if (scope.isAffected(target, file)) {
-            final long currentFileStamp = FSOperations.lastModified(file);
-            if (!rd.isGenerated() && (currentFileStamp > targetBuildStartStamp || getEventRegistrationStamp(file) > targetBuildStartStamp)) {
+            final long currentFileTimestamp = FSOperations.lastModified(file);
+            StampsStorage.Stamp stamp = stampsStorage.getCurrentStamp(file);
+            if (!rd.isGenerated() && (currentFileTimestamp > targetBuildStartStamp || getEventRegistrationStamp(file) > targetBuildStartStamp)) {
               // if the file was modified after the compilation had started,
               // do not save the stamp considering file dirty
               // Important!
@@ -407,7 +422,7 @@ public class BuildFSState {
             }
             else {
               marked = true;
-              stamps.saveStamp(file, target, currentFileStamp);
+              stampsStorage.saveStamp(file, target, stamp); // todo: ask jeka
             }
           }
           else {

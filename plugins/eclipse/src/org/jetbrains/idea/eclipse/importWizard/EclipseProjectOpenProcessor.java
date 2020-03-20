@@ -19,13 +19,12 @@ public final class EclipseProjectOpenProcessor extends ProjectOpenProcessorBase<
   }
 
   @Override
-  @NotNull
-  public String[] getSupportedExtensions() {
+  public String @NotNull [] getSupportedExtensions() {
     return new String[] {EclipseXml.CLASSPATH_FILE, EclipseXml.PROJECT_FILE};
   }
 
   @Override
-  public boolean doQuickImport(VirtualFile file, final WizardContext wizardContext) {
+  public boolean doQuickImport(@NotNull VirtualFile file, @NotNull final WizardContext wizardContext) {
     getBuilder().setRootDirectory(file.getParent().getPath());
 
     final List<String> projects = getBuilder().getList();

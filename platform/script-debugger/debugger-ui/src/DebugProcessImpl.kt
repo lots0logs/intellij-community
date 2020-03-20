@@ -50,7 +50,6 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
                                                          private val editorsProvider: XDebuggerEditorsProvider,
                                                          private val smartStepIntoHandler: XSmartStepIntoHandler<*>? = null,
                                                          protected val executionResult: ExecutionResult? = null) : XDebugProcess(session), MultiVmDebugProcess {
-  protected val repeatStepInto: AtomicBoolean = AtomicBoolean()
   @Volatile var lastStep: StepAction? = null
   @Volatile protected var lastCallFrame: CallFrame? = null
   @Volatile protected var isForceStep: Boolean = false
@@ -134,6 +133,7 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
 
   final override fun startForceStepInto(context: XSuspendContext?) {
     isForceStep = true
+    enableBlackboxing(false, context.vm)
     startStepInto(context)
   }
 
@@ -145,12 +145,7 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
 
   final override fun startStepOut(context: XSuspendContext?) {
     val vm = context.vm
-    if (isVmStepOutCorrect()) {
-      lastCallFrame = null
-    }
-    else {
-      updateLastCallFrame(vm)
-    }
+    updateLastCallFrame(vm)
     continueVm(vm, StepAction.OUT)
   }
 
@@ -183,12 +178,16 @@ abstract class DebugProcessImpl<out C : VmConnection<*>>(session: XDebugSession,
       lastStep = null
       lastCallFrame = null
       urlToFileCache.clear()
-      disableDoNotStepIntoLibraries = false
+      enableBlackboxing(true, vm)
     }
     else {
       lastStep = stepAction
     }
     return suspendContextManager.continueVm(stepAction)
+  }
+
+  protected open fun enableBlackboxing(state: Boolean, vm: Vm) {
+    disableDoNotStepIntoLibraries = !state
   }
 
   protected fun setOverlay(context: SuspendContext<*>) {

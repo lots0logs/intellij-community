@@ -3,6 +3,7 @@ package com.intellij.codeInspection.duplicateExpressions;
 
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.ui.SingleIntegerFieldOptionsPanel;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
@@ -22,6 +23,7 @@ import com.intellij.refactoring.ui.TypeSelectorManagerImpl;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.siyeh.ig.psiutils.CommentTracker;
+import com.siyeh.ig.psiutils.ExpressionUtils;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.Nls;
@@ -66,15 +68,12 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
       public void visitExpressionImpl(PsiExpression expression) {
         if (ComplexityCalculator.isDefinitelySimple(expression) ||
             SideEffectCalculator.isDefinitelyWithSideEffect(expression) ||
-            expression instanceof PsiLambdaExpression) {
+            expression instanceof PsiLambdaExpression ||
+            ExpressionUtils.isVoidContext(expression)) {
           return;
         }
         DuplicateExpressionsContext context = DuplicateExpressionsContext.getOrCreateContext(expression, session);
         if (context == null || context.mayHaveSideEffect(expression)) {
-          return;
-        }
-        PsiType type = RefactoringUtil.getTypeByExpressionWithExpectedType(expression);
-        if (type == null || PsiType.VOID.equals(type)) {
           return;
         }
         if (context.getComplexity(expression) > complexityThreshold) {
@@ -122,7 +121,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
         });
       }
 
-      public void registerProblems(@NotNull List<PsiExpression> occurrences, @NotNull PsiCodeBlock body) {
+      public void registerProblems(@NotNull List<? extends PsiExpression> occurrences, @NotNull PsiCodeBlock body) {
         if (occurrences.size() > 1 && areSafeToExtract(occurrences, body)) {
           Map<PsiExpression, List<PsiVariable>> reusableVariables = collectReusableVariables(occurrences);
           for (PsiExpression occurrence : occurrences) {
@@ -140,7 +139,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
             else if (isOnTheFly) {
               fixes.add(new IntroduceVariableFix(occurrence));
             }
-            holder.registerProblem(occurrence, InspectionsBundle.message("inspection.duplicate.expressions.message"),
+            holder.registerProblem(occurrence, JavaBundle.message("inspection.duplicate.expressions.message"),
                                    fixes.toArray(LocalQuickFix.EMPTY_ARRAY));
           }
         }
@@ -148,7 +147,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
     };
   }
 
-  private static boolean areSafeToExtract(@NotNull List<PsiExpression> occurrences, @NotNull PsiCodeBlock body) {
+  private static boolean areSafeToExtract(@NotNull List<? extends PsiExpression> occurrences, @NotNull PsiCodeBlock body) {
     if (occurrences.isEmpty()) return false;
     Project project = occurrences.get(0).getProject();
     Set<PsiVariable> variables = collectVariablesSafeToExtract(occurrences);
@@ -178,7 +177,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
   }
 
   @Nullable
-  private static Set<PsiVariable> collectVariablesSafeToExtract(@NotNull List<PsiExpression> occurrences) {
+  private static Set<PsiVariable> collectVariablesSafeToExtract(@NotNull List<? extends PsiExpression> occurrences) {
     Set<PsiVariable> variables = new THashSet<>();
     Ref<Boolean> refFailed = new Ref<>(Boolean.FALSE);
     JavaRecursiveElementWalkingVisitor visitor = new JavaRecursiveElementWalkingVisitor() {
@@ -187,7 +186,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
         super.visitReferenceElement(reference);
 
         PsiElement resolved = reference.resolve();
-        if (resolved instanceof PsiLocalVariable || resolved instanceof PsiParameter) {
+        if (PsiUtil.isJvmLocalVariable(resolved)) {
           variables.add((PsiVariable)resolved);
         }
         else if (resolved instanceof PsiVariable && !((PsiVariable)resolved).hasModifierProperty(PsiModifier.FINAL)) {
@@ -208,7 +207,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
   }
 
   @NotNull
-  private static Map<PsiExpression, List<PsiVariable>> collectReusableVariables(@NotNull List<PsiExpression> occurrences) {
+  private static Map<PsiExpression, List<PsiVariable>> collectReusableVariables(@NotNull List<? extends PsiExpression> occurrences) {
     if (occurrences.size() <= 1) {
       return Collections.emptyMap();
     }
@@ -235,7 +234,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
   }
 
   private static boolean canReplaceOtherOccurrences(@NotNull PsiExpression originalOccurrence,
-                                                    @NotNull List<PsiExpression> occurrences,
+                                                    @NotNull List<? extends PsiExpression> occurrences,
                                                     @NotNull PsiVariable variable) {
     return occurrences.stream().anyMatch(occurrence -> occurrence != originalOccurrence && canReplaceWith(occurrence, variable));
   }
@@ -272,7 +271,7 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
   @Override
   public JComponent createOptionsPanel() {
     return new SingleIntegerFieldOptionsPanel(
-      InspectionsBundle.message("inspection.duplicate.expressions.complexity.threshold"), this, "complexityThreshold", 3);
+      JavaBundle.message("inspection.duplicate.expressions.complexity.threshold"), this, "complexityThreshold", 3);
   }
 
   private static class IntroduceVariableFix implements LocalQuickFix {
@@ -284,14 +283,14 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.duplicate.expressions.introduce.variable.fix.family.name");
+      return JavaBundle.message("inspection.duplicate.expressions.introduce.variable.fix.family.name");
     }
 
     @Nls(capitalization = Nls.Capitalization.Sentence)
     @NotNull
     @Override
     public String getName() {
-      return InspectionsBundle.message("inspection.duplicate.expressions.introduce.variable.fix.name", myExpressionText);
+      return JavaBundle.message("inspection.duplicate.expressions.introduce.variable.fix.name", myExpressionText);
     }
 
     @Override
@@ -339,14 +338,14 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.duplicate.expressions.reuse.variable.fix.family.name");
+      return JavaBundle.message("inspection.duplicate.expressions.reuse.variable.fix.family.name");
     }
 
     @Nls(capitalization = Nls.Capitalization.Sentence)
     @NotNull
     @Override
     public String getName() {
-      return InspectionsBundle.message("inspection.duplicate.expressions.reuse.variable.fix.name", myVariableName, myExpressionText);
+      return JavaBundle.message("inspection.duplicate.expressions.reuse.variable.fix.name", myVariableName, myExpressionText);
     }
 
     @Override
@@ -371,14 +370,14 @@ public class DuplicateExpressionsInspection extends LocalInspectionTool {
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.duplicate.expressions.replace.other.occurrences.fix.family.name");
+      return JavaBundle.message("inspection.duplicate.expressions.replace.other.occurrences.fix.family.name");
     }
 
     @Nls(capitalization = Nls.Capitalization.Sentence)
     @NotNull
     @Override
     public String getName() {
-      return InspectionsBundle.message("inspection.duplicate.expressions.replace.other.occurrences.fix.name", myVariableName, myExpressionText);
+      return JavaBundle.message("inspection.duplicate.expressions.replace.other.occurrences.fix.name", myVariableName, myExpressionText);
     }
 
     @Override

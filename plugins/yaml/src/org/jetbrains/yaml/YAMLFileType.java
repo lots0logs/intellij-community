@@ -12,8 +12,6 @@ import javax.swing.*;
 public class YAMLFileType extends LanguageFileType {
   public static final YAMLFileType YML = new YAMLFileType();
   @NonNls public static final String DEFAULT_EXTENSION = "yml";
-  @NonNls private static final String NAME = "YAML";
-  @NonNls private static final String DESCRIPTION = YAMLBundle.message("filetype.description.yaml");
 
   private YAMLFileType() {
     super(YAMLLanguage.INSTANCE);
@@ -22,13 +20,13 @@ public class YAMLFileType extends LanguageFileType {
   @Override
   @NotNull
   public String getName() {
-    return NAME;
+    return "YAML";
   }
 
   @Override
   @NotNull
   public String getDescription() {
-    return DESCRIPTION;
+    return YAMLBundle.message("filetype.description.yaml");
   }
 
   @Override
@@ -40,7 +38,7 @@ public class YAMLFileType extends LanguageFileType {
   @Override
   @Nullable
   public Icon getIcon() {
-    return AllIcons.Nodes.DataTables;
+    return AllIcons.FileTypes.Yaml;
   }
 }
 

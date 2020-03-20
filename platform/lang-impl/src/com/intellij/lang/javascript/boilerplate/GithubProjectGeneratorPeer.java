@@ -1,30 +1,17 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.javascript.boilerplate;
 
 import com.google.common.collect.Sets;
 import com.intellij.BundleBase;
+import com.intellij.CommonBundle;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.util.projectWizard.SettingsStep;
 import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.platform.WebProjectGenerator;
 import com.intellij.platform.templates.github.GithubTagInfo;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.ReloadableComboBoxPanel;
 import com.intellij.util.ui.ReloadablePanel;
 import org.jetbrains.annotations.NotNull;
@@ -45,7 +32,6 @@ public class GithubProjectGeneratorPeer implements WebProjectGenerator.Generator
   private void createUIComponents() {
     myReloadableComboBoxPanel = new ReloadableComboBoxPanel<GithubTagInfo>() {
 
-      @SuppressWarnings("unchecked")
       @Override
       protected void doUpdateValues(@NotNull Set<GithubTagInfo> tags) {
         if (!shouldUpdate(tags)) {
@@ -91,24 +77,20 @@ public class GithubProjectGeneratorPeer implements WebProjectGenerator.Generator
         return !oldTags.equals(newTags);
       }
 
-      @SuppressWarnings("unchecked")
       @NotNull
       @Override
-      protected JComboBox createValuesComboBox() {
-        JComboBox box = super.createValuesComboBox();
-        box.setRenderer(new ListCellRendererWrapper<GithubTagInfo>() {
-          @Override
-          public void customize(JList list, GithubTagInfo tag, int index, boolean selected, boolean hasFocus) {
-            final String text;
-            if (tag == null) {
-              text = isBackgroundJobRunning() ? "Loading..." : "Unavailable";
-            }
-            else {
-              text = tag.getName();
-            }
-            setText(text);
+      protected JComboBox<GithubTagInfo> createValuesComboBox() {
+        JComboBox<GithubTagInfo> box = super.createValuesComboBox();
+        box.setRenderer(SimpleListCellRenderer.create((label, tag, index) -> {
+          final String text;
+          if (tag == null) {
+            text = isBackgroundJobRunning() ? CommonBundle.getLoadingTreeNodeText() : "Unavailable";
           }
-        });
+          else {
+            text = tag.getName();
+          }
+          label.setText(text);
+        }));
 
         return box;
       }
@@ -117,7 +99,7 @@ public class GithubProjectGeneratorPeer implements WebProjectGenerator.Generator
     myVersionPanel = myReloadableComboBoxPanel.getMainPanel();
   }
 
-  private final List<WebProjectGenerator.SettingsStateListener> myListeners = ContainerUtil.newArrayList();
+  private final List<WebProjectGenerator.SettingsStateListener> myListeners = new ArrayList<>();
   private final GithubTagInfo myMasterTag;
   private final GithubTagListProvider myTagListProvider;
   private JComponent myComponent;
@@ -158,8 +140,8 @@ public class GithubProjectGeneratorPeer implements WebProjectGenerator.Generator
   }
 
   @NotNull
-  private static List<GithubTagInfo> createSortedTagList(@NotNull Collection<GithubTagInfo> tags) {
-    List<GithubTagInfo> sortedTags = ContainerUtil.newArrayList(tags);
+  private static List<GithubTagInfo> createSortedTagList(@NotNull Collection<? extends GithubTagInfo> tags) {
+    List<GithubTagInfo> sortedTags = new ArrayList<>(tags);
     Collections.sort(sortedTags, (tag1, tag2) -> {
       GithubTagInfo.Version v1 = tag1.getVersion();
       GithubTagInfo.Version v2 = tag2.getVersion();
@@ -183,7 +165,7 @@ public class GithubProjectGeneratorPeer implements WebProjectGenerator.Generator
 
   @Override
   public void buildUI(@NotNull SettingsStep settingsStep) {
-    settingsStep.addSettingsField(BundleBase.replaceMnemonicAmpersand("&Version:"), myVersionPanel);
+    settingsStep.addSettingsField(BundleBase.replaceMnemonicAmpersand(IdeBundle.message("github.project.generator.version")), myVersionPanel);
     settingsStep.addSettingsComponent(myReloadableComboBoxPanel.getErrorComponent());
   }
 
@@ -206,7 +188,7 @@ public class GithubProjectGeneratorPeer implements WebProjectGenerator.Generator
     }
     String errorMessage = StringUtil.notNullize(myReloadableComboBoxPanel.getErrorComponent().getText());
     if (errorMessage.isEmpty()) {
-      errorMessage = "Versions have not been loaded yet.";
+      errorMessage = IdeBundle.message("github.project.generator.versions.not.loaded.error");
     }
     return new ValidationInfo(errorMessage);
   }

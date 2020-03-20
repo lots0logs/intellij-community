@@ -254,14 +254,14 @@ public class EditorRtlTest extends AbstractRtlTest {
   
   public void testMovingCaretToLogicalLineEnd() {
     prepareText("R");
-    myEditor.getCaretModel().moveToLogicalPosition(lF(1));
-    assertVisualPositionsEqual("Wrong visual position", vR(1), myEditor.getCaretModel().getVisualPosition());
+    getEditor().getCaretModel().moveToLogicalPosition(lF(1));
+    assertVisualPositionsEqual("Wrong visual position", vR(1), getEditor().getCaretModel().getVisualPosition());
   }
 
   public void testMovingCaretToVisualLineEnd() {
     prepareText("R");
-    myEditor.getCaretModel().moveToVisualPosition(vR(1));
-    assertLogicalPositionsEqual("Wrong logical position", lF(1), myEditor.getCaretModel().getLogicalPosition());
+    getEditor().getCaretModel().moveToVisualPosition(vR(1));
+    assertLogicalPositionsEqual("Wrong logical position", lF(1), getEditor().getCaretModel().getLogicalPosition());
   }
 
   public void testNavigationWithArrowKeys() {
@@ -289,7 +289,7 @@ public class EditorRtlTest extends AbstractRtlTest {
   
   public void testMovingIntoVirtualSpace() {
     prepareText("R");
-    myEditor.getSettings().setVirtualSpace(true);
+    getEditor().getSettings().setVirtualSpace(true);
     assertVisualCaretLocation(0, false);
     right();
     assertVisualCaretLocation(0, true);
@@ -352,6 +352,8 @@ public class EditorRtlTest extends AbstractRtlTest {
   public void testNextPrevWord() {
     prepareText("LL RR RR LL");
     nextWord();
+    assertVisualCaretLocation(2, false);
+    nextWord();
     assertVisualCaretLocation(3, false);
     nextWord();
     assertVisualCaretLocation(3, true);
@@ -362,8 +364,6 @@ public class EditorRtlTest extends AbstractRtlTest {
     nextWord();
     assertVisualCaretLocation(8, false);
     nextWord();
-    assertVisualCaretLocation(9, false);
-    nextWord();
     assertVisualCaretLocation(11, false);
     previousWord();
     assertVisualCaretLocation(9, false);
@@ -372,7 +372,7 @@ public class EditorRtlTest extends AbstractRtlTest {
     previousWord();
     assertVisualCaretLocation(8, true);
     previousWord();
-    assertVisualCaretLocation(5, true);
+    assertVisualCaretLocation(6, true);
     previousWord();
     assertVisualCaretLocation(3, true);
     previousWord();
@@ -384,6 +384,8 @@ public class EditorRtlTest extends AbstractRtlTest {
   public void testNextPrevWordWithSelection() {
     prepareText("LL RR RR LL");
     moveCaretToNextWordWithSelection();
+    checkResult("<selection>LL</selection> RR RR LL");
+    moveCaretToNextWordWithSelection();
     checkResult("<selection>LL </selection>RR RR LL");
     moveCaretToNextWordWithSelection();
     checkResult("<selection>LL RR RR</selection> LL");
@@ -393,8 +395,6 @@ public class EditorRtlTest extends AbstractRtlTest {
     checkResult("<selection>LL </selection>RR RR LL");
     moveCaretToNextWordWithSelection();
     checkResult("<selection>LL RR RR</selection> LL");
-    moveCaretToNextWordWithSelection();
-    checkResult("<selection>LL RR RR </selection>LL");
     moveCaretToNextWordWithSelection();
     checkResult("<selection>LL RR RR LL</selection>");
     moveCaretToPreviousWordWithSelection();
@@ -404,7 +404,7 @@ public class EditorRtlTest extends AbstractRtlTest {
     moveCaretToPreviousWordWithSelection();
     checkResult("<selection>LL </selection>RR RR LL");
     moveCaretToPreviousWordWithSelection();
-    checkResult("<selection>LL RR </selection>RR LL");
+    checkResult("<selection>LL RR</selection> RR LL");
     moveCaretToPreviousWordWithSelection();
     checkResult("<selection>LL RR RR</selection> LL");
     moveCaretToPreviousWordWithSelection();
@@ -415,7 +415,7 @@ public class EditorRtlTest extends AbstractRtlTest {
   
   public void testHomeEnd() {
     prepareText("RR");
-    myEditor.getCaretModel().moveToOffset(1);
+    getEditor().getCaretModel().moveToOffset(1);
     home();
     assertVisualCaretLocation(0, false);
     end();
@@ -424,7 +424,7 @@ public class EditorRtlTest extends AbstractRtlTest {
   
   public void testHomeEndWithSelection() {
     prepareText("RR");
-    myEditor.getCaretModel().moveToOffset(1);
+    getEditor().getCaretModel().moveToOffset(1);
     homeWithSelection();
     assertVisualCaretLocation(0, false);
     checkResult("<selection>R</selection>R");
@@ -435,7 +435,7 @@ public class EditorRtlTest extends AbstractRtlTest {
   
   public void testTextStartEnd() {
     prepareText("RR");
-    myEditor.getCaretModel().moveToOffset(1);
+    getEditor().getCaretModel().moveToOffset(1);
     executeAction(IdeActions.ACTION_EDITOR_TEXT_START);
     assertVisualCaretLocation(0, false);
     executeAction(IdeActions.ACTION_EDITOR_TEXT_END);
@@ -444,7 +444,7 @@ public class EditorRtlTest extends AbstractRtlTest {
   
   public void testTextStartEndWithSelection() {
     prepareText("RR");
-    myEditor.getCaretModel().moveToOffset(1);
+    getEditor().getCaretModel().moveToOffset(1);
     executeAction(IdeActions.ACTION_EDITOR_TEXT_START_WITH_SELECTION);
     assertVisualCaretLocation(0, false);
     checkResult("<selection>R</selection>R");
@@ -483,13 +483,13 @@ public class EditorRtlTest extends AbstractRtlTest {
     prepareText("R=1");
     right();
     assertVisualCaretLocation(0, false);
-    assertEquals(2, myEditor.getCaretModel().getOffset());
+    assertEquals(2, getEditor().getCaretModel().getOffset());
     right();
     assertVisualCaretLocation(1, false);
-    assertEquals(3, myEditor.getCaretModel().getOffset());
+    assertEquals(3, getEditor().getCaretModel().getOffset());
     right();
     assertVisualCaretLocation(1, true);
-    assertEquals(2, myEditor.getCaretModel().getOffset());
+    assertEquals(2, getEditor().getCaretModel().getOffset());
   }
   
   public void testMovingCaretThroughSoftWrap() {
@@ -553,7 +553,7 @@ public class EditorRtlTest extends AbstractRtlTest {
     prepare("<caret>\nRR", TestFileType.TEXT);
     delete();
     checkResult("<caret>RR");
-    assertTrue(myEditor.getCaretModel().getPrimaryCaret().isAtBidiRunBoundary());
+    assertTrue(getEditor().getCaretModel().getPrimaryCaret().isAtBidiRunBoundary());
   }
 
   public void testTokenOrderIsAlwaysLtr() {

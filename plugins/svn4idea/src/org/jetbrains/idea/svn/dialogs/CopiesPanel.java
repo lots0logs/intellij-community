@@ -25,7 +25,6 @@ import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.components.labels.LinkLabel;
 import com.intellij.ui.components.labels.LinkListener;
 import com.intellij.util.Consumer;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.hash.EqualityPolicy;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.UIUtil;
@@ -292,7 +291,7 @@ public class CopiesPanel {
 
   @NotNull
   private List<WorkingCopyFormat> getSupportedFormats() {
-    List<WorkingCopyFormat> result = ContainerUtil.newArrayList();
+    List<WorkingCopyFormat> result = new ArrayList<>();
     ClientFactory factory = myVcs.getFactory();
 
     try {
@@ -532,10 +531,9 @@ public class CopiesPanel {
 
     private static final String FIX_ACTION = "FIX";
     private static final String TITLE = "";
-    private static final String DESCRIPTION = SvnBundle.message("subversion.roots.detection.errors.found.description");
 
     private ErrorsFoundNotification(@NotNull final Project project) {
-      super(NOTIFICATION_GROUP.getDisplayId(), TITLE, DESCRIPTION, NotificationType.ERROR, createListener(project));
+      super(NOTIFICATION_GROUP.getDisplayId(), TITLE, getDescription(), NotificationType.ERROR, createListener(project));
     }
 
     private static NotificationListener.Adapter createListener(@NotNull final Project project) {
@@ -547,6 +545,10 @@ public class CopiesPanel {
           }
         }
       };
+    }
+
+    private static String getDescription() {
+      return SvnBundle.message("subversion.roots.detection.errors.found.description");
     }
   }
 }

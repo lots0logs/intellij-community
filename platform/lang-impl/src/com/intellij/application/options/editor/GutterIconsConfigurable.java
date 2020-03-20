@@ -1,28 +1,14 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.editor;
 
 import com.intellij.codeInsight.daemon.*;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.lang.LanguageExtensionPoint;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.ex.EditorSettingsExternalizable;
-import com.intellij.openapi.extensions.ExtensionPoint;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
@@ -39,15 +25,10 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.speedSearch.SpeedSearchSupply;
 import com.intellij.util.Function;
 import com.intellij.util.NullableFunction;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
-import com.intellij.util.containers.hash.HashSet;
 import com.intellij.util.ui.EmptyIcon;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.*;
 
 import javax.swing.*;
 import javax.swing.event.ChangeListener;
@@ -59,8 +40,8 @@ import java.util.*;
  * @author Dmitry Avdeev
  */
 public class GutterIconsConfigurable implements SearchableConfigurable, Configurable.NoScroll {
-  public static final String DISPLAY_NAME = "Gutter Icons";
-  public static final String ID = "editor.preferences.gutterIcons";
+  @NonNls public static final String ID = "editor.preferences.gutterIcons";
+
   private JPanel myPanel;
   private CheckBoxList<GutterIconDescriptor> myList;
   private JBCheckBox myShowGutterIconsJBCheckBox;
@@ -70,7 +51,7 @@ public class GutterIconsConfigurable implements SearchableConfigurable, Configur
   @Nls
   @Override
   public String getDisplayName() {
-    return DISPLAY_NAME;
+    return IdeBundle.message("configurable.GutterIconsConfigurable.display.name");
   }
 
   @Nullable
@@ -82,16 +63,14 @@ public class GutterIconsConfigurable implements SearchableConfigurable, Configur
   @Nullable
   @Override
   public JComponent createComponent() {
-    ExtensionPoint<LineMarkerProvider> point = Extensions.getRootArea().getExtensionPoint(LineMarkerProviders.EP_NAME);
-    @SuppressWarnings("unchecked")
-    LanguageExtensionPoint<LineMarkerProvider>[] extensions = (LanguageExtensionPoint<LineMarkerProvider>[])point.getExtensions();
+    LanguageExtensionPoint<LineMarkerProvider>[] extensions = LineMarkerProviders.EP_NAME.getExtensions();
     NullableFunction<LanguageExtensionPoint<LineMarkerProvider>, PluginDescriptor> function =
       point1 -> {
         LineMarkerProvider instance = point1.getInstance();
         return instance instanceof LineMarkerProviderDescriptor && ((LineMarkerProviderDescriptor)instance).getName() != null ? point1.getPluginDescriptor() : null;
       };
     MultiMap<PluginDescriptor, LanguageExtensionPoint<LineMarkerProvider>> map = ContainerUtil.groupBy(Arrays.asList(extensions), function);
-    Map<GutterIconDescriptor, PluginDescriptor> pluginDescriptorMap = ContainerUtil.newHashMap();
+    Map<GutterIconDescriptor, PluginDescriptor> pluginDescriptorMap = new HashMap<>();
     Set<String> ids = new HashSet<>();
     myDescriptors = new ArrayList<>();
     for (final PluginDescriptor descriptor : map.keySet()) {
@@ -102,8 +81,8 @@ public class GutterIconsConfigurable implements SearchableConfigurable, Configur
           for (GutterIconDescriptor option : instance.getOptions()) {
             if (ids.add(option.getId())) {
               myDescriptors.add(option);
+              pluginDescriptorMap.put(option, descriptor);
             }
-            pluginDescriptorMap.put(option, descriptor);
           }
         }
         else {
@@ -192,8 +171,8 @@ public class GutterIconsConfigurable implements SearchableConfigurable, Configur
   }
 
   private static String getPluginDisplayName(PluginDescriptor pluginDescriptor) {
-    final String name = ((IdeaPluginDescriptor)pluginDescriptor).getName();
-    return "IDEA CORE".equals(name) ? "Common" : name;
+    if (pluginDescriptor instanceof IdeaPluginDescriptor && pluginDescriptor.getPluginId() == PluginManagerCore.CORE_ID) return IdeBundle.message("title.common");
+    return pluginDescriptor.getName();
   }
 
   private void createUIComponents() {
@@ -218,7 +197,7 @@ public class GutterIconsConfigurable implements SearchableConfigurable, Configur
         checkBox.setBorder(null);
 
         PluginDescriptor pluginDescriptor = myFirstDescriptors.get(descriptor);
-        if (pluginDescriptor instanceof IdeaPluginDescriptor) {
+        if (pluginDescriptor != null) {
           SeparatorWithText separator = new SeparatorWithText();
           String name = getPluginDisplayName(pluginDescriptor);
           separator.setCaption(name);
@@ -248,20 +227,19 @@ public class GutterIconsConfigurable implements SearchableConfigurable, Configur
   @Nullable
   @Override
   public Runnable enableSearch(String option) {
-    return () -> ObjectUtils.assertNotNull(SpeedSearchSupply.getSupply(myList, true)).findAndSelectElement(option);
+    return () -> Objects.requireNonNull(SpeedSearchSupply.getSupply(myList, true)).findAndSelectElement(option);
   }
 
   @TestOnly
   public List<GutterIconDescriptor> getDescriptors() { return myDescriptors; }
 
   public static class ShowSettingsAction extends DumbAwareAction {
-
     public ShowSettingsAction() {
     }
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-      ShowSettingsUtil.getInstance().showSettingsDialog(null, GutterIconsConfigurable.class);
+      ShowSettingsUtil.getInstance().showSettingsDialog(e.getProject(), GutterIconsConfigurable.class);
     }
   }
 }

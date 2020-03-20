@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.impl;
 
 import com.intellij.debugger.engine.DebugProcess;
@@ -18,9 +18,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * @author egor
- */
 public class ClassLoadingUtils {
   private static final int BATCH_SIZE = 4096;
   private ClassLoadingUtils() {}
@@ -31,11 +28,12 @@ public class ClassLoadingUtils {
       ArrayType arrayType = (ArrayType)context.getDebugProcess().findClass(context, "java.net.URL[]", context.getClassLoader());
       ArrayReference emptyUrlArray = DebuggerUtilsEx.mirrorOfArray(arrayType, 0, context);
       ClassType loaderClass = (ClassType)process.findClass(context, "java.net.URLClassLoader", context.getClassLoader());
-      Method ctorMethod = loaderClass.concreteMethodByName(JVMNameUtil.CONSTRUCTOR_NAME, "([Ljava/net/URL;Ljava/lang/ClassLoader;)V");
-      ClassLoaderReference reference = (ClassLoaderReference)process.newInstance(context, loaderClass, ctorMethod,
-                                                                                 Arrays.asList(emptyUrlArray, context.getClassLoader()));
-      context.keep(reference);
-      return reference;
+      Method ctorMethod = DebuggerUtils.findMethod(loaderClass, JVMNameUtil.CONSTRUCTOR_NAME, "([Ljava/net/URL;Ljava/lang/ClassLoader;)V");
+      return context.computeAndKeep(() -> (ClassLoaderReference)process
+        .newInstance(context, loaderClass, ctorMethod, Arrays.asList(emptyUrlArray, context.getClassLoader())));
+    }
+    catch (VMDisconnectedException e) {
+      throw e;
     }
     catch (Exception e) {
       throw new EvaluateException("Error creating evaluation class loader: " + e, e);
@@ -50,12 +48,15 @@ public class ClassLoadingUtils {
     try {
       VirtualMachineProxyImpl proxy = (VirtualMachineProxyImpl)process.getVirtualMachineProxy();
       Method defineMethod =
-        ((ClassType)classLoader.referenceType()).concreteMethodByName("defineClass", "(Ljava/lang/String;[BII)Ljava/lang/Class;");
+        DebuggerUtils.findMethod(classLoader.referenceType(), "defineClass", "(Ljava/lang/String;[BII)Ljava/lang/Class;");
       process.invokeMethod(context, classLoader, defineMethod,
                            Arrays.asList(DebuggerUtilsEx.mirrorOfString(name, proxy, context),
                                          mirrorOf(bytes, context, process),
                                          proxy.mirrorOf(0),
                                          proxy.mirrorOf(bytes.length)));
+    }
+    catch (VMDisconnectedException e) {
+      throw e;
     }
     catch (Exception e) {
       throw new EvaluateException("Error during class " + name + " definition: " + e, e);
@@ -67,7 +68,7 @@ public class ClassLoadingUtils {
    * May modify class loader in evaluationContext
    */
   @Nullable
-  public static ClassType getHelperClass(Class cls, EvaluationContext evaluationContext) throws EvaluateException {
+  public static ClassType getHelperClass(Class<?> cls, EvaluationContext evaluationContext) throws EvaluateException {
     // TODO [egor]: cache and load in bootstrap class loader
     String name = cls.getName();
     DebugProcess process = evaluationContext.getDebugProcess();

@@ -64,12 +64,15 @@ class NormalCompletionDfaTest extends NormalCompletionTestCase {
   void testNoUnnecessaryCastDfa() { doTest() }
   void testNoUnnecessaryCastRawDfa() { doTest() }
   void testInconsistentHierarchyDfa() { doTest() }
+  void testAfterAssertTrueDfa() { doTest() }
   void testNoUnnecessaryCastDeepHierarchy() { doTest() }
   void testInstanceOfAfterFunction() { doTest() }
   void testInstanceOfDisjunction() { doTest() }
   void testInstanceOfDisjunction2() { doTest() }
   void testInstanceOfDisjunctionDeep() { doTest() }
   void testInstanceOfDisjunctionCircular() { doTest() }
+  void testAfterGetClass() { doTest() }
+  void testNoCastForCompatibleCapture() { doTest() }
   void testComplexInstanceOfDfa() {
     configureByTestName()
     myFixture.assertPreferredCompletionItems 0, 'methodFromX', 'methodFromX2', 'methodFromY', 'methodFromY2'
@@ -142,16 +145,40 @@ public class Main {
 
     public static void main(String[] args) {
         PublicInterface i = PublicInterface.createPrivateImplementation();
-        i.getV<caret>x
+        i.getVa<caret>x
     }
 }'''
 
     assert myFixture.complete(CompletionType.BASIC, 2).size() == 0
   }
 
+  void 'test show methods accessible on base type but inaccessible on cast type'() {
+    def clazz = myFixture.addClass '''
+package some;
+import another.*;
+
+public class Super {
+    void foo() {}
+    
+    void test(Super o) {
+      if (o instanceof Sub) {
+        o.fo<caret>o
+      }
+    }
+}
+
+'''
+    myFixture.addClass 'package another; public class Sub extends some.Super {}'
+
+    myFixture.configureFromExistingVirtualFile(clazz.containingFile.virtualFile)
+
+    myFixture.completeBasic()
+    assert myFixture.lookupElementStrings == ['foo']
+  }
+
   private void doTestSecond() {
     configure()
-    assert myItems?.length == 0
+    assert myItems == null || myItems.length == 0
     myFixture.completeBasic()
     checkResult()
   }

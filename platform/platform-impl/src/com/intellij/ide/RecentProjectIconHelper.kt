@@ -5,6 +5,7 @@ import com.intellij.ide.ui.ProductIcons
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.util.Pair
 import com.intellij.ui.IconDeferrer
+import com.intellij.ui.scale.JBUIScale
 import com.intellij.util.IconUtil
 import com.intellij.util.ImageLoader
 import com.intellij.util.io.basicAttributesIfExists
@@ -47,7 +48,7 @@ internal class RecentProjectIconHelper {
           // [tav] todo: the icon is created in def screen scale
           if (UIUtil.isJreHiDPI()) {
             val newG = g.create(x, y, image.width, image.height) as Graphics2D
-            val s = JBUI.sysScale()
+            val s = JBUIScale.sysScale()
             newG.scale((1 / s).toDouble(), (1 / s).toDouble())
             newG.drawImage(image, (x / s).toInt(), (y / s).toInt(), null)
             newG.scale(1.0, 1.0)
@@ -59,11 +60,11 @@ internal class RecentProjectIconHelper {
         }
 
         override fun getIconWidth(): Int {
-          return if (UIUtil.isJreHiDPI()) (image.width / JBUI.sysScale()).toInt() else image.width
+          return if (UIUtil.isJreHiDPI()) (image.width / JBUIScale.sysScale()).toInt() else image.width
         }
 
         override fun getIconHeight(): Int {
-          return if (UIUtil.isJreHiDPI()) (image.height / JBUI.sysScale()).toInt() else image.height
+          return if (UIUtil.isJreHiDPI()) (image.height / JBUIScale.sysScale()).toInt() else image.height
         }
       }
     }
@@ -120,6 +121,10 @@ internal class RecentProjectIconHelper {
   }
 
   private fun calculateIcon(path: @SystemIndependent String, isDark: Boolean): Icon? {
+    if (!RecentProjectsManagerBase.isFileSystemPath(path)) {
+      return null
+    }
+
     val file = Paths.get(path, ".idea", if (isDark) "icon_dark.png" else "icon.png")
     val fileInfo = file.basicAttributesIfExists() ?: return null
     val timestamp = fileInfo.lastModifiedTime().toMillis()

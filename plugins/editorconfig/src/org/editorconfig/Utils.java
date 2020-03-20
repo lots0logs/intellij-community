@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.editorconfig;
 
 import com.intellij.application.options.CodeStyle;
@@ -10,7 +10,9 @@ import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.registry.Registry;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
@@ -24,18 +26,24 @@ import org.editorconfig.configmanagement.EncodingManager;
 import org.editorconfig.configmanagement.LineEndingsManager;
 import org.editorconfig.configmanagement.StandardEditorConfigProperties;
 import org.editorconfig.core.EditorConfig.OutPair;
+import org.editorconfig.language.messages.EditorConfigBundle;
 import org.editorconfig.plugincomponents.EditorConfigNotifier;
+import org.editorconfig.plugincomponents.SettingsProviderComponent;
 import org.editorconfig.settings.EditorConfigSettings;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.nio.file.Paths;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class Utils {
+
+  public static final String EDITOR_CONFIG_FILE_NAME = ".editorconfig";
 
   public static final  String FULL_SETTINGS_SUPPORT_REG_KEY = "editor.config.full.settings.support";
 
@@ -92,10 +100,10 @@ public class Utils {
     final CodeStyleSettings settings = CodeStyle.getSettings(project);
     final CommonCodeStyleSettings.IndentOptions commonIndentOptions = settings.getIndentOptions();
     StringBuilder result = new StringBuilder();
-    addIndentOptions(result, "*", commonIndentOptions, getEncoding(project) +
-      getLineEndings(project) +
-      getTrailingSpaces() +
-      getEndOfFile());
+    addIndentOptions(result, "*", commonIndentOptions, getEncodingLine(project) +
+                                                       getLineEndings(project) +
+                                                       getTrailingSpacesLine() +
+                                                       getEndOfFileLine());
     for (FileType fileType : FileTypeManager.getInstance().getRegisteredFileTypes()) {
       if (!FileTypeIndex.containsFileOfType(fileType, GlobalSearchScope.allScope(project))) continue;
 
@@ -113,7 +121,7 @@ public class Utils {
     final VirtualFile child = baseDir.findChild(".editorconfig");
     if (child != null) {
       final String message = ".editorconfig already present in " + baseDir.getPath() + "\nOverwrite?";
-      if (Messages.showYesNoDialog(project, message, ".editorconfig exists", null) == Messages.NO) return;
+      if (Messages.showYesNoDialog(project, message, EditorConfigBundle.message("dialog.title.editorconfig.exists"), null) == Messages.NO) return;
     }
     ApplicationManager.getApplication().runWriteAction(() -> {
       try {
@@ -125,50 +133,72 @@ public class Utils {
     });
   }
 
-  private static String getEndOfFile() {
+  @NotNull
+  private static String getEndOfFileLine() {
     return StandardEditorConfigProperties.INSERT_FINAL_NEWLINE + "=" + EditorSettingsExternalizable.getInstance().isEnsureNewLineAtEOF() + "\n";
   }
 
-  private static String getTrailingSpaces() {
-    final String spaces = EditorSettingsExternalizable.getInstance().getStripTrailingSpaces();
-    if (EditorSettingsExternalizable.STRIP_TRAILING_SPACES_NONE.equals(spaces)) return StandardEditorConfigProperties.TRIM_TRAILING_WHITESPACE + "=false\n";
-    if (EditorSettingsExternalizable.STRIP_TRAILING_SPACES_WHOLE.equals(spaces)) return StandardEditorConfigProperties.TRIM_TRAILING_WHITESPACE + "=true\n";
-    return "";
+  @NotNull
+  private static String getTrailingSpacesLine() {
+    final Boolean trimTrailingSpaces = getTrimTrailingSpaces();
+    return trimTrailingSpaces != null ? StandardEditorConfigProperties.TRIM_TRAILING_WHITESPACE + "=" + trimTrailingSpaces + "\n" : "";
   }
 
-  private static String getLineEndings(Project project) {
-    final String separator = CodeStyle.getSettings(project).getLineSeparator();
-    for (LineSeparator s : LineSeparator.values()) {
-      if (separator.equals(s.getSeparatorString())) {
-        return LineEndingsManager.lineEndingsKey + "=" + s.name().toLowerCase(Locale.US) + "\n";
-      }
-    }
-    return "";
+  @Nullable
+  public static Boolean getTrimTrailingSpaces() {
+    final String spaces = EditorSettingsExternalizable.getInstance().getStripTrailingSpaces();
+    if (EditorSettingsExternalizable.STRIP_TRAILING_SPACES_NONE.equals(spaces)) return false;
+    if (EditorSettingsExternalizable.STRIP_TRAILING_SPACES_WHOLE.equals(spaces)) return true;
+    return null;
   }
 
   @NotNull
-  private static String getEncoding(Project project) {
+  private static String getLineEndings(@NotNull Project project) {
+    final String separator = CodeStyle.getSettings(project).getLineSeparator();
+    String s = getLineSeparatorString(separator);
+    if (s != null) return LineEndingsManager.lineEndingsKey + "=" + s + "\n";
+    return "";
+  }
+
+  @Nullable
+  public static String getLineSeparatorString(@NotNull String separator) {
+    for (LineSeparator s : LineSeparator.values()) {
+      if (separator.equals(s.getSeparatorString())) {
+        return StringUtil.toLowerCase(s.name());
+      }
+    }
+    return null;
+  }
+
+  @NotNull
+  public static String getEncodingLine(@NotNull Project project) {
+    String encoding = getEncoding(project);
+    return encoding != null ? EncodingManager.charsetKey + "=" + encoding + "\n" : "";
+  }
+
+  @Nullable
+  public static String getEncoding(@NotNull Project project) {
     final Charset charset = EncodingProjectManager.getInstance(project).getDefaultCharset();
     for (Map.Entry<String, Charset> entry : EncodingManager.encodingMap.entrySet()) {
       if (entry.getValue() == charset) {
-        return EncodingManager.charsetKey + "=" + entry.getKey() + "\n";
+        return entry.getKey();
       }
     }
-    return "";
+    return null;
   }
 
   @NotNull
-  private static String buildPattern(FileType fileType) {
-    final StringBuilder result = new StringBuilder();
-    final List<FileNameMatcher> associations = FileTypeManager.getInstance().getAssociations(fileType);
-    for (FileNameMatcher matcher : associations) {
-      if (result.length() != 0) result.append(",");
-      result.append(matcher.getPresentableString());
-    }
+  public static String buildPattern(FileType fileType) {
+    List<FileNameMatcher> associations = FileTypeManager.getInstance().getAssociations(fileType);
+    String result = associations
+            .stream()
+            .map(matcher -> matcher.getPresentableString())
+            .sorted()
+            .collect(Collectors.joining(","));
     if (associations.size() > 1) {
-      result.insert(0, "{").append("}");
+      return "{" + result + "}";
     }
-    return result.toString();
+    return result;
   }
 
   private static boolean equalIndents(CommonCodeStyleSettings.IndentOptions commonIndentOptions,
@@ -197,4 +227,43 @@ public class Utils {
     result.append("\n");
   }
 
+
+  public static boolean editorConfigExists(@NotNull Project project) {
+    SettingsProviderComponent settingsProvider  = SettingsProviderComponent.getInstance();
+    String basePath = project.getBasePath();
+    if (basePath == null) return false;
+    File projectDir = new File(basePath);
+    Set<String> rootDirs = settingsProvider.getRootDirs(project);
+    if (rootDirs.isEmpty()) {
+        rootDirs = Collections.singleton(basePath);
+    }
+    for (String rootDir : rootDirs) {
+      File currRoot = new File(rootDir);
+      while (currRoot != null) {
+        if (containsEditorConfig(currRoot)) return true;
+        if (EditorConfigRegistry.shouldStopAtProjectRoot() && FileUtil.filesEqual(currRoot, projectDir)) break;
+        currRoot = currRoot.getParentFile();
+      }
+    }
+    return false;
+  }
+
+  private static boolean containsEditorConfig(@NotNull File dir) {
+    if (dir.exists() && dir.isDirectory()) {
+      if (FileUtil.exists(dir.getPath() + File.separator + ".editorconfig")) return true;
+    }
+    return false;
+  }
+
+  @NotNull
+  public static List<VirtualFile> pathsToFiles(@NotNull List<String> paths) {
+    List<VirtualFile> files = new ArrayList<>();
+    for (String path : paths) {
+      VirtualFile file = VfsUtil.findFile(Paths.get(path), true);
+      if (file != null) {
+        files.add(file);
+      }
+    }
+    return files;
+  }
 }

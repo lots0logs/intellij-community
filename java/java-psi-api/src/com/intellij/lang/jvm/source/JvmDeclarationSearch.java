@@ -5,7 +5,6 @@ import com.intellij.lang.jvm.JvmElement;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiNameIdentifierOwner;
-import com.intellij.util.containers.EmptyIterator;
 import com.intellij.util.containers.FlatteningIterator;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -67,12 +66,12 @@ public class JvmDeclarationSearch {
   @NotNull
   private static Iterator<JvmElement> iterateDeclarations(@NotNull PsiElement declaringElement) {
     List<JvmDeclarationSearcher> searchers = EP.allForLanguage(declaringElement.getLanguage());
-    return searchers.isEmpty() ? EmptyIterator.getInstance() : iterateDeclarations(declaringElement, searchers);
+    return searchers.isEmpty() ? Collections.emptyIterator() : iterateDeclarations(declaringElement, searchers);
   }
 
   @NotNull
   private static Iterator<JvmElement> iterateDeclarations(@NotNull PsiElement declaringElement,
-                                                          @NotNull Collection<JvmDeclarationSearcher> searchers) {
+                                                          @NotNull Collection<? extends JvmDeclarationSearcher> searchers) {
     return new FlatteningIterator<JvmDeclarationSearcher, JvmElement>(searchers.iterator()) {
       @Override
       public boolean hasNext() {

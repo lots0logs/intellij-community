@@ -23,9 +23,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * @author nik
- */
 public abstract class XDebuggerUtil {
   public static XDebuggerUtil getInstance() {
     return ServiceManager.getService(XDebuggerUtil.class);
@@ -111,7 +108,7 @@ public abstract class XDebuggerUtil {
    * @param line 0-based line number
    * @param processor processor
    */
-  public abstract void iterateLine(@NotNull Project project, @NotNull Document document, int line, @NotNull Processor<PsiElement> processor);
+  public abstract void iterateLine(@NotNull Project project, @NotNull Document document, int line, @NotNull Processor<? super PsiElement> processor);
 
   /**
    * Disable value lookup in specified editor

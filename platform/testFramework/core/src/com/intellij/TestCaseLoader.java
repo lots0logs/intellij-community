@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij;
 
 import com.intellij.idea.Bombed;
@@ -6,10 +6,9 @@ import com.intellij.idea.ExcludeFromTestDiscovery;
 import com.intellij.idea.HardwareAgentRequired;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.testFramework.RunFirst;
-import com.intellij.testFramework.TeamCityLogger;
-import com.intellij.testFramework.TestFrameworkUtil;
-import com.intellij.testFramework.TestSorter;
+import com.intellij.testFramework.*;
+import com.intellij.util.MathUtil;
+import com.intellij.util.SystemProperties;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import junit.framework.Test;
@@ -26,6 +25,7 @@ import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.ToIntFunction;
 
@@ -54,11 +54,16 @@ public class TestCaseLoader {
    */
   private static final String ALL_TESTS_GROUP = "ALL";
   private static final String PLATFORM_LITE_FIXTURE_NAME = "com.intellij.testFramework.PlatformLiteFixture";
+  /**
+   * By default test classes run in alphabetical order. Pass {@code "reversed"} to this property to run test classes in reversed alphabetical order.
+   * This help to find problems when test A modifies global state causing test B to fail if it runs after A.
+   */
+  private static final boolean REVERSE_ORDER = SystemProperties.getBooleanProperty("intellij.build.test.reverse.order", false);
 
-  private final List<Class> myClassList = new ArrayList<>();
+  private final List<Class<?>> myClassList = new ArrayList<>();
   private final List<Throwable> myClassLoadingErrors = new ArrayList<>();
-  private Class myFirstTestClass;
-  private Class myLastTestClass;
+  private Class<?> myFirstTestClass;
+  private Class<?> myLastTestClass;
   private final TestClassesFilter myTestClassesFilter;
   private final boolean myForceLoadPerformanceTests;
 
@@ -95,7 +100,7 @@ public class TestCaseLoader {
     MultiMap<String, String> groups = MultiMap.createLinked();
 
     for (URL fileUrl : groupingFileUrls) {
-      try (InputStreamReader reader = new InputStreamReader(fileUrl.openStream())) {
+      try (InputStreamReader reader = new InputStreamReader(fileUrl.openStream(), StandardCharsets.UTF_8)) {
         groups.putAllValues(GroupBasedTestClassFilter.readGroups(reader));
       }
       catch (IOException e) {
@@ -142,26 +147,42 @@ public class TestCaseLoader {
     return StringUtil.split(System.getProperty("intellij.build.test.groups", System.getProperty("idea.test.group", "")).trim(), ";");
   }
 
-  void addClassIfTestCase(Class testCaseClass, String moduleName) {
+  void addClassIfTestCase(Class<?> testCaseClass, String moduleName) {
     if (shouldAddTestCase(testCaseClass, moduleName, true) &&
         testCaseClass != myFirstTestClass && testCaseClass != myLastTestClass &&
         TestFrameworkUtil.canRunTest(testCaseClass)) {
 
-      int index = Math.abs(testCaseClass.getName().hashCode());
-
-      if (index % TEST_RUNNERS_COUNT == TEST_RUNNER_INDEX) {
+      if (SelfSeedingTestCase.class.isAssignableFrom(testCaseClass) || matchesCurrentBucket(testCaseClass.getName())) {
         myClassList.add(testCaseClass);
       }
     }
   }
 
-  void addFirstTest(Class aClass) {
+  /**
+   * @return true iff this {@code testIdentifier} matches current testing settings: number of buckets and bucket index. {@code testIdentifier} may
+   * be something identifying a test: test class or feature file name
+   * @apiNote logic for bucketing tests into different bucket configurations.
+   * @see TestCaseLoader#TEST_RUNNERS_COUNT
+   * @see TestCaseLoader#TEST_RUNNER_INDEX
+   */
+  public static boolean matchesCurrentBucket(@NotNull String testIdentifier) {
+    return MathUtil.nonNegativeAbs(testIdentifier.hashCode()) % TEST_RUNNERS_COUNT == TEST_RUNNER_INDEX;
+  }
+
+  /**
+   * @return true iff tests supposed to be separated into buckets using {@link #matchesCurrentBucket(String)} method
+   */
+  public static boolean shouldBucketTests() {
+    return TEST_RUNNERS_COUNT > 1;
+  }
+
+  void addFirstTest(Class<?> aClass) {
     assert myFirstTestClass == null : "already added: " + aClass;
     assert shouldAddTestCase(aClass, null, false) : "not a test: " + aClass;
     myFirstTestClass = aClass;
   }
 
-  void addLastTest(Class aClass) {
+  void addLastTest(Class<?> aClass) {
     assert myLastTestClass == null : "already added: " + aClass;
     assert shouldAddTestCase(aClass, null, false) : "not a test: " + aClass;
     myLastTestClass = aClass;
@@ -191,13 +212,13 @@ public class TestCaseLoader {
     return TestFrameworkUtil.isJUnit4TestClass(testCaseClass, false);
   }
 
-  private boolean shouldExcludeTestClass(String moduleName, Class testCaseClass) {
+  private boolean shouldExcludeTestClass(String moduleName, Class<?> testCaseClass) {
     if (!myForceLoadPerformanceTests && !shouldIncludePerformanceTestCase(testCaseClass)) return true;
     String className = testCaseClass.getName();
     return !myTestClassesFilter.matches(className, moduleName) || isBombed(testCaseClass) || isExcludeFromTestDiscovery(testCaseClass);
   }
 
-  private static boolean isExcludeFromTestDiscovery(Class c) {
+  private static boolean isExcludeFromTestDiscovery(Class<?> c) {
     return RUN_WITH_TEST_DISCOVERY && getAnnotationInHierarchy(c, ExcludeFromTestDiscovery.class) != null;
   }
 
@@ -210,7 +231,7 @@ public class TestCaseLoader {
   public void loadTestCases(final String moduleName, final Collection<String> classNamesIterator) {
     for (String className : classNamesIterator) {
       try {
-        Class candidateClass = Class.forName(className, false, getClassLoader());
+        Class<?> candidateClass = Class.forName(className, false, getClassLoader());
         addClassIfTestCase(candidateClass, moduleName);
       }
       catch (Throwable e) {
@@ -229,52 +250,28 @@ public class TestCaseLoader {
     return myClassLoadingErrors;
   }
 
-  private static final List<String> ourRankList = getTeamCityRankList();
-
-  private static List<String> getTeamCityRankList() {
-    if (isPerformanceTestsRun()) {
-      // let performance test order be stable to decrease the variation in their timings
-      return Collections.emptyList();
-    }
-
-    String filePath = System.getProperty("teamcity.tests.recentlyFailedTests.file", null);
-    if (filePath != null) {
-      try {
-        return FileUtil.loadLines(filePath);
-      }
-      catch (IOException ignored) { }
-    }
-
-    return Collections.emptyList();
-  }
-
-  private static int getRank(Class aClass) {
+  private static int getRank(Class<?> aClass) {
     if (runFirst(aClass)) return 0;
-    if (isPerformanceTestsRun()) return 1;
 
     // PlatformLiteFixture is the very special test case because it doesn't load all the XMLs with component/extension declarations
     // (that is, uses a mock application). Instead, it allows to declare them manually using its registerComponent/registerExtension
     // methods. The goal is to make tests which extend PlatformLiteFixture extremely fast. The problem appears when such tests are invoked
-    // together with other tests which rely on declarations in XML files (that is, use a real application). The nature of the IDEA
+    // together with other tests which rely on declarations in XML files (that is, use a real application). The nature of the IDE
     // application is such that static final fields are often used to cache extensions. While having a positive effect on performance,
     // it creates problems during testing. Simply speaking, if the instance of PlatformLiteFixture is the first one in a suite, it pollutes
     // static final fields (and all other kinds of caches) with invalid values. To avoid it, such tests should always be the last.
     if (isPlatformLiteFixture(aClass)) {
-      return ourRankList.size() + 1;
+      return 2;
     }
 
-    int i = ourRankList.indexOf(aClass.getName());
-    if (i != -1) {
-      return i;
-    }
-    return ourRankList.size();
+    return 1;
   }
 
-  private static boolean runFirst(Class testClass) {
+  private static boolean runFirst(Class<?> testClass) {
     return getAnnotationInHierarchy(testClass, RunFirst.class) != null;
   }
 
-  private static boolean isPlatformLiteFixture(Class aClass) {
+  private static boolean isPlatformLiteFixture(Class<?> aClass) {
     while (aClass != null) {
       if (PLATFORM_LITE_FIXTURE_NAME.equals(aClass.getName())) {
         return true;
@@ -290,8 +287,8 @@ public class TestCaseLoader {
     return myClassList.size();
   }
 
-  public List<Class> getClasses() {
-    List<Class> result = new ArrayList<>(myClassList.size());
+  public List<Class<?>> getClasses() {
+    List<Class<?>> result = new ArrayList<>(myClassList.size());
 
     if (myFirstTestClass != null) {
       result.add(myFirstTestClass);
@@ -316,11 +313,12 @@ public class TestCaseLoader {
       catch (Throwable ignore) { }
     }
 
+    Comparator<String> classNameComparator = REVERSE_ORDER ? Comparator.reverseOrder() : Comparator.naturalOrder();
     return new TestSorter() {
       @NotNull
       @Override
-      public List<Class> sorted(@NotNull List<Class> tests, @NotNull ToIntFunction<? super Class> ranker) {
-        return ContainerUtil.sorted(tests, Comparator.comparingInt(ranker));
+      public List<Class<?>> sorted(@NotNull List<Class<?>> tests, @NotNull ToIntFunction<? super Class<?>> ranker) {
+        return ContainerUtil.sorted(tests, Comparator.<Class<?>>comparingInt(ranker).thenComparing(Class::getName, classNameComparator));
       }
     };
   }
@@ -339,15 +337,15 @@ public class TestCaseLoader {
     return INCLUDE_PERFORMANCE_TESTS;
   }
 
-  static boolean shouldIncludePerformanceTestCase(Class aClass) {
+  static boolean shouldIncludePerformanceTestCase(Class<?> aClass) {
     return isIncludingPerformanceTestsRun() || isPerformanceTestsRun() || !isPerformanceTest(null, aClass);
   }
 
-  static boolean isPerformanceTest(String methodName, Class aClass) {
+  static boolean isPerformanceTest(String methodName, Class<?> aClass) {
     return TestFrameworkUtil.isPerformanceTest(methodName, aClass.getSimpleName());
   }
 
-  public void fillTestCases(String rootPackage, List<File> classesRoots) {
+  public void fillTestCases(String rootPackage, List<? extends File> classesRoots) {
     long before = System.currentTimeMillis();
     for (File classesRoot : classesRoots) {
       int oldCount = getClassesCount();
@@ -366,7 +364,12 @@ public class TestCaseLoader {
 
     String message = "Number of test classes found: " + getClassesCount() + " time to load: " + (after - before) / 1000 + "s.";
     System.out.println(message);
-    TeamCityLogger.info(message);
+
+    if (!RUN_ONLY_AFFECTED_TESTS && getClassesCount() == 0) {
+      // There is build failure condition logic in TeamCity that depends on the logged message.
+      // Be careful with changing it.
+      System.out.println("Expected some tests to be executed, but no test classes were found.");
+    }
   }
 
   @Nullable

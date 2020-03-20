@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.inspections.quickfix;
 
 import com.intellij.codeInspection.LocalQuickFix;
@@ -12,9 +12,6 @@ import com.jetbrains.python.codeInsight.controlflow.ScopeOwner;
 import com.jetbrains.python.psi.*;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * @author oleg
- */
 public class AddGlobalQuickFix implements LocalQuickFix {
   @Override
   @NotNull
@@ -33,7 +30,7 @@ public class AddGlobalQuickFix implements LocalQuickFix {
       final Ref<Boolean> added = new Ref<>(false);
       owner.accept(new PyRecursiveElementVisitor(){
         @Override
-        public void visitElement(PsiElement element) {
+        public void visitElement(@NotNull PsiElement element) {
           if (!added.get()){
             super.visitElement(element);
           }

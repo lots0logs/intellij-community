@@ -1,9 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.rmi.ssl;
 
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.security.CompositeX509TrustManager;
-import com.intellij.util.containers.ContainerUtilRt;
+import com.intellij.util.ArrayUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -15,6 +15,7 @@ import java.security.*;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,10 +24,11 @@ public class SslSocketFactory extends SSLSocketFactory {
   public static final String SSL_CLIENT_CERT_PATH = "sslClientCertPath";
   public static final String SSL_CLIENT_KEY_PATH = "sslClientKeyPath";
   public static final String SSL_TRUST_EVERYBODY = "sslTrustEverybody";
+  public static final String SSL_USE_FACTORY = "sslUseFactory";
   private static final String END_CERTIFICATE = "-----END CERTIFICATE-----";
   private final SSLSocketFactory myFactory;
 
-  public SslSocketFactory() throws GeneralSecurityException, IOException {
+  public SslSocketFactory() throws GeneralSecurityException {
     super();
     SSLContext ctx = SSLContext.getInstance("TLS");
     TrustManager[] tms;
@@ -53,14 +55,26 @@ public class SslSocketFactory extends SSLSocketFactory {
 
   @NotNull
   public static TrustManager[] createTrustManagers(@NotNull String caCertPath) throws Exception {
+    List<X509Certificate> certs = loadCertificates(caCertPath);
+    List<TrustManager> result = new ArrayList<TrustManager>(certs.size());
+    for (X509Certificate cert : certs) {
+      result.add(new MyTrustManager(cert));
+    }
+
+    return new TrustManager[]{new CompositeX509TrustManager(result.toArray(new TrustManager[0]))};
+  }
+
+  @NotNull
+  public static List<X509Certificate> loadCertificates(@NotNull String caCertPath)
+    throws IOException, CertificateException {
     String string = FileUtilRt.loadFile(new File(caCertPath));
     String[] tokens = string.split(END_CERTIFICATE);
-    List<TrustManager> result = ContainerUtilRt.newArrayListWithCapacity(tokens.length);
+    List<X509Certificate> certs = new ArrayList<X509Certificate>(tokens.length);
     for (String token : tokens) {
       if (token == null || token.trim().length() == 0) continue;
-      result.add(new MyTrustManager(readCertificate(stringStream(token + END_CERTIFICATE))));
+      certs.add(readCertificate(stringStream(token + END_CERTIFICATE)));
     }
-    return new TrustManager[]{new CompositeX509TrustManager(result.toArray(new TrustManager[0]))};
+    return certs;
   }
 
   @NotNull
@@ -156,7 +170,7 @@ public class SslSocketFactory extends SSLSocketFactory {
       return ks;
     }
 
-    public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+    public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
     }
 
     public void checkServerTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
@@ -171,10 +185,10 @@ public class SslSocketFactory extends SSLSocketFactory {
   }
 
   private static class MyTrustEverybodyManager implements X509TrustManager {
-    public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+    public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
     }
 
-    public void checkServerTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+    public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
     }
 
     @NotNull
@@ -195,7 +209,7 @@ public class SslSocketFactory extends SSLSocketFactory {
 
     @NotNull
     public String[] getClientAliases(String s, Principal[] principals) {
-      return new String[]{};
+      return ArrayUtilRt.EMPTY_STRING_ARRAY;
     }
 
     public String chooseClientAlias(String[] strings, Principal[] principals, Socket socket) {
@@ -204,7 +218,7 @@ public class SslSocketFactory extends SSLSocketFactory {
 
     @NotNull
     public String[] getServerAliases(String s, Principal[] principals) {
-      return new String[]{};
+      return ArrayUtilRt.EMPTY_STRING_ARRAY;
     }
 
     @Nullable

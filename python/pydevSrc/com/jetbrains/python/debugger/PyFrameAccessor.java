@@ -27,6 +27,10 @@ public interface PyFrameAccessor {
   @Nullable
   PyReferrersLoader getReferrersLoader();
 
+  /**
+   * @throws IllegalArgumentException if the type of the {@code var} is not supported
+   *                                  or the corresponding array has more than two dimensions
+   */
   ArrayChunk getArrayItems(PyDebugValue var, int rowOffset, int colOffset, int rows, int cols, String format) throws PyDebuggerException;
 
   @Nullable
@@ -46,6 +50,10 @@ public interface PyFrameAccessor {
   }
 
   default void setCurrentRootNode(@NotNull XCompositeNode node) {}
+
+  default boolean isSimplifiedView() {
+    return false;
+  }
 
   @Nullable
   default XCompositeNode getCurrentRootNode() {

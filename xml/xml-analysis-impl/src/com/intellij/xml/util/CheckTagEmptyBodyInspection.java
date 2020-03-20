@@ -17,19 +17,19 @@
 package com.intellij.xml.util;
 
 import com.intellij.codeInspection.ProblemsHolder;
-import com.intellij.codeInspection.XmlInspectionGroupNames;
 import com.intellij.codeInspection.XmlSuppressableInspectionTool;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.xml.XMLLanguage;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.xml.XmlChildRole;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.psi.xml.XmlTokenType;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.xml.XmlBundle;
 import com.intellij.xml.XmlExtension;
+import com.intellij.xml.analysis.XmlAnalysisBundle;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
@@ -57,7 +57,7 @@ public class CheckTagEmptyBodyInspection extends XmlSuppressableInspectionTool {
                 node.getElementType() == XmlTokenType.XML_END_TAG_START) {
               holder.registerProblem(
                 tag,
-                XmlBundle.message("xml.inspections.tag.empty.body"),
+                XmlAnalysisBundle.message("xml.inspections.tag.empty.body"),
                 isCollapsibleTag(tag) ? new Fix(tag) : null
               );
             }
@@ -68,22 +68,10 @@ public class CheckTagEmptyBodyInspection extends XmlSuppressableInspectionTool {
   }
 
   static boolean isCollapsibleTag(final XmlTag tag) {
-    final String name = tag.getName().toLowerCase();
+    final String name = StringUtil.toLowerCase(tag.getName());
     return tag.getLanguage() == XMLLanguage.INSTANCE ||
            "link".equals(name) || "br".equals(name) || "meta".equals(name) || "img".equals(name) || "input".equals(name) || "hr".equals(name) ||
            XmlExtension.isCollapsible(tag);
-  }
-
-  @Override
-  @NotNull
-  public String getGroupDisplayName() {
-    return XmlInspectionGroupNames.XML_INSPECTIONS;
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return XmlBundle.message("xml.inspections.check.tag.empty.body");
   }
 
   @Override

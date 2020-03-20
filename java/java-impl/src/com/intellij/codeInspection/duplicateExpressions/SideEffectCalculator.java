@@ -1,8 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.duplicateExpressions;
 
 import com.intellij.codeInspection.dataFlow.CommonDataflow;
-import com.intellij.codeInspection.dataFlow.DfaFactType;
+import com.intellij.codeInspection.dataFlow.types.DfReferenceType;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -54,7 +54,7 @@ class SideEffectCalculator {
         expression instanceof PsiClassObjectAccessExpression) {
       return false;
     }
-    int c = myCache.get(expression, -1);
+    int c = myCache.get(expression);
     if (c < 0) {
       c = calculateSideEffect(expression) ? 1 : 0;
       myCache.put(expression, c);
@@ -94,7 +94,7 @@ class SideEffectCalculator {
       PsiExpression array = access.getArrayExpression();
       return mayHaveSideEffect(array) ||
              mayHaveSideEffect(access.getIndexExpression()) ||
-             !Boolean.TRUE.equals(CommonDataflow.getExpressionFact(array, DfaFactType.LOCALITY));
+             !DfReferenceType.isLocal(CommonDataflow.getDfType(array));
     }
     if (e instanceof PsiLambdaExpression) {
       return false; // lambda itself (unless called) has no side effect

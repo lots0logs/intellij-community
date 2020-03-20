@@ -32,8 +32,8 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
+import org.intellij.plugins.relaxNG.RelaxngBundle;
 import org.intellij.plugins.relaxNG.compact.psi.*;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -41,16 +41,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collections;
 
 public abstract class BaseInspection extends XmlSuppressableInspectionTool {
-  @Override
-  @Nls
-  @NotNull
-  public final String getGroupDisplayName() {
-    return getRngGroupDisplayName();
-  }
-
-  public static String getRngGroupDisplayName() {
-    return "RELAX NG";
-  }
 
   @Override
   public boolean isSuppressedFor(@NotNull PsiElement element) {
@@ -83,9 +73,8 @@ public abstract class BaseInspection extends XmlSuppressableInspectionTool {
     return false;
   }
 
-  @NotNull
   @Override
-  public SuppressQuickFix[] getBatchSuppressActions(@Nullable PsiElement element) {
+  public SuppressQuickFix @NotNull [] getBatchSuppressActions(@Nullable PsiElement element) {
     if (element.getContainingFile() instanceof RncFile) {
       return ArrayUtil.mergeArrays(new SuppressQuickFix[] {
               new SuppressAction("Define") {
@@ -191,7 +180,7 @@ public abstract class BaseInspection extends XmlSuppressableInspectionTool {
     @NotNull
     @Override
     public String getName() {
-      return "Suppress for " + myLocation;
+      return RelaxngBundle.message("suppress.for.0", myLocation);
     }
 
     @Override

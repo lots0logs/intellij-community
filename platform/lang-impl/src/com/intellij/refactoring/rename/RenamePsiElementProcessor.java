@@ -1,18 +1,23 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.rename;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Pass;
-import com.intellij.psi.*;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiFileSystemItem;
+import com.intellij.psi.PsiReference;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.search.searches.ReferencesSearch;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.refactoring.RefactoringSettings;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
-import com.intellij.refactoring.util.MoveRenameUsageInfo;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.MultiMap;
@@ -20,6 +25,7 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -29,6 +35,8 @@ import java.util.Map;
  * @author yole
  */
 public abstract class RenamePsiElementProcessor {
+  private static final Logger LOG = Logger.getInstance(RenamePsiElementProcessor.class);
+
   public static final ExtensionPointName<RenamePsiElementProcessor> EP_NAME = ExtensionPointName.create("com.intellij.renamePsiElementProcessor");
 
   public abstract boolean canProcessElement(@NotNull PsiElement element);
@@ -43,19 +51,46 @@ public abstract class RenamePsiElementProcessor {
 
   public void renameElement(@NotNull PsiElement element,
                             @NotNull String newName,
-                            @NotNull UsageInfo[] usages,
+                            UsageInfo @NotNull [] usages,
                             @Nullable RefactoringElementListener listener) throws IncorrectOperationException {
     RenameUtil.doRenameGenericNamedElement(element, newName, usages, listener);
   }
 
+  /** @deprecated use {@link RenamePsiElementProcessor#findReferences(PsiElement, SearchScope, boolean)} instead */
+  @Deprecated
   @NotNull
   public Collection<PsiReference> findReferences(@NotNull PsiElement element, boolean searchInCommentsAndStrings) {
-    return findReferences(element);
+    return myOldFindMethodsImplemented
+           ? findReferences(element)
+           : findReferences(element, GlobalSearchScope.projectScope(element.getProject()), searchInCommentsAndStrings);
+  }
+
+  /** @deprecated use {@link RenamePsiElementProcessor#findReferences(PsiElement, SearchScope, boolean)} instead */
+  @Deprecated
+  @NotNull
+  public Collection<PsiReference> findReferences(@NotNull PsiElement element) {
+    return myOldFindMethodsImplemented
+           ? ReferencesSearch.search(element, GlobalSearchScope.projectScope(element.getProject())).findAll()
+           : findReferences(element, GlobalSearchScope.projectScope(element.getProject()), false);
   }
 
   @NotNull
-  public Collection<PsiReference> findReferences(@NotNull PsiElement element) {
-    return ReferencesSearch.search(element, GlobalSearchScope.projectScope(element.getProject())).findAll();
+  public Collection<PsiReference> findReferences(@NotNull PsiElement element,
+                                                 @NotNull SearchScope searchScope,
+                                                 boolean searchInCommentsAndStrings) {
+    if (myOldFindMethodsImplemented) {
+      Collection<PsiReference> refs = findReferences(element, searchInCommentsAndStrings);
+      if (!searchScope.equals(GlobalSearchScope.projectScope(element.getProject()))) {
+        ArrayList<PsiReference> result = new ArrayList<>();
+        for (PsiReference ref : refs) {
+          VirtualFile file = PsiUtilCore.getVirtualFile(ref.getElement());
+          if (file == null || searchScope.contains(file)) result.add(ref);
+        }
+        return result;
+      }
+      return refs;
+    }
+    return ReferencesSearch.search(element, searchScope).findAll();
   }
 
   @Nullable
@@ -217,11 +252,27 @@ public abstract class RenamePsiElementProcessor {
 
   @NotNull
   public UsageInfo createUsageInfo(@NotNull PsiElement element, @NotNull PsiReference ref, @NotNull PsiElement referenceElement) {
-    return new MoveRenameUsageInfo(referenceElement, ref,
-                                   ref.getRangeInElement().getStartOffset(),
-                                   ref.getRangeInElement().getEndOffset(),
-                                   element,
-                                   ref.resolve() == null && !(ref instanceof PsiPolyVariantReference && ((PsiPolyVariantReference)ref).multiResolve(true).length > 0));
+    return RenameUtilBase.createMoveRenameUsageInfo(element, ref, referenceElement);
+  }
+
+  final boolean myOldFindMethodsImplemented;
+  {
+    boolean implemented;
+    try {
+      Method find1 = getClass().getMethod("findReferences", PsiElement.class);
+      Method find2 = getClass().getMethod("findReferences", PsiElement.class, Boolean.TYPE);
+      implemented = !RenamePsiElementProcessor.class.equals(find1.getDeclaringClass()) ||
+                    !RenamePsiElementProcessor.class.equals(find2.getDeclaringClass());
+      if (implemented) {
+        LOG.warn(getClass().getName() + " overrides deprecated findReferences(..).\n" +
+                 "Override findReferences(PsiElement, SearchScope, boolean) instead.");
+      }
+    }
+    catch (NoSuchMethodException e) {
+      implemented = false;
+      LOG.warn(e);
+    }
+    myOldFindMethodsImplemented = implemented;
   }
 
 }

@@ -1,48 +1,31 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.io;
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
-import com.intellij.openapi.project.CacheUpdateRunner;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.testFramework.PlatformTestCase;
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase;
+import com.intellij.testFramework.HeavyPlatformTestCase;
+import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 import com.intellij.util.TimeoutUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.FileBasedIndex;
 import com.intellij.util.indexing.FileBasedIndexImpl;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.ide.PooledThreadExecutor;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
 /**
  * @author Dmitry Avdeev
  */
-public class PersistencePerformanceTest extends LightPlatformCodeInsightFixtureTestCase {
-  private final ExecutorService myThreadPool = PooledThreadExecutor.INSTANCE;
+public class PersistencePerformanceTest extends BasePlatformTestCase {
   private final List<PersistentHashMap<String, Record>> myMaps = new ArrayList<>();
   private final List<String> myKeys = new ArrayList<>();
   private PersistentStringEnumerator myEnumerator;
@@ -64,7 +47,7 @@ public class PersistencePerformanceTest extends LightPlatformCodeInsightFixtureT
     for (int i = 0; i < 100; i++) {
       byte[] bytes = new byte[1000];
       random.nextBytes(bytes);
-      String key = new String(bytes, CharsetToolkit.UTF8_CHARSET);
+      String key = new String(bytes, StandardCharsets.UTF_8);
       myKeys.add(key);
     }
     File tempDirectory = FileUtil.createTempDirectory("map", "");
@@ -74,7 +57,7 @@ public class PersistencePerformanceTest extends LightPlatformCodeInsightFixtureT
       myMaps.add(map);
     }
     PagedFileStorage.StorageLockContext storageLockContext = new PagedFileStorage.StorageLockContext(false);
-    myEnumerator = new PersistentStringEnumerator(FileUtil.createTempFile(tempDirectory, "persistent", "enum"), storageLockContext);
+    myEnumerator = new PersistentStringEnumerator(FileUtil.createTempFile(tempDirectory, "persistent", "enum").toPath(), storageLockContext);
   }
 
   @Override
@@ -98,10 +81,10 @@ public class PersistencePerformanceTest extends LightPlatformCodeInsightFixtureT
   public void testReadWrite() throws Exception {
     List<Future<Boolean>> futures = Collections.synchronizedList(new ArrayList<>());
     for (PersistentHashMap<String, Record> map : myMaps) {
-      Future<Boolean> submit = myThreadPool.submit(() -> doTask(map));
+      Future<Boolean> submit = ApplicationManager.getApplication().executeOnPooledThread(() -> doTask(map));
       futures.add(submit);
     }
-    Future<?> waitFuture = myThreadPool.submit(() -> {
+    Future<?> waitFuture = ApplicationManager.getApplication().executeOnPooledThread(() -> {
       while (ContainerUtil.exists(futures, future -> !future.isDone())) {
         TimeoutUtil.sleep(100);
         myMaps.forEach(PersistentHashMap::dropMemoryCaches);
@@ -113,15 +96,14 @@ public class PersistencePerformanceTest extends LightPlatformCodeInsightFixtureT
       File file = FileUtil.createTempFile("", ".txt");
       VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
       assertNotNull(virtualFile);
-      PlatformTestCase.setFileText(virtualFile, "foo bar");
+      HeavyPlatformTestCase.setFileText(virtualFile, "foo bar");
       files.add(virtualFile);
     }
 
     FileBasedIndexImpl index = (FileBasedIndexImpl)FileBasedIndex.getInstance();
     while (ContainerUtil.exists(futures, future -> !future.isDone())) {
       Thread.sleep(100);
-      CacheUpdateRunner.processFiles(new EmptyProgressIndicator(), files, getProject(),
-                                     content -> index.indexFileContent(getProject(), content));
+      index.indexFiles(getProject(), files, new EmptyProgressIndicator());
     }
     for (Future<Boolean> future : futures) {
       assertTrue(future.get());

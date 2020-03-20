@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.uiDesigner.actions;
 
@@ -38,7 +38,7 @@ import java.util.List;
  * @author yole
  */
 public class GenerateMainAction extends AnAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.actions.GenerateMainAction");
+  private static final Logger LOG = Logger.getInstance(GenerateMainAction.class);
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
@@ -114,8 +114,7 @@ public class GenerateMainAction extends AnAction {
   public void update(@NotNull AnActionEvent e) {
     boolean enabled = isActionEnabled(e);
     Presentation presentation = e.getPresentation();
-    presentation.setEnabled(enabled);
-    presentation.setVisible(enabled);
+    presentation.setEnabledAndVisible(enabled);
   }
 
   private static boolean isActionEnabled(final AnActionEvent e) {

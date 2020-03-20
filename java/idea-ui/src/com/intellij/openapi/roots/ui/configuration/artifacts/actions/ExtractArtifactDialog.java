@@ -2,8 +2,7 @@
 package com.intellij.openapi.roots.ui.configuration.artifacts.actions;
 
 import com.intellij.CommonBundle;
-import com.intellij.openapi.project.ProjectBundle;
-import com.intellij.openapi.roots.ui.configuration.artifacts.ArtifactTypeCellRenderer;
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.openapi.roots.ui.configuration.artifacts.LayoutTreeComponent;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
@@ -12,29 +11,30 @@ import com.intellij.packaging.artifacts.ArtifactType;
 import com.intellij.packaging.impl.artifacts.PlainArtifactType;
 import com.intellij.packaging.ui.ArtifactEditorContext;
 import com.intellij.ui.DocumentAdapter;
+import com.intellij.ui.SimpleListCellRenderer;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 
-/**
- * @author nik
- */
 public class ExtractArtifactDialog extends DialogWrapper implements IExtractArtifactDialog {
   private JPanel myMainPanel;
   private JTextField myNameField;
-  private JComboBox myTypeBox;
+  private JComboBox<ArtifactType> myTypeBox;
   private final ArtifactEditorContext myContext;
 
   public ExtractArtifactDialog(ArtifactEditorContext context, LayoutTreeComponent treeComponent, String initialName) {
     super(treeComponent.getLayoutTree(), true);
     myContext = context;
-    setTitle(ProjectBundle.message("dialog.title.extract.artifact"));
+    setTitle(JavaUiBundle.message("dialog.title.extract.artifact"));
     for (ArtifactType type : ArtifactType.getAllTypes()) {
       myTypeBox.addItem(type);
     }
     myTypeBox.setSelectedItem(PlainArtifactType.getInstance());
-    myTypeBox.setRenderer(new ArtifactTypeCellRenderer(myTypeBox.getRenderer()));
+    myTypeBox.setRenderer(SimpleListCellRenderer.create((label, value, index) -> {
+      label.setIcon(value.getIcon());
+      label.setText(value.getPresentableName());
+    }));
     myNameField.getDocument().addDocumentListener(new DocumentAdapter() {
       @Override
       protected void textChanged(@NotNull DocumentEvent e) {
@@ -49,7 +49,7 @@ public class ExtractArtifactDialog extends DialogWrapper implements IExtractArti
   protected void doOKAction() {
     final String artifactName = getArtifactName();
     if (myContext.getArtifactModel().findArtifact(artifactName) != null) {
-      Messages.showErrorDialog(myContext.getProject(), "Artifact '" + artifactName + "' already exists!", CommonBundle.getErrorTitle());
+      Messages.showErrorDialog(myContext.getProject(), JavaUiBundle.message("dialog.message.artifact.0.already.exists", artifactName), CommonBundle.getErrorTitle());
       return;
     }
     super.doOKAction();

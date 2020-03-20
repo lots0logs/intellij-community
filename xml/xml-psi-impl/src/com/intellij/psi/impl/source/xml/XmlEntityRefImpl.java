@@ -1,23 +1,8 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.xml;
 
 import com.intellij.ide.highlighter.DTDFileType;
 import com.intellij.openapi.util.Computable;
-import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.RecursionManager;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
@@ -41,9 +26,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author mike
- */
 public class XmlEntityRefImpl extends XmlElementImpl implements XmlEntityRef {
   @NonNls private static final String GT_ENTITY = "&gt;";
   @NonNls private static final String QUOT_ENTITY = "&quot;";
@@ -60,11 +42,6 @@ public class XmlEntityRefImpl extends XmlElementImpl implements XmlEntityRef {
   }
 
   public static XmlEntityDecl resolveEntity(final XmlElement element, final String text, PsiFile targetFile) {
-    if (targetFile instanceof XmlFile) {
-      XmlDocument document = ((XmlFile)targetFile).getDocument();
-      if (document != null && document.getUserData(DISABLE_ENTITY_EXPAND) != null) return null;
-    }
-    
     final String entityName = text.substring(1, text.length() - 1);
 
     final PsiElement targetElement = targetFile != null ? targetFile : element;
@@ -81,7 +58,7 @@ public class XmlEntityRefImpl extends XmlElementImpl implements XmlEntityRef {
           return doResolveEntity(targetElement, entityName, containingFile).getValue();
         }
         value = CachedValuesManager.getManager(manager.getProject()).createCachedValue(
-          () -> doResolveEntity(targetElement, entityName, containingFile));
+          () -> doResolveEntity(targetElement, entityName, containingFile), true);
 
 
         map.put(entityName, value);
@@ -89,8 +66,6 @@ public class XmlEntityRefImpl extends XmlElementImpl implements XmlEntityRef {
     }
     return value.getValue();
   }
-
-  private static final Key<Boolean> DISABLE_ENTITY_EXPAND = Key.create("disable.entity.expand");
 
   private static CachedValueProvider.Result<XmlEntityDecl> doResolveEntity(final PsiElement targetElement,
                                                                            final String entityName,
@@ -158,7 +133,7 @@ public class XmlEntityRefImpl extends XmlElementImpl implements XmlEntityRef {
           if (HtmlUtil.isHtml5Document(document)) {
             descriptorFile = XmlUtil.findXmlFile((XmlFile)targetElement, Html5SchemaProvider.getCharsDtdLocation());
           }
-          else if (rootTag != null && document.getUserData(DISABLE_ENTITY_EXPAND) == null) {
+          else if (rootTag != null) {
             final XmlElementDescriptor descriptor = rootTag.getDescriptor();
 
             if (descriptor != null && !(descriptor instanceof AnyXmlElementDescriptor)) {
@@ -209,8 +184,7 @@ public class XmlEntityRefImpl extends XmlElementImpl implements XmlEntityRef {
   }
 
   @Override
-  @NotNull
-  public PsiReference[] getReferences() {
+  public PsiReference @NotNull [] getReferences() {
     return ReferenceProvidersRegistry.getReferencesFromProviders(this);
   }
 
@@ -222,10 +196,5 @@ public class XmlEntityRefImpl extends XmlElementImpl implements XmlEntityRef {
     else {
       visitor.visitElement(this);
     }
-  }
-
-  public static void setNoEntityExpandOutOfDocument(XmlDocument doc, boolean b) {
-    if (b) doc.putUserData(DISABLE_ENTITY_EXPAND, Boolean.TRUE);
-    else doc.putUserData(DISABLE_ENTITY_EXPAND, null);
   }
 }

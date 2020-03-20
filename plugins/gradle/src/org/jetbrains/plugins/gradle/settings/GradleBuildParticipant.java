@@ -1,24 +1,10 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.settings;
 
 import com.intellij.openapi.externalSystem.model.project.ModuleData;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.containers.ContainerUtil;
+import gnu.trove.THashMap;
 import gnu.trove.TObjectHashingStrategy;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData;
@@ -26,6 +12,7 @@ import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData;
 import java.io.File;
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,7 +23,7 @@ public class GradleBuildParticipant implements Serializable {
   private static final long serialVersionUID = 1L;
 
   private final String myProjectPath;
-  private final Map<File, ModuleData> moduleArtifactMap = ContainerUtil.newTroveMap(new TObjectHashingStrategy<File>() {
+  private final Map<File, ModuleData> moduleArtifactMap = new THashMap<>(new TObjectHashingStrategy<File>() {
     @Override
     public int computeHashCode(File file) {
       return ExternalSystemUtil.fileHashCode(file);
@@ -47,7 +34,7 @@ public class GradleBuildParticipant implements Serializable {
       return ExternalSystemUtil.filesEqual(o1, o2);
     }
   });
-  private final Map<String, ModuleData> moduleNameMap = ContainerUtil.newHashMap();
+  private final Map<String, ModuleData> moduleNameMap = new HashMap<>();
 
   public GradleBuildParticipant(String projectPath) {
     myProjectPath = projectPath;
@@ -72,7 +59,7 @@ public class GradleBuildParticipant implements Serializable {
   }
 
   @Nullable
-  public ModuleData findModuleDataByArtifacts(Collection<File> artifacts) {
+  public ModuleData findModuleDataByArtifacts(Collection<? extends File> artifacts) {
     ModuleData moduleData = null;
     for (File artifact : artifacts) {
       moduleData = moduleArtifactMap.get(artifact);

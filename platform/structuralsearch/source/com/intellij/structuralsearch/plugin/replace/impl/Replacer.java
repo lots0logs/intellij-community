@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.structuralsearch.plugin.replace.impl;
 
 import com.intellij.codeInsight.template.Template;
@@ -6,9 +6,10 @@ import com.intellij.codeInsight.template.TemplateManager;
 import com.intellij.lang.Language;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
-import com.intellij.openapi.application.impl.ApplicationImpl;
+import com.intellij.openapi.application.ex.ApplicationEx;
+import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
-import com.intellij.openapi.fileTypes.FileType;
+import com.intellij.openapi.fileTypes.LanguageFileType;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
@@ -54,42 +55,41 @@ public class Replacer {
   }
 
   public static int insertSubstitution(StringBuilder result, int offset, final ParameterInfo info, String image) {
-   if (!image.isEmpty()) {
-     result.insert(offset + info.getStartIndex(), image);
-     offset += image.length();
-   }
-   return offset;
- }
+    if (!image.isEmpty()) {
+      result.insert(offset + info.getStartIndex(), image);
+      offset += image.length();
+    }
+    return offset;
+  }
 
   public static String testReplace(String in, String what, String by, ReplaceOptions options, Project project)  {
     return testReplace(in, what, by, options, project, false);
   }
 
   public static String testReplace(String in, String what, String by, ReplaceOptions options, Project project, boolean sourceIsFile) {
-    final FileType type = options.getMatchOptions().getFileType();
+    final LanguageFileType type = options.getMatchOptions().getFileType();
     return testReplace(in, what, by, options, project, sourceIsFile, false, type, null);
   }
 
   public static String testReplace(String in, String what, String by, ReplaceOptions replaceOptions, Project project, boolean sourceIsFile,
-                                   boolean createPhysicalFile, FileType sourceFileType, Language sourceDialect) {
+                                   boolean createPhysicalFile, LanguageFileType sourceFileType, Language sourceDialect) {
     replaceOptions.setReplacement(by);
 
     final MatchOptions matchOptions = replaceOptions.getMatchOptions();
     matchOptions.fillSearchCriteria(what);
 
     Matcher.validate(project, matchOptions);
-    checkSupportedReplacementPattern(project, replaceOptions);
+    checkReplacementPattern(project, replaceOptions);
 
     final Replacer replacer = new Replacer(project, replaceOptions);
-    final Matcher matcher = new Matcher(project);
+    final Matcher matcher = new Matcher(project, matchOptions);
     try {
       final PsiElement firstElement, lastElement, parent;
-
-      if (replaceOptions.getMatchOptions().getScope() == null) {
+      if (matchOptions.getScope() == null) {
         final PsiElement[] elements = MatcherImplUtil.createTreeFromText(
           in,
-          sourceIsFile ? PatternTreeContext.File : PatternTreeContext.Block,
-          sourceFileType, sourceDialect, null,
+          new PatternContextInfo(sourceIsFile ? PatternTreeContext.File : PatternTreeContext.Block),
+          sourceFileType, sourceDialect,
           project,
           createPhysicalFile
         );
@@ -106,34 +106,32 @@ public class Replacer {
       }
 
       final CollectingMatchResultSink sink = new CollectingMatchResultSink();
-      matcher.testFindMatches(sink, matchOptions);
+      matcher.testFindMatches(sink);
 
-      final List<ReplacementInfo> resultPtrList = new SmartList<>();
+      final List<ReplacementInfo> replacements = new SmartList<>();
       for (final MatchResult result : sink.getMatches()) {
-        resultPtrList.add(replacer.buildReplacement(result));
+        replacements.add(replacer.buildReplacement(result));
       }
 
       int startOffset = firstElement.getTextRange().getStartOffset();
-      int endOffset = sourceIsFile ? 0 : parent.getTextLength() - lastElement.getTextRange().getEndOffset();
+      int endOffset = sourceIsFile ? 0 : (parent.getTextLength() - lastElement.getTextRange().getEndOffset());
 
       // get nodes from text may contain
       final PsiElement prevSibling = firstElement.getPrevSibling();
       if (prevSibling instanceof PsiWhiteSpace) {
-        startOffset -= prevSibling.getTextLength() - 1;
+        startOffset -= prevSibling.getTextLength();
       }
 
       final PsiElement nextSibling = lastElement.getNextSibling();
       if (nextSibling instanceof PsiWhiteSpace) {
-        endOffset -= nextSibling.getTextLength() - 1;
+        endOffset -= nextSibling.getTextLength();
       }
-
-      replacer.replaceAll(resultPtrList);
-
-      String result = parent.getText();
-      result = result.substring(startOffset);
-      result = result.substring(0,result.length() - endOffset);
-
-      return result;
+      replacer.replaceAll(replacements);
+      if (firstElement == lastElement && firstElement instanceof PsiFile) {
+        return firstElement.getText();
+      }
+      final String result = parent.getText();
+      return result.substring(startOffset, result.length() - endOffset);
     }
     catch (RuntimeException e) {
       throw e;
@@ -146,12 +144,12 @@ public class Replacer {
     }
   }
 
-  public void replaceAll(final List<ReplacementInfo> infos) {
+  public void replaceAll(final List<? extends ReplacementInfo> infos) {
     for (ReplacementInfo info : infos) {
       replaceHandler.prepare(info);
     }
 
-    ((ApplicationImpl)ApplicationManager.getApplication()).runWriteActionWithCancellableProgressInDispatchThread(
+    ((ApplicationEx)ApplicationManager.getApplication()).runWriteActionWithCancellableProgressInDispatchThread(
       SSRBundle.message("structural.replace.title"),
       project,
       null,
@@ -164,9 +162,11 @@ public class Replacer {
             indicator.checkCanceled();
             indicator.setFraction((float)(i + 1) / size);
 
-            ReplacementInfo info = infos.get(i);
-            PsiElement element = info.getMatch(0);
-            assert element != null;
+            final ReplacementInfo info = infos.get(i);
+            final PsiElement element = info.getMatch(0);
+            if (element == null) {
+              continue;
+            }
             final VirtualFile vFile = element.getContainingFile().getVirtualFile();
             if (vFile != null && !vFile.equals(lastFile)) {
               indicator.setText2(vFile.getPresentableUrl());
@@ -213,13 +213,16 @@ public class Replacer {
   }
 
   private void reformatAndPostProcess(final PsiElement elementParent) {
-    if (elementParent == null) return;
+    if (elementParent == null || !elementParent.isValid()) return;
     final PsiFile containingFile = elementParent.getContainingFile();
 
     if (containingFile != null && options.isToReformatAccordingToStyle()) {
       final VirtualFile file = containingFile.getVirtualFile();
       if (file != null) {
-        PsiDocumentManager.getInstance(project).commitDocument(FileDocumentManager.getInstance().getDocument(file));
+        final Document document = FileDocumentManager.getInstance().getDocument(file);
+        if (document != null) {
+          PsiDocumentManager.getInstance(project).commitDocument(document);
+        }
       }
 
       final int parentOffset = elementParent.getTextRange().getStartOffset();
@@ -232,8 +235,7 @@ public class Replacer {
     final PsiElement lastChild = el.getLastChild();
     if (lastChild instanceof PsiComment &&
         replacementInfo.getVariableName(lastChild) == null &&
-        !(replacement.getLastChild() instanceof PsiComment)
-      ) {
+        !(replacement.getLastChild() instanceof PsiComment)) {
       PsiElement firstElementAfterStatementEnd = lastChild;
       for(PsiElement curElement=firstElementAfterStatementEnd.getPrevSibling();curElement!=null;curElement = curElement.getPrevSibling()) {
         if (!(curElement instanceof PsiWhiteSpace) && !(curElement instanceof PsiComment)) break;
@@ -245,8 +247,7 @@ public class Replacer {
     final PsiElement firstChild = el.getFirstChild();
     if (firstChild instanceof PsiComment &&
         !(firstChild instanceof PsiDocCommentBase) &&
-        replacementInfo.getVariableName(firstChild) == null
-        ) {
+        replacementInfo.getVariableName(firstChild) == null) {
       PsiElement lastElementBeforeStatementStart = firstChild;
 
       for(PsiElement curElement=lastElementBeforeStatementStart.getNextSibling();curElement!=null;curElement = curElement.getNextSibling()) {
@@ -257,43 +258,42 @@ public class Replacer {
     }
   }
 
-  public static void checkSupportedReplacementPattern(Project project, ReplaceOptions options) {
+  public static void checkReplacementPattern(Project project, ReplaceOptions options) {
     try {
-      String search = options.getMatchOptions().getSearchPattern();
-      String replacement = options.getReplacement();
-      FileType fileType = options.getMatchOptions().getFileType();
-      Template template = TemplateManager.getInstance(project).createTemplate("","",search);
-      Template template2 = TemplateManager.getInstance(project).createTemplate("","",replacement);
+      final String search = options.getMatchOptions().getSearchPattern();
+      final String replacement = options.getReplacement();
+      final LanguageFileType fileType = options.getMatchOptions().getFileType();
+      final Template searchTemplate = TemplateManager.getInstance(project).createTemplate("" , "", search);
+      final Template replaceTemplate = TemplateManager.getInstance(project).createTemplate("", "", replacement);
 
-      int segmentCount = template2.getSegmentsCount();
-      for(int i=0;i<segmentCount;++i) {
-        final String replacementSegmentName = template2.getSegmentName(i);
-        final int segmentCount2  = template.getSegmentsCount();
-        int j;
+      final int segmentCount = replaceTemplate.getSegmentsCount();
+      for(int i = 0; i < segmentCount; i++) {
+        final String replacementSegmentName = replaceTemplate.getSegmentName(i);
+        final int segmentCount2  = searchTemplate.getSegmentsCount();
+        int j = 0;
 
-        for(j=0;j<segmentCount2;++j) {
-          final String searchSegmentName = template.getSegmentName(j);
-
+        while (j < segmentCount2) {
+          final String searchSegmentName = searchTemplate.getSegmentName(j);
           if (replacementSegmentName.equals(searchSegmentName)) break;
 
           // Reference to
-          if (replacementSegmentName.startsWith(searchSegmentName) &&
-              replacementSegmentName.charAt(searchSegmentName.length())=='_'
-             ) {
+          if (replacementSegmentName.startsWith(searchSegmentName) && replacementSegmentName.charAt(searchSegmentName.length()) == '_') {
             try {
-              Integer.parseInt(replacementSegmentName.substring(searchSegmentName.length()+1));
+              Integer.parseInt(replacementSegmentName.substring(searchSegmentName.length() + 1));
               break;
-            } catch(NumberFormatException ex) {}
+            } catch (NumberFormatException ignore) {}
           }
+          j++;
         }
 
         if (j == segmentCount2) {
-          ReplacementVariableDefinition definition = options.getVariableDefinition(replacementSegmentName);
+          final ReplacementVariableDefinition definition = options.getVariableDefinition(replacementSegmentName);
 
           if (definition == null || definition.getScriptCodeConstraint().length() <= 2 /*empty quotes*/) {
             throw new MalformedPatternException(SSRBundle.message("replacement.variable.is.not.defined.message", replacementSegmentName));
           } else {
-            String message = ScriptSupport.checkValidScript(StringUtil.unquoteString(definition.getScriptCodeConstraint()));
+            final String message = ScriptSupport.checkValidScript(StringUtil.unquoteString(definition.getScriptCodeConstraint()),
+                                                                  options.getMatchOptions());
             if (message != null) {
               throw new MalformedPatternException(SSRBundle.message("replacement.variable.is.not.valid", replacementSegmentName, message));
             }
@@ -301,7 +301,7 @@ public class Replacer {
         }
       }
 
-      StructuralSearchProfile profile = StructuralSearchUtil.getProfileByFileType(fileType);
+      final StructuralSearchProfile profile = StructuralSearchUtil.getProfileByFileType(fileType);
       assert profile != null;
       ReadAction.run(() -> profile.checkReplacementPattern(project, options));
     } catch (IncorrectOperationException ex) {

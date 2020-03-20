@@ -1,23 +1,13 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.codeStyle;
 
+import com.intellij.application.options.CodeStyle;
 import com.intellij.configurationStore.Property;
+import com.intellij.configurationStore.XmlSerializer;
 import com.intellij.lang.Language;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.util.*;
 import com.intellij.psi.PsiDocumentManager;
@@ -26,15 +16,21 @@ import com.intellij.psi.codeStyle.arrangement.ArrangementSettings;
 import com.intellij.psi.codeStyle.arrangement.ArrangementUtil;
 import com.intellij.psi.codeStyle.arrangement.Rearranger;
 import com.intellij.psi.codeStyle.arrangement.std.ArrangementStandardSettingsAware;
+import com.intellij.psi.util.PsiEditorUtil;
+import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.util.ReflectionUtil;
+import com.intellij.util.xmlb.SerializationFilter;
 import com.intellij.util.xmlb.SkipDefaultValuesSerializationFilters;
-import com.intellij.util.xmlb.XmlSerializer;
 import org.intellij.lang.annotations.MagicConstant;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Set;
@@ -66,6 +62,8 @@ public class CommonCodeStyleSettings {
   private final SoftMargins mySoftMargins = new SoftMargins();
 
   @NonNls private static final String INDENT_OPTIONS_TAG = "indentOptions";
+
+  private final static Logger LOG = Logger.getInstance(CommonCodeStyleSettings.class);
 
   public CommonCodeStyleSettings(Language language, FileType fileType) {
     myLanguage = language;
@@ -159,7 +157,7 @@ public class CommonCodeStyleSettings {
     return LanguageCodeStyleSettingsProvider.getDefaultCommonSettings(myLanguage);
   }
 
-  public void readExternal(Element element) throws InvalidDataException {
+  public void readExternal(Element element) {
     DefaultJDOMExternalizer.readExternal(this, element);
     if (myIndentOptions != null) {
       Element indentOptionsElement = element.getChild(INDENT_OPTIONS_TAG);
@@ -172,9 +170,10 @@ public class CommonCodeStyleSettings {
       myArrangementSettings = ArrangementUtil.readExternal(arrangementRulesContainer, myLanguage);
     }
     mySoftMargins.deserializeFrom(element);
+    LOG.info("Loaded " + myLanguage.getDisplayName() + " common code style settings");
   }
 
-  public void writeExternal(Element element) throws WriteExternalException {
+  public void writeExternal(Element element) {
     CommonCodeStyleSettings defaultSettings = getDefaultSettings();
     Set<String> supportedFields = getSupportedFields();
     if (supportedFields != null) {
@@ -341,15 +340,14 @@ public class CommonCodeStyleSettings {
   public static final int NEXT_LINE_IF_WRAPPED = 5;
 
   @MagicConstant(intValues = {END_OF_LINE, NEXT_LINE, NEXT_LINE_SHIFTED, NEXT_LINE_SHIFTED2, NEXT_LINE_IF_WRAPPED})
+  @Retention(RetentionPolicy.RUNTIME)
   public @interface BraceStyleConstant {}
 
+  @Property(externalName = "block_brace_style")
   @BraceStyleConstant public int BRACE_STYLE = END_OF_LINE;
   @BraceStyleConstant public int CLASS_BRACE_STYLE = END_OF_LINE;
   @BraceStyleConstant public int METHOD_BRACE_STYLE = END_OF_LINE;
   @BraceStyleConstant public int LAMBDA_BRACE_STYLE = END_OF_LINE;
-
-  @Deprecated
-  public boolean USE_FLYING_GEESE_BRACES = false;
 
   public boolean DO_NOT_INDENT_TOP_LEVEL_CLASS_MEMBERS = false;
 
@@ -394,7 +392,8 @@ public class CommonCodeStyleSettings {
   public boolean FINALLY_ON_NEW_LINE = false;
 
   public boolean INDENT_CASE_FROM_SWITCH = true;
-  
+
+  @Property(externalName = "case_statement_on_separate_line")
   public boolean CASE_STATEMENT_ON_NEW_LINE = true;
 
   /**
@@ -426,9 +425,6 @@ public class CommonCodeStyleSettings {
   public boolean ALIGN_MULTILINE_RESOURCES = true;
   public boolean ALIGN_MULTILINE_FOR = true;
 
-  @Deprecated
-  public boolean INDENT_WHEN_CASES = true;
-
   public boolean ALIGN_MULTILINE_BINARY_OPERATION = false;
   public boolean ALIGN_MULTILINE_ASSIGNMENT = false;
   public boolean ALIGN_MULTILINE_TERNARY_OPERATION = false;
@@ -436,6 +432,7 @@ public class CommonCodeStyleSettings {
   public boolean ALIGN_THROWS_KEYWORD = false;
 
   public boolean ALIGN_MULTILINE_EXTENDS_LIST = false;
+  @Property(externalName = "align_multiline_method_parentheses")
   public boolean ALIGN_MULTILINE_METHOD_BRACKETS = false;
   public boolean ALIGN_MULTILINE_PARENTHESIZED_EXPRESSION = false;
   public boolean ALIGN_MULTILINE_ARRAY_INITIALIZER_EXPRESSION = false;
@@ -824,11 +821,17 @@ public class CommonCodeStyleSettings {
 
   //----------------- WRAPPING ---------------------------
 
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.FIELD)
+  public @interface WrapConstant {
+  }
+
   public static final int DO_NOT_WRAP = 0x00;
   public static final int WRAP_AS_NEEDED = 0x01;
   public static final int WRAP_ALWAYS = 0x02;
   public static final int WRAP_ON_EVERY_ITEM = 0x04;
 
+  @WrapConstant
   public int CALL_PARAMETERS_WRAP = DO_NOT_WRAP;
   public boolean PREFER_PARAMETERS_WRAP = false;
   @Property(externalName = "call_parameters_new_line_after_left_paren")
@@ -836,24 +839,31 @@ public class CommonCodeStyleSettings {
   @Property(externalName = "call_parameters_right_paren_on_new_line")
   public boolean CALL_PARAMETERS_RPAREN_ON_NEXT_LINE = false;
 
+  @WrapConstant
   public int METHOD_PARAMETERS_WRAP = DO_NOT_WRAP;
   @Property(externalName = "method_parameters_new_line_after_left_paren")
   public boolean METHOD_PARAMETERS_LPAREN_ON_NEXT_LINE = false;
   @Property(externalName = "method_parameters_right_paren_on_new_line")
   public boolean METHOD_PARAMETERS_RPAREN_ON_NEXT_LINE = false;
 
+  @WrapConstant
   public int RESOURCE_LIST_WRAP = DO_NOT_WRAP;
   @Property(externalName = "resource_list_new_line_after_left_paren")
   public boolean RESOURCE_LIST_LPAREN_ON_NEXT_LINE = false;
   @Property(externalName = "resource_list_right_paren_on_new_line")
   public boolean RESOURCE_LIST_RPAREN_ON_NEXT_LINE = false;
 
+  @WrapConstant
   public int EXTENDS_LIST_WRAP = DO_NOT_WRAP;
+  @WrapConstant
   public int THROWS_LIST_WRAP = DO_NOT_WRAP;
 
+  @WrapConstant
   public int EXTENDS_KEYWORD_WRAP = DO_NOT_WRAP;
+  @WrapConstant
   public int THROWS_KEYWORD_WRAP = DO_NOT_WRAP;
 
+  @WrapConstant
   public int METHOD_CALL_CHAIN_WRAP = DO_NOT_WRAP;
   public boolean WRAP_FIRST_METHOD_IN_CALL_CHAIN = false;
 
@@ -862,12 +872,15 @@ public class CommonCodeStyleSettings {
   @Property(externalName = "parentheses_expression_right_paren_on_new_line")
   public boolean PARENTHESES_EXPRESSION_RPAREN_WRAP = false;
 
+  @WrapConstant
   public int BINARY_OPERATION_WRAP = DO_NOT_WRAP;
   public boolean BINARY_OPERATION_SIGN_ON_NEXT_LINE = false;
 
+  @WrapConstant
   public int TERNARY_OPERATION_WRAP = DO_NOT_WRAP;
   public boolean TERNARY_OPERATION_SIGNS_ON_NEXT_LINE = false;
 
+  @WrapConstant
   public boolean MODIFIER_LIST_WRAP = false;
 
   public boolean KEEP_SIMPLE_BLOCKS_IN_ONE_LINE = false;
@@ -876,26 +889,27 @@ public class CommonCodeStyleSettings {
   public boolean KEEP_SIMPLE_CLASSES_IN_ONE_LINE = false;
   public boolean KEEP_MULTIPLE_EXPRESSIONS_IN_ONE_LINE = false;
 
+  @WrapConstant
   public int FOR_STATEMENT_WRAP = DO_NOT_WRAP;
   @Property(externalName = "for_statement_new_line_after_left_paren")
   public boolean FOR_STATEMENT_LPAREN_ON_NEXT_LINE = false;
   @Property(externalName = "for_statement_right_paren_on_new_line")
   public boolean FOR_STATEMENT_RPAREN_ON_NEXT_LINE = false;
 
+  @WrapConstant
   public int ARRAY_INITIALIZER_WRAP = DO_NOT_WRAP;
   @Property(externalName = "array_initializer_new_line_after_left_brace")
   public boolean ARRAY_INITIALIZER_LBRACE_ON_NEXT_LINE = false;
   @Property(externalName = "array_initializer_right_brace_on_new_line")
   public boolean ARRAY_INITIALIZER_RBRACE_ON_NEXT_LINE = false;
 
+  @WrapConstant
   public int ASSIGNMENT_WRAP = DO_NOT_WRAP;
   public boolean PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE = false;
 
-  @Deprecated
-  public int LABELED_STATEMENT_WRAP = WRAP_ALWAYS;
-
   public boolean WRAP_COMMENTS = false;
 
+  @WrapConstant
   public int ASSERT_STATEMENT_WRAP = DO_NOT_WRAP;
   public boolean ASSERT_STATEMENT_COLON_ON_NEXT_LINE = false;
 
@@ -918,10 +932,15 @@ public class CommonCodeStyleSettings {
 
   //-------------- Annotation formatting settings-------------------------------------------
 
+  @WrapConstant
   public int METHOD_ANNOTATION_WRAP = WRAP_ALWAYS;
+  @WrapConstant
   public int CLASS_ANNOTATION_WRAP = WRAP_ALWAYS;
+  @WrapConstant
   public int FIELD_ANNOTATION_WRAP = WRAP_ALWAYS;
+  @WrapConstant
   public int PARAMETER_ANNOTATION_WRAP = DO_NOT_WRAP;
+  @WrapConstant
   public int VARIABLE_ANNOTATION_WRAP = DO_NOT_WRAP;
 
   @Property(externalName = "space_before_annotation_parameter_list")
@@ -932,6 +951,7 @@ public class CommonCodeStyleSettings {
 
 
   //-------------------------Enums----------------------------------------------------------
+  @WrapConstant
   public int ENUM_CONSTANTS_WRAP = DO_NOT_WRAP;
 
   //-------------------------Force rearrange settings---------------------------------------
@@ -987,28 +1007,33 @@ public class CommonCodeStyleSettings {
     private boolean myOverrideLanguageOptions;
 
     @Override
-    public void readExternal(Element element) throws InvalidDataException {
+    public void readExternal(Element element) {
       deserialize(element);
     }
 
     @Override
-    public void writeExternal(Element element) throws WriteExternalException {
+    public void writeExternal(Element element) {
       serialize(element, DEFAULT_INDENT_OPTIONS);
     }
 
-    public void serialize(Element indentOptionsElement, final IndentOptions defaultOptions) {
-      XmlSerializer.serializeInto(this, indentOptionsElement, new SkipDefaultValuesSerializationFilters() {
-        @Override
-        protected void configure(@NotNull Object o) {
-          if (o instanceof IndentOptions && defaultOptions != null) {
-            ((IndentOptions)o).copyFrom(defaultOptions);
+    public void serialize(@NotNull Element indentOptionsElement, @Nullable IndentOptions defaultOptions) {
+      SerializationFilter filter = null;
+      if (defaultOptions != null) {
+        //noinspection deprecation
+        filter = new SkipDefaultValuesSerializationFilters() {
+          @Override
+          protected void configure(@NotNull Object o) {
+            if (o instanceof IndentOptions) {
+              ((IndentOptions)o).copyFrom(defaultOptions);
+            }
           }
-        }
-      });
+        };
+      }
+      XmlSerializer.serializeObjectInto(this, indentOptionsElement, filter);
     }
 
     public void deserialize(Element indentOptionsElement) {
-      XmlSerializer.deserializeInto(this, indentOptionsElement);
+      XmlSerializer.deserializeInto(indentOptionsElement, this);
     }
 
     @Override
@@ -1085,7 +1110,7 @@ public class CommonCodeStyleSettings {
 
     /**
      * @return True if the options can override the ones defined in language settings.
-     * @see CommonCodeStyleSettings.IndentOptions#setOverrideLanguageOptions(boolean) 
+     * @see CommonCodeStyleSettings.IndentOptions#setOverrideLanguageOptions(boolean)
      */
     public boolean isOverrideLanguageOptions() {
       return myOverrideLanguageOptions;
@@ -1094,7 +1119,7 @@ public class CommonCodeStyleSettings {
     /**
      * Make the indent options override options defined for a language block if the block implements {@code BlockEx.getLanguage()}
      * Useful when indent options provider must take a priority over any language settings for a formatter block.
-     * 
+     *
      * @param overrideLanguageOptions True if language block options should be ignored.
      * @see FileIndentOptionsProvider
      */
@@ -1137,5 +1162,11 @@ public class CommonCodeStyleSettings {
 
   void setSoftMargins(List<Integer> values) {
     mySoftMargins.setValues(values);
+  }
+
+  public static CommonCodeStyleSettings getLocalCodeStyleSettings(Editor editor, int tailOffset) {
+    PsiFile psiFile = PsiEditorUtil.getPsiFile(editor);
+    Language language = PsiUtilCore.getLanguageAtOffset(psiFile, tailOffset);
+    return CodeStyle.getLanguageSettings(psiFile, language);
   }
 }

@@ -1,11 +1,11 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.highlighting
 
 import com.intellij.codeInsight.daemon.impl.HighlightInfoType
 import com.intellij.codeInsight.daemon.impl.SeveritiesProvider
 import com.intellij.testFramework.LightProjectDescriptor
 import groovy.transform.CompileStatic
-import org.jetbrains.plugins.groovy.GroovyLightProjectDescriptor
+import org.jetbrains.plugins.groovy.GroovyProjectDescriptors
 import org.jetbrains.plugins.groovy.LightGroovyTestCase
 import org.jetbrains.plugins.groovy.util.TestUtils
 
@@ -20,9 +20,15 @@ class GroovyHighlightUsagesTest extends LightGroovyTestCase {
     final List<HighlightInfoType> severitiesHighlightInfoTypes = [ELEMENT_UNDER_CARET_READ, ELEMENT_UNDER_CARET_WRITE]
   }
 
-  final LightProjectDescriptor projectDescriptor = GroovyLightProjectDescriptor.GROOVY_LATEST
+  final LightProjectDescriptor projectDescriptor = GroovyProjectDescriptors.GROOVY_LATEST
 
   final String basePath = TestUtils.testDataPath + 'highlighting/usages/'
+
+  @Override
+  void setUp() throws Exception {
+    super.setUp()
+    myFixture.setReadEditorMarkupModel(true)
+  }
 
   private void doTest(boolean directoryTest = false) {
     SeveritiesProvider.EP_NAME.getPoint(null).registerExtension(SEVERITIES_PROVIDER, testRootDisposable)
@@ -50,4 +56,6 @@ class GroovyHighlightUsagesTest extends LightGroovyTestCase {
   void 'test class usages 1'() { doTest() }
 
   void 'test class usages 2'() { doTest() }
+
+  void 'test binding variable'() { doTest() }
 }

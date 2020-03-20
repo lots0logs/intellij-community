@@ -2,6 +2,7 @@
 package com.intellij.jarRepository.settings;
 
 import com.google.common.base.Strings;
+import com.intellij.CommonBundle;
 import com.intellij.jarRepository.JarRepositoryManager;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
@@ -10,6 +11,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.ui.CollectionComboBoxModel;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.labels.SwingActionLink;
@@ -87,7 +89,7 @@ public class RepositoryLibraryPropertiesEditor {
     myIncludeTransitiveDepsCheckBox = new ThreeStateCheckBox(UIUtil.replaceMnemonicAmpersand("Include &transitive dependencies"));
     myIncludeTransitiveDepsCheckBox.setThirdStateEnabled(false);
     myTransitiveDependenciesPanel.add(myIncludeTransitiveDepsCheckBox);
-    myManageDependenciesLink = new SwingActionLink(new AbstractAction("Configure...") {
+    myManageDependenciesLink = new SwingActionLink(new AbstractAction(CommonBundle.message("action.text.configure.ellipsis")) {
       @Override
       public void actionPerformed(ActionEvent e) {
         configureTransitiveDependencies();
@@ -109,7 +111,7 @@ public class RepositoryLibraryPropertiesEditor {
         mavenCoordinates.setText(repositoryLibraryDescription.getMavenCoordinates(model.getVersion()));
       }
     };
-    versionSelector.setRenderer(new VersionSelectorCellRenderer());
+    versionSelector.setRenderer(SimpleListCellRenderer.create("", VersionItem::getDisplayName));
     updateManageDependenciesLink();
     reloadVersionsAsync();
   }

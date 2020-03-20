@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.images.editor.actions;
 
 import com.intellij.application.options.colors.ColorAndFontOptions;
 import com.intellij.application.options.colors.SimpleEditorPreview;
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
@@ -32,6 +33,7 @@ import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.UiNotifyConnector;
 import org.intellij.images.fileTypes.ImageFileTypeManager;
@@ -49,8 +51,8 @@ import java.awt.event.ItemEvent;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static com.intellij.openapi.wm.impl.IdeBackgroundUtil.*;
@@ -82,7 +84,7 @@ public class BackgroundImageDialog extends DialogWrapper {
   private final JBCheckBox myFlipVerCb = new JBCheckBox();
 
   boolean myAdjusting;
-  private final Map<String, String> myResults = ContainerUtil.newHashMap();
+  private final Map<String, String> myResults = new HashMap<>();
 
   private final SimpleEditorPreview myEditorPreview;
   private final JComponent myIdePreview;
@@ -90,7 +92,7 @@ public class BackgroundImageDialog extends DialogWrapper {
   public BackgroundImageDialog(@NotNull Project project, @Nullable String selectedPath) {
     super(project, true);
     myProject = project;
-    setTitle("Background Image");
+    setTitle(IdeBundle.message("dialog.title.background.image"));
     myEditorPreview = createEditorPreview();
     myIdePreview = createFramePreview();
     myPropertyTmp = getSystemProp() + "#" + project.getLocationHash();
@@ -108,10 +110,9 @@ public class BackgroundImageDialog extends DialogWrapper {
     pack();
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
-    return ArrayUtil.append(super.createActions(), new AbstractAction("Clear and Close") {
+  protected Action @NotNull [] createActions() {
+    return ArrayUtil.append(super.createActions(), new AbstractAction(IdeBundle.message("button.clear.and.close")) {
       @Override
       public void actionPerformed(ActionEvent e) {
         doClearAction();
@@ -270,7 +271,7 @@ public class BackgroundImageDialog extends DialogWrapper {
       @Override
       public void update(@NotNull AnActionEvent e) {
         e.getPresentation().setText(text);
-        e.getPresentation().putClientProperty(Toggleable.SELECTED_PROPERTY, target.equals(myPreviewTarget));
+        Toggleable.setSelected(e.getPresentation(), target.equals(myPreviewTarget));
         super.update(e);
       }
 
@@ -455,12 +456,12 @@ public class BackgroundImageDialog extends DialogWrapper {
 
   @NotNull
   private static Color getSelectionBackground() {
-    return ColorUtil.mix(UIUtil.getListSelectionBackground(), UIUtil.getLabelBackground(), UIUtil.isUnderDarcula() ? .5 : .75);
+    return ColorUtil.mix(UIUtil.getListSelectionBackground(true), UIUtil.getLabelBackground(), StartupUiUtil.isUnderDarcula() ? .5 : .75);
   }
 
   private static void initFlipPanel(@NotNull JPanel p, @NotNull JBCheckBox flipHorCb, @NotNull JBCheckBox flipVerCb) {
-    flipHorCb.setToolTipText("Flip vertically");
-    flipVerCb.setToolTipText("Flip horizontally");
+    flipHorCb.setToolTipText(IdeBundle.message("tooltip.flip.vertically"));
+    flipVerCb.setToolTipText(IdeBundle.message("tooltip.flip.horizontally"));
     p.setLayout(new GridLayout(1, 2, 1, 1));
     Color color = getSelectionBackground();
     JBPanelWithEmptyText h = addClickablePanel(p, flipHorCb, color);
@@ -475,7 +476,7 @@ public class BackgroundImageDialog extends DialogWrapper {
     IdeBackgroundUtil.Anchor[] values = IdeBackgroundUtil.Anchor.values();
     String[] names = new String[values.length];
     for (int i = 0; i < names.length; i++) {
-      names[i] = values[i].name().replace('_', '-').toLowerCase(Locale.ENGLISH);
+      names[i] = StringUtil.toLowerCase(values[i].name().replace('_', '-'));
     }
     Color color = getSelectionBackground();
     p.setLayout(new GridLayout(3, 3, 1, 1));
@@ -492,7 +493,7 @@ public class BackgroundImageDialog extends DialogWrapper {
     String[] names = new String[values.length];
     BufferedImage image = sampleImage();
     for (int i = 0; i < names.length; i++) {
-      names[i] = values[i].name().replace('_', '-').toLowerCase(Locale.ENGLISH);
+      names[i] = StringUtil.toLowerCase(values[i].name().replace('_', '-'));
     }
     Color color = getSelectionBackground();
     p.setLayout(new GridLayout(1, values.length, 1, 1));

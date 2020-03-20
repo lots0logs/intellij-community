@@ -33,11 +33,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
- * @author nik
- */
 public abstract class InjectedLanguageBlockBuilder {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.formatter.xml.XmlInjectedLanguageBlockBuilder");
+  private static final Logger LOG = Logger.getInstance(InjectedLanguageBlockBuilder.class);
 
   @NotNull
   public Block createInjectedBlock(@NotNull ASTNode node,
@@ -57,7 +54,7 @@ public abstract class InjectedLanguageBlockBuilder {
 
   public abstract Block createBlockAfterInjection(ASTNode node, Wrap wrap, Alignment alignment, Indent indent, TextRange range);
 
-  public boolean addInjectedBlocks(List<Block> result, final ASTNode injectionHost, Wrap wrap, Alignment alignment, Indent indent) {
+  public boolean addInjectedBlocks(List<? super Block> result, final ASTNode injectionHost, Wrap wrap, Alignment alignment, Indent indent) {
     final PsiFile[] injectedFile = new PsiFile[1];
     final Ref<TextRange> injectedRangeInsideHost = new Ref<>();
     final Ref<Integer> prefixLength = new Ref<>();
@@ -136,7 +133,7 @@ public abstract class InjectedLanguageBlockBuilder {
     return false;
   }
 
-  public void addInjectedLanguageBlockWrapper(final List<Block> result, final ASTNode injectedNode,
+  public void addInjectedLanguageBlockWrapper(final List<? super Block> result, final ASTNode injectedNode,
                                               final Indent indent, int offset, @Nullable TextRange range) {
 
     //

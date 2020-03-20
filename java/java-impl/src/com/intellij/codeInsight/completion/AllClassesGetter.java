@@ -22,7 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class AllClassesGetter {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.completion.AllClassesGetter");
+  private static final Logger LOG = Logger.getInstance(AllClassesGetter.class);
   public static final InsertHandler<JavaPsiClassReferenceElement> TRY_SHORTENING = new InsertHandler<JavaPsiClassReferenceElement>() {
 
     private void _handleInsert(final InsertionContext context, final JavaPsiClassReferenceElement item) {
@@ -119,7 +119,7 @@ public class AllClassesGetter {
     final Project project = context.getProject();
     final GlobalSearchScope scope = filterByScope ? context.getContainingFile().getResolveScope() : GlobalSearchScope.allScope(project);
 
-    processJavaClasses(prefixMatcher, project, scope, new LimitedAccessibleClassPreprocessor(parameters, filterByScope, consumer));
+    processJavaClasses(prefixMatcher, project, scope, new LimitedAccessibleClassPreprocessor(parameters, filterByScope, c->{consumer.consume(c); return true;}));
   }
 
   public static void processJavaClasses(@NotNull final PrefixMatcher prefixMatcher,
@@ -131,8 +131,9 @@ public class AllClassesGetter {
       if (prefixMatcher.prefixMatches(s)) {
         names.add(s);
       }
+      return true;
     });
-    LinkedHashSet<String> sorted = CompletionUtil.sortMatching(prefixMatcher, names);
+    LinkedHashSet<String> sorted = prefixMatcher.sortMatching(names);
     AllClassesSearchExecutor.processClassesByNames(project, scope, sorted, processor);
   }
 

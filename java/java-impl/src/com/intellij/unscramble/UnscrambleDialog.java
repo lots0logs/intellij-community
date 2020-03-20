@@ -5,6 +5,7 @@ import com.intellij.execution.ui.RunContentDescriptor;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.IdeBundle;
 import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
@@ -19,7 +20,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vcs.configurable.VcsContentAnnotationConfigurable;
 import com.intellij.ui.GuiUtils;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.TextFieldWithHistory;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -53,7 +54,7 @@ public class UnscrambleDialog extends DialogWrapper {
   private final Project myProject;
   private JPanel myEditorPanel;
   private JPanel myLogFileChooserPanel;
-  private JComboBox myUnscrambleChooser;
+  private JComboBox<UnscrambleSupport> myUnscrambleChooser;
   private JPanel myPanel;
   private TextFieldWithHistory myLogFile;
   private JCheckBox myUseUnscrambler;
@@ -200,9 +201,8 @@ public class UnscrambleDialog extends DialogWrapper {
     myEditorPanel.add(myStacktraceEditorPanel, BorderLayout.CENTER);
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
+  protected Action @NotNull [] createActions() {
     return ArrayUtil.prepend(createNormalizeTextAction(), super.createActions());
   }
 
@@ -232,16 +232,10 @@ public class UnscrambleDialog extends DialogWrapper {
 
   private void populateRegisteredUnscramblerList() {
     for (UnscrambleSupport unscrambleSupport : UnscrambleSupport.EP_NAME.getExtensions()) {
-      //noinspection unchecked
       myUnscrambleChooser.addItem(unscrambleSupport);
     }
-    //noinspection unchecked
-    myUnscrambleChooser.setRenderer(new ListCellRendererWrapper<UnscrambleSupport>() {
-      @Override
-      public void customize(JList list, UnscrambleSupport unscrambleSupport, int index, boolean selected, boolean hasFocus) {
-        setText(unscrambleSupport == null ? IdeBundle.message("unscramble.no.unscrambler.item") : unscrambleSupport.getPresentableName());
-      }
-    });
+    myUnscrambleChooser.setRenderer(SimpleListCellRenderer.create(
+      JavaBundle.message("unscramble.no.unscrambler.item"), UnscrambleSupport::getPresentableName));
   }
 
   @Override
@@ -286,7 +280,7 @@ public class UnscrambleDialog extends DialogWrapper {
 
   private final class NormalizeTextAction extends AbstractAction {
     NormalizeTextAction(){
-      putValue(NAME, IdeBundle.message("unscramble.normalize.button"));
+      putValue(NAME, JavaBundle.message("unscramble.normalize.button"));
       putValue(DEFAULT_ACTION, Boolean.FALSE);
     }
 
@@ -397,9 +391,9 @@ public class UnscrambleDialog extends DialogWrapper {
 
   private static RunContentDescriptor addConsole(final Project project, final List<ThreadState> threadDump, String unscrambledTrace) {
     Icon icon = null;
-    String message = IdeBundle.message("unscramble.unscrambled.stacktrace.tab");
+    String message = JavaBundle.message("unscramble.unscrambled.stacktrace.tab");
     if (!threadDump.isEmpty()) {
-      message = IdeBundle.message("unscramble.unscrambled.threaddump.tab");
+      message = JavaBundle.message("unscramble.unscrambled.threaddump.tab");
       icon = AllIcons.Actions.Dump;
     }
     else {
@@ -410,7 +404,7 @@ public class UnscrambleDialog extends DialogWrapper {
       }
     }
     if (ContainerUtil.find(threadDump, DEADLOCK_CONDITION) != null) {
-      message = IdeBundle.message("unscramble.unscrambled.deadlock.tab");
+      message = JavaBundle.message("unscramble.unscrambled.deadlock.tab");
       icon = AllIcons.Debugger.KillProcess;
     }
     return AnalyzeStacktraceUtil.addConsole(project, threadDump.size() > 1 ? new ThreadDumpConsoleFactory(project, threadDump) : null, message, unscrambledTrace, icon);

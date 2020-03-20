@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.actions;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -20,6 +20,7 @@ import com.intellij.openapi.vcs.annotate.AnnotationProvider;
 import com.intellij.openapi.vcs.annotate.FileAnnotation;
 import com.intellij.openapi.vcs.history.VcsFileRevision;
 import com.intellij.openapi.vcs.history.VcsHistoryUtil;
+import com.intellij.openapi.vcs.impl.BackgroundableActionLock;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.diff.Diff;
 import com.intellij.util.diff.FilesTooBigForDiffException;
@@ -27,11 +28,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.intellij.util.ObjectUtils.notNull;
 
 public abstract class AnnotateRevisionActionBase extends DumbAwareAction {
   public AnnotateRevisionActionBase(@Nullable String text, @Nullable String description, @Nullable Icon icon) {
@@ -89,7 +89,7 @@ public abstract class AnnotateRevisionActionBase extends DumbAwareAction {
     final VirtualFile file = getFile(e);
     final AbstractVcs vcs = getVcs(e);
 
-    annotate(notNull(file), notNull(fileRevision), notNull(vcs), getEditor(e), getAnnotatedLine(e));
+    annotate(Objects.requireNonNull(file), Objects.requireNonNull(fileRevision), Objects.requireNonNull(vcs), getEditor(e), getAnnotatedLine(e));
   }
 
   public static void annotate(@NotNull VirtualFile file,
@@ -106,7 +106,8 @@ public abstract class AnnotateRevisionActionBase extends DumbAwareAction {
     final Ref<Integer> newLineRef = new Ref<>();
     final Ref<VcsException> exceptionRef = new Ref<>();
 
-    VcsAnnotateUtil.getBackgroundableLock(vcs.getProject(), file).lock();
+    final BackgroundableActionLock actionLock = VcsAnnotateUtil.getBackgroundableLock(vcs.getProject(), file);
+    actionLock.lock();
 
     Semaphore semaphore = new Semaphore(0);
     AtomicBoolean shouldOpenEditorInSync = new AtomicBoolean(true);
@@ -132,7 +133,7 @@ public abstract class AnnotateRevisionActionBase extends DumbAwareAction {
 
       @Override
       public void onFinished() {
-        VcsAnnotateUtil.getBackgroundableLock(vcs.getProject(), file).unlock();
+        actionLock.unlock();
       }
 
       @Override

@@ -28,13 +28,19 @@ public final class StoragePathMacros {
    */
   public static final String CACHE_FILE = "$CACHE_FILE$";
 
+  /**
+   * Applicable only for project-level.
+   */
+  @NotNull
+  public static final String PRODUCT_WORKSPACE_FILE = "$PRODUCT_WORKSPACE_FILE$";
+
   @NotNull
   public static final String MODULE_FILE = "$MODULE_FILE$";
 
   /**
    * Application level non-roamable storage.
    */
-  public static final String NOT_ROAMABLE_FILE = PathManager.DEFAULT_OPTIONS_FILE;
+  public static final String NON_ROAMABLE_FILE = PathManager.DEFAULT_OPTIONS_FILE;
 
   private StoragePathMacros() {
   }

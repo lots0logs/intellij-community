@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.uiDesigner.actions;
 
@@ -26,13 +26,14 @@ import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes;
 
 import javax.swing.*;
 import java.io.IOException;
+import java.util.function.Supplier;
 
 /**
  * @author yole
  */
 public abstract class AbstractCreateFormAction extends CreateElementActionBase implements DumbAware {
-  public AbstractCreateFormAction(String text, String description, Icon icon) {
-    super(text, description, icon);
+  public AbstractCreateFormAction(@NotNull Supplier<String> dynamicText, @NotNull Supplier<String> dynamicDescription, Icon icon) {
+    super(dynamicText, dynamicDescription, icon);
   }
 
   @Override
@@ -52,8 +53,7 @@ public abstract class AbstractCreateFormAction extends CreateElementActionBase i
         }
       }
 
-      presentation.setEnabled(false);
-      presentation.setVisible(false);
+      presentation.setEnabledAndVisible(false);
     }
   }
 

@@ -3,31 +3,23 @@
  */
 package com.intellij.ide.actions;
 
-import com.intellij.ide.gdpr.Consent;
-import com.intellij.ide.gdpr.ConsentOptions;
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.DumbAwareAction;
-import com.intellij.openapi.util.Pair;
 import com.intellij.ui.AppUIUtil;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-import java.util.List;
-
 public class DataSharingOptionsAction extends DumbAwareAction {
   public DataSharingOptionsAction() {
-    super("Data Sharing Options...", "Data Sharing Options", null);
+    super(IdeBundle.messagePointer("action.DataSharingOptionsAction.text"),
+          IdeBundle.messagePointer("action.DataSharingOptionsAction.description"), null);
   }
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
-    final Pair<List<Consent>, Boolean> consentsToShow = ConsentOptions.getInstance().getConsents();
     try {
-      final Collection<Consent> result = AppUIUtil.confirmConsentOptions(consentsToShow.first);
-      if (result != null) {
-        ConsentOptions.getInstance().setConsents(result);
-      }
+      AppUIUtil.confirmConsentOptions(AppUIUtil.loadConsentsForEditing());
     }
     catch (Exception ex) {
       Logger.getInstance(DataSharingOptionsAction.class).warn(ex);

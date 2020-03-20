@@ -8,6 +8,7 @@ import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings;
 import com.intellij.openapi.externalSystem.util.ExternalSystemBundle;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUiUtil;
 import com.intellij.openapi.project.Project;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,6 +26,7 @@ public abstract class AbstractExternalModuleBuilder<S extends ExternalProjectSet
                                           @NotNull final S externalProjectSettings) {
     myExternalSystemId = externalSystemId;
     myExternalProjectSettings = externalProjectSettings;
+    externalProjectSettings.setupNewProjectDefault();
     Icon icon = ExternalSystemUiUtil.getUiAware(externalSystemId).getProjectIcon();
     myIcon = icon == null ? super.getNodeIcon() : icon;
   }
@@ -40,6 +42,7 @@ public abstract class AbstractExternalModuleBuilder<S extends ExternalProjectSet
   }
 
   @Override
+  @Nls(capitalization = Nls.Capitalization.Sentence)
   public String getDescription() {
     return ExternalSystemBundle.message("module.type.description", myExternalSystemId.getReadableName());
   }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.incremental.groovy;
 
 import com.intellij.openapi.application.PathManager;
@@ -21,8 +7,7 @@ import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.ObjectUtils;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.execution.ParametersListUtil;
@@ -58,7 +43,7 @@ import java.util.*;
  * @author peter
  */
 public class GreclipseBuilder extends ModuleLevelBuilder {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.incremental.groovy.GreclipseBuilder");
+  private static final Logger LOG = Logger.getInstance(GreclipseBuilder.class);
   private static final Key<Boolean> COMPILER_VERSION_INFO = Key.create("_greclipse_compiler_info_");
   public static final String ID = "Groovy-Eclipse";
   private static final Object ourGlobalEnvironmentLock = new String("GreclipseBuilder lock");
@@ -83,7 +68,7 @@ public class GreclipseBuilder extends ModuleLevelBuilder {
   @Nullable
   private ClassLoader createGreclipseLoader(@Nullable String jar) {
     if (StringUtil.isEmpty(jar)) return null;
-    
+
     if (jar.equals(myGreclipseJar)) {
       return myGreclipseLoader;
     }
@@ -91,7 +76,7 @@ public class GreclipseBuilder extends ModuleLevelBuilder {
     try {
       URL[] urls = {
         new File(jar).toURI().toURL(),
-        new File(ObjectUtils.assertNotNull(PathManager.getJarPathForClass(GreclipseMain.class))).toURI().toURL()
+        new File(Objects.requireNonNull(PathManager.getJarPathForClass(GreclipseMain.class))).toURI().toURL()
       };
       ClassLoader loader = new URLClassLoader(urls, StandardJavaFileManager.class.getClassLoader());
       Class.forName("org.eclipse.jdt.internal.compiler.batch.Main", false, loader);
@@ -106,6 +91,7 @@ public class GreclipseBuilder extends ModuleLevelBuilder {
   }
 
 
+  @NotNull
   @Override
   public List<String> getCompilableFileExtensions() {
     return Arrays.asList("groovy", "java");
@@ -178,11 +164,11 @@ public class GreclipseBuilder extends ModuleLevelBuilder {
 
       StringWriter out = new StringWriter();
       StringWriter err = new StringWriter();
-      HashMap<String, List<String>> outputMap = ContainerUtil.newHashMap();
+      HashMap<String, List<String>> outputMap = new HashMap<>();
 
       boolean success = performCompilation(args, out, err, outputMap, context, chunk);
-      
-      List<GroovycOutputParser.OutputItem> items = ContainerUtil.newArrayList();
+
+      List<GroovycOutputParser.OutputItem> items = new ArrayList<>();
       for (String src : outputMap.keySet()) {
         for (String classFile : outputMap.get(src)) {
           items.add(new GroovycOutputParser.OutputItem(FileUtil.toSystemIndependentName(mainOutputDir + classFile),
@@ -217,7 +203,7 @@ public class GreclipseBuilder extends ModuleLevelBuilder {
 
   static boolean useGreclipse(CompileContext context) {
     JpsProject project = context.getProjectDescriptor().getProject();
-    return ID.equals(JpsJavaExtensionService.getInstance().getOrCreateCompilerConfiguration(project).getJavaCompilerId());
+    return ID.equals(JpsJavaExtensionService.getInstance().getCompilerConfiguration(project).getJavaCompilerId());
   }
 
   private boolean performCompilation(List<String> args, StringWriter out, StringWriter err, Map<String, List<String>> outputs, CompileContext context, ModuleChunk chunk) {
@@ -226,7 +212,7 @@ public class GreclipseBuilder extends ModuleLevelBuilder {
       synchronized (ourGlobalEnvironmentLock) {
         try {
           System.setProperty(GroovyRtConstants.GROOVY_TARGET_BYTECODE, bytecodeTarget);
-          return performCompilationInner(args, out, err, outputs, context, chunk);
+          return performCompilationInner(args, out, err, outputs, context);
         }
         finally {
           System.clearProperty(GroovyRtConstants.GROOVY_TARGET_BYTECODE);
@@ -234,33 +220,49 @@ public class GreclipseBuilder extends ModuleLevelBuilder {
       }
     }
 
-    return performCompilationInner(args, out, err, outputs, context, chunk);
+    return performCompilationInner(args, out, err, outputs, context);
   }
 
   private boolean performCompilationInner(List<String> args,
                                           StringWriter out,
                                           StringWriter err,
                                           Map<String, List<String>> outputs,
-                                          CompileContext context, ModuleChunk chunk) {
+                                          CompileContext context) {
+    final ClassLoader jpsLoader = Thread.currentThread().getContextClassLoader();
     try {
+      // We have to set context class loader in order because greclipse will create child GroovyClassLoader,
+      // and will use context class loader as parent.
+      //
+      // Here's what happens if we leave jpsLoader:
+      // 1. org.codehaus.groovy.transform.ASTTransformationCollectorCodeVisitor
+      //    is loaded with GreclipseMain's class loader, i.e. myGreclipseLoader;
+      // 2. org.codehaus.groovy.transform.ASTTransformation inside ASTTransformationCollectorCodeVisitor.verifyClass
+      //    is loaded with ASTTransformationCollectorCodeVisitor' loader, i.e. myGreclipseLoader;
+      // 3. transformation GroovyClassLoader is created with context class loader (jpsLoader) as a parent;
+      // 4. some CoolTransform implements ASTTransformation is loaded with GroovyClassLoader;
+      // 5. ASTTransformation supertype of CoolTransform is loaded with GroovyClassLoader too;
+      // 6. GroovyClassLoader asks its parent, which is jpsLoader, it doesn't know about ASTTransformation
+      //    => GroovyClassLoader loads ASTTransformation by itself;
+      // 7. there are two different ASTTransformation class instances
+      //    => we get ASTTransformation.class.isAssignableFrom(klass) = false
+      //    => compilation fails with error.
+      //
+      // If we set context classloader here, then in the 6th step parent loader will be myGreclipseLoader,
+      // and ASTTransformation class will be returned from myGreclipseLoader, and the compilation won't fail.
+      Thread.currentThread().setContextClassLoader(myGreclipseLoader);
       Class<?> mainClass = Class.forName(GreclipseMain.class.getName(), true, myGreclipseLoader);
-      Constructor<?> constructor = mainClass.getConstructor(PrintWriter.class, PrintWriter.class, Map.class, Map.class);
+      Constructor<?> constructor = mainClass.getConstructor(PrintWriter.class, PrintWriter.class, Map.class);
       Method compileMethod = mainClass.getMethod("compile", String[].class);
 
-      HashMap<String, Object> customDefaultOptions = ContainerUtil.newHashMap();
-      // without this greclipse won't load AST transformations
-      customDefaultOptions.put("org.eclipse.jdt.core.compiler.groovy.groovyClassLoaderPath", getClasspathString(chunk));
-
-      // used by greclipse to cache transform loaders
-      // names should be different for production & tests
-      customDefaultOptions.put("org.eclipse.jdt.core.compiler.groovy.groovyProjectName", chunk.getPresentableShortName());
-
-      Object main = constructor.newInstance(new PrintWriter(out), new PrintWriter(err), customDefaultOptions, outputs);
-      return (Boolean)compileMethod.invoke(main, new Object[]{ArrayUtil.toStringArray(args)});
+      Object main = constructor.newInstance(new PrintWriter(out), new PrintWriter(err), outputs);
+      return (Boolean)compileMethod.invoke(main, new Object[]{ArrayUtilRt.toStringArray(args)});
     }
     catch (Exception e) {
       context.processMessage(CompilerMessage.createInternalBuilderError(getPresentableName(), e));
       return false;
+    }
+    finally {
+      Thread.currentThread().setContextClassLoader(jpsLoader);
     }
   }
 

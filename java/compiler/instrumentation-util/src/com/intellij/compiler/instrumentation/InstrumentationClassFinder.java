@@ -72,8 +72,7 @@ public class InstrumentationClassFinder {
 
       @Override
       public InputStream getResourceAsStream(String name) {
-        InputStream is = null;
-        is = super.getResourceAsStream(name);
+        InputStream is = super.getResourceAsStream(name);
         if (is == null) {
           try {
             is = InstrumentationClassFinder.this.getResourceAsStream(name);
@@ -92,7 +91,7 @@ public class InstrumentationClassFinder {
         }
         try {
           final byte[] bytes = loadBytes(is);
-          return defineClass(name, bytes, 0, bytes.length);
+          return defineClass(name.replace('/', '.'), bytes, 0, bytes.length);
         }
         finally {
           try {
@@ -177,7 +176,7 @@ public class InstrumentationClassFinder {
     if (resource != null) {
       is = resource.getInputStream();
     }
-    // second look into memory and classspath
+    // second look into memory and classpath
     if (is == null) {
       is = lookupClassBeforeClasspath(internalName);
     }
@@ -528,8 +527,9 @@ public class InstrumentationClassFinder {
 
     private static Loader getLoader(final URL url, int index) throws IOException {
       String s;
+      final String protocol = url.getProtocol();
       try {
-        s = url.toURI().getSchemeSpecificPart();
+        s = Loader.JRT_PROTOCOL.equals(protocol)? url.getFile() : url.toURI().getSchemeSpecificPart();
       }
       catch (URISyntaxException thisShouldNotHappen) {
         thisShouldNotHappen.printStackTrace();
@@ -537,7 +537,6 @@ public class InstrumentationClassFinder {
       }
 
       if (s != null && s.length() > 0) {
-        final String protocol = url.getProtocol();
         if (Loader.JRT_PROTOCOL.equals(protocol)) {
           final Loader jrtLoader = JrtClassHolder.create(url, index);
           if (jrtLoader != null) {
@@ -584,7 +583,7 @@ public class InstrumentationClassFinder {
     private static class FileLoader extends Loader {
       private final File myRootDir;
 
-      FileLoader(URL url, int index) throws IOException {
+      FileLoader(URL url, int index) {
         super(url, index);
         if (!FILE_PROTOCOL.equals(url.getProtocol())) {
           throw new IllegalArgumentException("url");
@@ -683,7 +682,7 @@ public class InstrumentationClassFinder {
             if (entry != null) {
               return new Resource() {
                 @Override
-                public InputStream getInputStream() throws IOException {
+                public InputStream getInputStream() {
                   try {
                     final ZipFile file = acquireZipFile();
                     if (file != null) {
@@ -802,7 +801,7 @@ public class InstrumentationClassFinder {
       Class<? extends ClassFinderClasspath.Loader> aClass = null;
       Constructor<? extends ClassFinderClasspath.Loader> constructor = null;
       try {
-        aClass = (Class<? extends ClassFinderClasspath.Loader>)Class.forName("com.intellij.compiler.instrumentation.JrtLoader");
+        aClass = Class.forName("com.intellij.compiler.instrumentation.JrtLoader").asSubclass(ClassFinderClasspath.Loader.class);
         constructor = aClass.getDeclaredConstructor(URL.class, int.class);
         constructor.setAccessible(true);
       }

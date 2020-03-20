@@ -3,7 +3,7 @@ package com.intellij.openapi.vfs.impl.local;
 
 import com.intellij.execution.process.OSProcessHandler;
 import com.intellij.execution.process.ProcessOutputTypes;
-import com.intellij.ide.actions.ShowFilePathAction;
+import com.intellij.ide.actions.RevealFileAction;
 import com.intellij.notification.NotificationListener;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationBundle;
@@ -19,22 +19,24 @@ import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.local.FileWatcherNotificationSink;
 import com.intellij.openapi.vfs.local.PluggableFileWatcher;
 import com.intellij.openapi.vfs.newvfs.ManagingFS;
+import com.intellij.util.ArrayUtil;
 import com.intellij.util.TimeoutUtil;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.io.BaseDataReader;
 import com.intellij.util.io.BaseOutputReader;
 import com.sun.jna.Platform;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -45,7 +47,6 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
 
   private static final String PROPERTY_WATCHER_DISABLED = "idea.filewatcher.disabled";
   private static final String PROPERTY_WATCHER_EXECUTABLE_PATH = "idea.filewatcher.executable.path";
-  private static final File PLATFORM_NOT_SUPPORTED = new File("(platform not supported)");
   private static final String ROOTS_COMMAND = "ROOTS";
   private static final String EXIT_COMMAND = "EXIT";
   private static final int MAX_PROCESS_LAUNCH_ATTEMPT_COUNT = 10;
@@ -73,14 +74,19 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
       LOG.info("Native file watcher is disabled");
     }
     else if (myExecutable == null) {
-      notifyOnFailure(ApplicationBundle.message("watcher.exe.not.found"), null);
-    }
-    else if (myExecutable == PLATFORM_NOT_SUPPORTED) {
-      notifyOnFailure(ApplicationBundle.message("watcher.exe.not.exists"), null);
+      if (SystemInfo.isWindows || SystemInfo.isMac || SystemInfo.isLinux && ArrayUtil.contains(Platform.RESOURCE_PREFIX, "linux-x86", "linux-x86-64")) {
+        notifyOnFailure(ApplicationBundle.message("watcher.exe.not.found"), null);
+      }
+      else if (SystemInfo.isLinux) {
+        notifyOnFailure(ApplicationBundle.message("watcher.exe.compile"), NotificationListener.URL_OPENING_LISTENER);
+      }
+      else {
+        notifyOnFailure(ApplicationBundle.message("watcher.exe.not.exists"), null);
+      }
     }
     else if (!myExecutable.canExecute()) {
       String message = ApplicationBundle.message("watcher.exe.not.exe", myExecutable);
-      notifyOnFailure(message, (notification, event) -> ShowFilePathAction.openFile(myExecutable));
+      notifyOnFailure(message, (notification, event) -> RevealFileAction.openFile(myExecutable));
     }
     else {
       try {
@@ -119,7 +125,9 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
    * Subclasses should override this method if they want to use custom logic to disable their file watcher.
    */
   protected boolean isDisabled() {
-    return Boolean.parseBoolean(System.getProperty(PROPERTY_WATCHER_DISABLED));
+    if (Boolean.getBoolean(PROPERTY_WATCHER_DISABLED)) return true;
+    Application app = ApplicationManager.getApplication();
+    return app.isCommandLine() || app.isUnitTestMode();
   }
 
   /**
@@ -127,10 +135,18 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
    */
   @Nullable
   protected File getExecutable() {
-    String execPath = System.getProperty(PROPERTY_WATCHER_EXECUTABLE_PATH);
-    if (execPath != null) return new File(execPath);
+    return getFSNotifierExecutable();
+  }
 
-    String[] names = null;
+  @Nullable
+  public static File getFSNotifierExecutable() {
+    String customPath = System.getProperty(PROPERTY_WATCHER_EXECUTABLE_PATH);
+    if (customPath != null) {
+      File customFile = PathManager.findBinFile(customPath);
+      return customFile != null ? customFile : new File(customPath);
+    }
+
+    String[] names = ArrayUtil.EMPTY_STRING_ARRAY;
     if (SystemInfo.isWindows) {
       if ("win32-x86".equals(Platform.RESOURCE_PREFIX)) names = new String[]{"fsnotifier.exe"};
       else if ("win32-x86-64".equals(Platform.RESOURCE_PREFIX)) names = new String[]{"fsnotifier64.exe", "fsnotifier.exe"};
@@ -141,11 +157,8 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
     else if (SystemInfo.isLinux) {
       if ("linux-x86".equals(Platform.RESOURCE_PREFIX)) names = new String[]{"fsnotifier"};
       else if ("linux-x86-64".equals(Platform.RESOURCE_PREFIX)) names = new String[]{"fsnotifier64"};
-      else if ("linux-arm".equals(Platform.RESOURCE_PREFIX)) names = new String[]{"fsnotifier-arm"};
     }
-    if (names == null) return PLATFORM_NOT_SUPPORTED;
-
-    return Arrays.stream(names).map(PathManager::findBinFile).filter(o -> o != null).findFirst().orElse(null);
+    return StreamEx.of(names).map(PathManager::findBinFile).nonNull().findFirst().orElse(null);
   }
 
   /* internal stuff */
@@ -210,7 +223,7 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
   private void setWatchRoots(List<String> recursive, List<String> flat, boolean restart) {
     if (myProcessHandler == null || myProcessHandler.isProcessTerminated()) return;
 
-    if (ApplicationManager.getApplication().isDisposeInProgress()) {
+    if (ApplicationManager.getApplication().isDisposed()) {
       recursive = flat = Collections.emptyList();
     }
 
@@ -249,12 +262,12 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
   public void resetChangedPaths() {
     synchronized (myLastChangedPaths) {
       myLastChangedPathIndex = 0;
-      for (int i = 0; i < myLastChangedPaths.length; ++i) myLastChangedPaths[i] = null;
+      Arrays.fill(myLastChangedPaths, null);
     }
   }
 
   private static final Charset CHARSET =
-    SystemInfo.isWindows || SystemInfo.isMac ? CharsetToolkit.UTF8_CHARSET : CharsetToolkit.getPlatformCharset();
+    SystemInfo.isWindows || SystemInfo.isMac ? StandardCharsets.UTF_8 : CharsetToolkit.getPlatformCharset();
 
   private static final BaseOutputReader.Options READER_OPTIONS = new BaseOutputReader.Options() {
     @Override public BaseDataReader.SleepingPolicy policy() { return BaseDataReader.SleepingPolicy.BLOCKING; }
@@ -268,7 +281,7 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
   private class MyProcessHandler extends OSProcessHandler {
     private final BufferedWriter myWriter;
     private WatcherOp myLastOp;
-    private final List<String> myLines = ContainerUtil.newArrayList();
+    private final List<String> myLines = new ArrayList<>();
 
     private MyProcessHandler(@NotNull Process process, @NotNull String commandLine) {
       super(process, commandLine, CHARSET);
@@ -368,7 +381,7 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
     }
 
     private void processRemap() {
-      Set<Pair<String, String>> pairs = ContainerUtil.newHashSet();
+      Set<Pair<String, String>> pairs = new HashSet<>();
       for (int i = 0; i < myLines.size() - 1; i += 2) {
         pairs.add(Pair.create(myLines.get(i), myLines.get(i + 1)));
       }
@@ -420,7 +433,7 @@ public class NativeFileWatcherImpl extends PluggableFileWatcher {
   }
 
   protected boolean isRepetition(String path) {
-    // collapse subsequent change file change notifications that happen once we copy large file,
+    // collapse subsequent change file change notifications that happen once we copy a large file,
     // this allows reduction of path checks at least 20% for Windows
     synchronized (myLastChangedPaths) {
       for (int i = 0; i < myLastChangedPaths.length; ++i) {

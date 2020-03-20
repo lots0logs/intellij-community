@@ -2,17 +2,19 @@
 package com.intellij.refactoring.rename;
 
 import com.intellij.codeInsight.generation.GetterSetterPrototypeProvider;
-import com.intellij.lang.StdLanguages;
+import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.codeStyle.VariableKind;
 import com.intellij.psi.controlFlow.ControlFlowUtil;
 import com.intellij.psi.search.searches.ClassInheritorsSearch;
 import com.intellij.psi.search.searches.OverridingMethodsSearch;
+import com.intellij.psi.util.JavaPsiRecordUtil;
 import com.intellij.psi.util.PropertyUtilBase;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
@@ -26,6 +28,7 @@ import com.intellij.refactoring.util.RefactoringMessageUtil;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -37,7 +40,7 @@ import java.util.List;
 import java.util.Map;
 
 public class RenameJavaVariableProcessor extends RenameJavaMemberProcessor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.rename.RenameJavaVariableProcessor");
+  private static final Logger LOG = Logger.getInstance(RenameJavaVariableProcessor.class);
 
   @Override
   public boolean canProcessElement(@NotNull final PsiElement element) {
@@ -47,7 +50,7 @@ public class RenameJavaVariableProcessor extends RenameJavaMemberProcessor {
   @Override
   public void renameElement(@NotNull final PsiElement psiElement,
                             @NotNull final String newName,
-                            @NotNull final UsageInfo[] usages,
+                            final UsageInfo @NotNull [] usages,
                             @Nullable RefactoringElementListener listener) throws IncorrectOperationException {
     PsiVariable variable = (PsiVariable) psiElement;
     List<MemberHidesOuterMemberUsageInfo> outerHides = new ArrayList<>();
@@ -125,8 +128,30 @@ public class RenameJavaVariableProcessor extends RenameJavaMemberProcessor {
 
   @Override
   public void prepareRenaming(@NotNull final PsiElement element, @NotNull final String newName, @NotNull final Map<PsiElement, String> allRenames) {
-    if (element instanceof PsiField && StdLanguages.JAVA.equals(element.getLanguage())) {
+    if (element instanceof PsiField && JavaLanguage.INSTANCE.equals(element.getLanguage())) {
       prepareFieldRenaming((PsiField)element, newName, allRenames);
+    }
+    if (element instanceof PsiRecordComponent) {
+      PsiClass containingClass = ((PsiRecordComponent)element).getContainingClass();
+      if (containingClass != null) {
+        String name = ((PsiRecordComponent)element).getName();
+        if (name != null) {
+          PsiMethod explicitGetter = ContainerUtil
+            .find(containingClass.findMethodsByName(name, false), m -> m.getParameterList().isEmpty());
+
+          if (explicitGetter != null) {
+            addOverriddenAndImplemented(explicitGetter, newName, null, newName, JavaCodeStyleManager.getInstance(element.getProject()), allRenames);
+          }
+
+          PsiMethod canonicalConstructor = ContainerUtil.find(containingClass.getConstructors(), c -> JavaPsiRecordUtil.isExplicitCanonicalConstructor(c));
+          if (canonicalConstructor != null) {
+            PsiParameter parameter = ContainerUtil.find(canonicalConstructor.getParameterList().getParameters(), p -> name.equals(p.getName()));
+            if (parameter != null) {
+              allRenames.put(parameter, newName);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -364,7 +389,7 @@ public class RenameJavaVariableProcessor extends RenameJavaMemberProcessor {
     JavaRefactoringSettings.getInstance().RENAME_SEARCH_FOR_TEXT_FOR_VARIABLE = enabled;
   }
 
-  private static void findSubmemberHidesFieldCollisions(final PsiField field, final String newName, final List<UsageInfo> result) {
+  private static void findSubmemberHidesFieldCollisions(final PsiField field, final String newName, final List<? super UsageInfo> result) {
     if (field.getContainingClass() == null) return;
     if (field.hasModifierProperty(PsiModifier.PRIVATE)) return;
     final PsiClass containingClass = field.getContainingClass();
@@ -389,7 +414,7 @@ public class RenameJavaVariableProcessor extends RenameJavaMemberProcessor {
     }
   }
 
-  private static void findLocalHidesFieldCollisions(final PsiElement element, final String newName, final Map<? extends PsiElement, String> allRenames, final List<UsageInfo> result) {
+  private static void findLocalHidesFieldCollisions(final PsiElement element, final String newName, final Map<? extends PsiElement, String> allRenames, final List<? super UsageInfo> result) {
     if (!(element instanceof PsiLocalVariable) && !(element instanceof PsiParameter)) return;
 
     PsiClass toplevel = PsiUtil.getTopLevelClass(element);
@@ -419,5 +444,21 @@ public class RenameJavaVariableProcessor extends RenameJavaMemberProcessor {
         }
       }
     });
+  }
+  
+  @Override
+  public String getQualifiedNameAfterRename(@NotNull final PsiElement element, @NotNull final String newName, final boolean nonJava) {
+    if (nonJava && element instanceof PsiField) {
+      final PsiField field = (PsiField)element;
+      PsiClass containingClass = field.getContainingClass();
+      if (containingClass != null) {
+        String qualifiedName = containingClass.getQualifiedName();
+        if (qualifiedName != null) {
+          return StringUtil.getQualifiedName(qualifiedName, newName);
+        }
+      }
+    }
+    
+    return null;
   }
 }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.rebase;
 
 import com.intellij.dvcs.DvcsUtil;
@@ -28,9 +14,10 @@ import git4idea.GitLocalBranch;
 import git4idea.GitUtil;
 import git4idea.branch.GitRebaseParams;
 import git4idea.commands.Git;
+import git4idea.config.GitVcsSettings;
+import git4idea.config.GitSaveChangesPolicy;
 import git4idea.repo.GitRepository;
 import git4idea.stash.GitChangesSaver;
-import git4idea.stash.GitStashChangesSaver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -66,7 +53,7 @@ public class GitRebaseSpec {
   @NotNull
   public static GitRebaseSpec forNewRebase(@NotNull Project project,
                                            @NotNull GitRebaseParams params,
-                                           @NotNull Collection<GitRepository> repositories,
+                                           @NotNull Collection<? extends GitRepository> repositories,
                                            @NotNull ProgressIndicator indicator) {
     GitUtil.updateRepositories(repositories);
     Map<GitRepository, String> initialHeadPositions = findInitialHeadPositions(repositories, params.getBranch());
@@ -146,7 +133,7 @@ public class GitRebaseSpec {
    */
   @NotNull
   public List<GitRepository> getIncompleteRepositories() {
-    List<GitRepository> incompleteRepositories = ContainerUtil.newArrayList();
+    List<GitRepository> incompleteRepositories = new ArrayList<>();
     final GitRepository ongoingRebase = getOngoingRebase();
     if (ongoingRebase != null) incompleteRepositories.add(ongoingRebase);
     incompleteRepositories.addAll(DvcsUtil.sortRepositories(ContainerUtil.filter(myStatuses.keySet(),
@@ -155,13 +142,14 @@ public class GitRebaseSpec {
   }
 
   @NotNull
-  private static GitStashChangesSaver newSaver(@NotNull Project project, @NotNull ProgressIndicator indicator) {
+  private static GitChangesSaver newSaver(@NotNull Project project, @NotNull ProgressIndicator indicator) {
     Git git = Git.getInstance();
-    return new GitStashChangesSaver(project, git, indicator, VcsBundle.message("stash.changes.message", "rebase"));
+    GitSaveChangesPolicy saveMethod = GitVcsSettings.getInstance(project).getSaveChangesPolicy();
+    return GitChangesSaver.getSaver(project, git, indicator, VcsBundle.message("stash.changes.message", "rebase"), saveMethod);
   }
 
   @NotNull
-  private static Map<GitRepository, String> findInitialHeadPositions(@NotNull Collection<GitRepository> repositories,
+  private static Map<GitRepository, String> findInitialHeadPositions(@NotNull Collection<? extends GitRepository> repositories,
                                                                      @Nullable final String branchToCheckout) {
     return ContainerUtil.map2Map(repositories, repository -> {
       String currentRevision = findCurrentRevision(repository, branchToCheckout);
@@ -191,7 +179,7 @@ public class GitRebaseSpec {
   }
 
   @NotNull
-  private static Map<GitRepository, String> findInitialBranchNames(@NotNull Collection<GitRepository> repositories) {
+  private static Map<GitRepository, String> findInitialBranchNames(@NotNull Collection<? extends GitRepository> repositories) {
     return ContainerUtil.map2Map(repositories, repository -> {
       String currentBranchName = repository.getCurrentBranchName();
       LOG.debug("Current branch in [" + repository.getRoot().getName() + "] is [" + currentBranchName + "]");

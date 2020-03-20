@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.parser
 /**
  * @author peter
@@ -72,6 +72,18 @@ class ExpressionsParsingTest extends GroovyParsingTestCase {
   void testclosures$param6() throws Throwable { doTest() }
 
   void testclosures$param7() throws Throwable { doTest() }
+
+  void testclosures$withDefaultParam1() throws Throwable { doTest() }
+
+  void testclosures$withDefaultParam2() throws Throwable { doTest() }
+
+  //IDEA-210585
+  void _testclosures$withDefaultParam3() throws Throwable { doTest() }
+
+  //IDEA-210585
+  void _testclosures$withDefaultParam4() throws Throwable { doTest() }
+
+  void testclosures$withDefaultParam5() throws Throwable { doTest() }
 
   void testconditional$con1() throws Throwable { doTest() }
 
@@ -215,6 +227,50 @@ class ExpressionsParsingTest extends GroovyParsingTestCase {
 
   void testnew$closureAfterArrayInitializer() { doTest() }
 
+  void testnew$newLine() { doTest() }
+
+  void testnew$newLine2() { doTest() }
+
+  void testnew$newLine3() { doTest() }
+
+  void testnew$newLine4() { doTest() }
+
+  void testnew$newLine5() { doTest() }
+
+  void testnew$newLine6() { doTest() }
+
+  void testnew$newLine7() { doTest() }
+
+  void testnew$newLine8() { doTest() }
+
+  void testnew$newLine9() { doTest() }
+
+  void testnew$newLine10() { doTest() }
+
+  void testnew$newLine11() { doTest() }
+
+  void testnew$newLine12() { doTest() }
+
+  void testnew$newLine13() { doTest() }
+
+  void testnew$newLine14() { doTest() }
+
+  void testnew$newLine15() { doTest() }
+
+  void testnew$newLine16() { doTest() }
+
+  void testnew$newLine17() { doTest() }
+
+  void testnew$newLine18() { doTest() }
+
+  void testnew$newLine19() { doTest() }
+
+  void testnew$newLine20() { doTest() }
+
+  void testnew$newLine21() { doTest() }
+
+  void testnew$newLine22() { doTest() }
+
 //  public void testnew$new1() throws Throwable { doTest(); }
   void testanonymous$anonymous() throws Throwable { doTest() }
 
@@ -341,6 +397,14 @@ class ExpressionsParsingTest extends GroovyParsingTestCase {
   void testpath$path8() throws Throwable { doTest() }
 
   void testpath$path9() throws Throwable { doTest() }
+
+  void testpath$path16() throws Throwable { doTest() }
+
+  void testpath$path17() throws Throwable { doTest() }
+
+  void testpath$path18() throws Throwable { doTest() }
+
+  void testpath$path19() throws Throwable { doTest() }
 
   void testpath$regexp() { doTest() }
 
@@ -885,4 +949,28 @@ class ExpressionsParsingTest extends GroovyParsingTestCase {
   void testlambda$return3() { doTest() }
 
   void testlambda$return4() { doTest() }
+
+  void testtypeAnnotations$field1() { doTest() }
+
+  void testtypeAnnotations$field2() { doTest() }
+
+  void testtypeAnnotations$methodSignature() { doTest() }
+
+  void testtypeAnnotations$methodSignature2() { doTest() }
+
+  void testtypeAnnotations$methodSignature3() { doTest() }
+
+  void testtypeAnnotations$classDecl1() { doTest() }
+
+  void testtypeAnnotations$classDecl2() { doTest() }
+
+  void testtypeAnnotations$tryCatch() { doTest() }
+
+  void testtypeAnnotations$cast() { doTest() }
+
+  void testtypeAnnotations$newExpression1() { doTest() }
+
+  void testtypeAnnotations$newExpression2() { doTest() }
+
+  void testtypeAnnotations$newExpression3() { doTest() }
 }

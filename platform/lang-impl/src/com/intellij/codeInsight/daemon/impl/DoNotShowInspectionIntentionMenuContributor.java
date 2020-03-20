@@ -11,6 +11,7 @@ import com.intellij.codeInspection.ex.InspectionToolWrapper;
 import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
 import com.intellij.codeInspection.ex.QuickFixWrapper;
 import com.intellij.concurrency.JobLauncher;
+import com.intellij.ide.lightEdit.LightEdit;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
@@ -36,7 +37,7 @@ import java.util.List;
 import java.util.Set;
 
 public class DoNotShowInspectionIntentionMenuContributor implements IntentionMenuContributor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.impl.DoNotShowInspectionIntentionMenuContributor");
+  private static final Logger LOG = Logger.getInstance(DoNotShowInspectionIntentionMenuContributor.class);
 
   @Override
   public void collectActions(@NotNull Editor hostEditor,
@@ -78,11 +79,11 @@ public class DoNotShowInspectionIntentionMenuContributor implements IntentionMen
                 " in:" + psiElement.getContainingFile() + " host:" + hostFile + "(" + hostFile.getClass().getName() + ")",
                 new Attachment(virtualFile != null ? virtualFile.getPresentableUrl() : "null", text != null ? text : "null"));
     }
-    if (DumbService.isDumb(project)) {
+    if (DumbService.isDumb(project) || LightEdit.owns(project)) {
       return;
     }
 
-    final List<LocalInspectionToolWrapper> intentionTools = new ArrayList<>();
+    List<LocalInspectionToolWrapper> intentionTools = new ArrayList<>();
     final InspectionProfile profile = InspectionProjectProfileManager.getInstance(project).getInspectionProfile();
     final InspectionToolWrapper[] tools = profile.getInspectionTools(hostFile);
     for (InspectionToolWrapper toolWrapper : tools) {
@@ -111,6 +112,8 @@ public class DoNotShowInspectionIntentionMenuContributor implements IntentionMen
     }
 
     final Set<String> dialectIds = InspectionEngine.calcElementDialectIds(elements);
+    intentionTools = InspectionEngine.filterToolsApplicableByLanguage(intentionTools, dialectIds);
+
     final LocalInspectionToolSession session = new LocalInspectionToolSession(hostFile, 0, hostFile.getTextLength());
     final Processor<LocalInspectionToolWrapper> processor = toolWrapper -> {
       final LocalInspectionTool localInspectionTool = toolWrapper.getTool();
@@ -139,8 +142,7 @@ public class DoNotShowInspectionIntentionMenuContributor implements IntentionMen
           }
         }
       };
-      InspectionEngine.createVisitorAndAcceptElements(localInspectionTool, holder, true, session, elements,
-                                                      dialectIds, InspectionEngine.getDialectIdsSpecifiedForTool(toolWrapper));
+      InspectionEngine.createVisitorAndAcceptElements(localInspectionTool, holder, true, session, elements);
       localInspectionTool.inspectionFinished(session, holder);
       return true;
     };

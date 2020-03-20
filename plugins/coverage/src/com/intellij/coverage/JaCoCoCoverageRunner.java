@@ -176,7 +176,7 @@ public class JaCoCoCoverageRunner extends JavaCoverageRunner {
 
   @Override
   public void appendCoverageArgument(String sessionDataFilePath,
-                                     @Nullable String[] patterns,
+                                     String @Nullable [] patterns,
                                      SimpleJavaParameters parameters,
                                      boolean collectLineInfo,
                                      boolean isSampling) {
@@ -185,7 +185,7 @@ public class JaCoCoCoverageRunner extends JavaCoverageRunner {
 
   @Override
   public void appendCoverageArgument(String sessionDataFilePath,
-                                     @Nullable String[] patterns,
+                                     String @Nullable [] patterns,
                                      String[] excludePatterns,
                                      SimpleJavaParameters javaParameters,
                                      boolean collectLineInfo,
@@ -245,16 +245,19 @@ public class JaCoCoCoverageRunner extends JavaCoverageRunner {
   }
 
   @Override
+  @NotNull
   public String getPresentableName() {
     return "JaCoCo";
   }
 
   @Override
+  @NotNull
   public String getId() {
     return "jacoco";
   }
 
   @Override
+  @NotNull
   public String getDataFileExtension() {
     return "exec";
   }

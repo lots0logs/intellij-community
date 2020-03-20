@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.stubs;
 
 import com.intellij.diagnostic.PluginException;
@@ -23,16 +9,20 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.fileTypes.LanguageFileType;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.newvfs.FileAttribute;
+import com.intellij.openapi.vfs.newvfs.persistent.FSRecords;
 import com.intellij.psi.templateLanguages.TemplateLanguage;
 import com.intellij.psi.tree.IFileElementType;
 import com.intellij.psi.tree.IStubFileElementType;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.IndexInfrastructure;
 import com.intellij.util.indexing.IndexingStamp;
+import com.intellij.util.io.DataInputOutputUtil;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
 import gnu.trove.TLongObjectHashMap;
@@ -40,9 +30,12 @@ import gnu.trove.TObjectLongHashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +45,7 @@ class StubVersionMap {
   private static final String INDEXED_FILETYPES = "indexed_filetypes";
   private static final String RECORD_SEPARATOR = "\uFFFF";
   private static final String LINE_SEPARATOR = "\n";
-  private static final Charset ourEncoding = CharsetToolkit.UTF8_CHARSET;
+  private static final Charset ourEncoding = StandardCharsets.UTF_8;
   private static final Logger LOG = Logger.getInstance(StubVersionMap.class);
   private final Map<FileType, Object> fileTypeToVersionOwner = new THashMap<>();
   private final TObjectLongHashMap<FileType> fileTypeToVersion = new TObjectLongHashMap<>();
@@ -86,7 +79,7 @@ class StubVersionMap {
     if (canUsePreviousMappings) {
       List<String> stringList = StringUtil.split(FileUtil.loadFile(allIndexedFiles, ourEncoding), LINE_SEPARATOR);
       long allIndexedFilesVersion = Long.parseLong(stringList.get(0));
-      
+
       if (allIndexedFilesVersion == currentStubIndexStamp) {
         for (int i = 1, size = stringList.size(); i < size; ++i) {
           List<String> strings = StringUtil.split(stringList.get(i), RECORD_SEPARATOR);
@@ -170,7 +163,7 @@ class StubVersionMap {
     }
   }
 
-  private static Object getVersionOwner(FileType fileType) {
+  static Object getVersionOwner(FileType fileType) {
     Object owner = null;
     if (fileType instanceof LanguageFileType) {
       Language l = ((LanguageFileType)fileType).getLanguage();
@@ -236,11 +229,28 @@ class StubVersionMap {
     }
   }
 
-  public int getIndexingTimestampDiffForFileType(FileType type) {
+  private int getIndexingTimestampDiffForFileType(FileType type) {
     return (int)(myStubIndexStamp - fileTypeToVersion.get(type));
   }
 
-  public @Nullable FileType getFileTypeByIndexingTimestampDiff(int diff) {
+  @Nullable
+  private FileType getFileTypeByIndexingTimestampDiff(int diff) {
     return versionToFileType.get(myStubIndexStamp - diff);
+  }
+
+  private static final FileAttribute VERSION_STAMP = new FileAttribute("stubIndex.versionStamp", 2, true);
+  public void persistIndexedState(int fileId, @NotNull VirtualFile file) throws IOException {
+    try (DataOutputStream stream = FSRecords.writeAttribute(fileId, VERSION_STAMP)) {
+      FileType type = ProgressManager.getInstance().computeInNonCancelableSection(() -> file.getFileType());
+      DataInputOutputUtil.writeINT(stream, getIndexingTimestampDiffForFileType(type));
+    }
+  }
+
+  public boolean isIndexed(int fileId, @NotNull VirtualFile file) throws IOException {
+    DataInputStream stream = FSRecords.readAttributeWithLock(fileId, VERSION_STAMP);
+    int diff = stream != null ? DataInputOutputUtil.readINT(stream) : 0;
+    if (diff == 0) return false;
+    FileType fileType = getFileTypeByIndexingTimestampDiff(diff);
+    return fileType != null && getStamp(file.getFileType()) == getStamp(fileType);
   }
 }

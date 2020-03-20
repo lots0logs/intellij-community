@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.options;
 
 import com.intellij.openapi.components.ServiceManager;
@@ -17,42 +17,39 @@ public abstract class ShowSettingsUtil {
     return ServiceManager.getService(ShowSettingsUtil.class);
   }
 
-  public abstract void showSettingsDialog(Project project, ConfigurableGroup... group);
+  public abstract void showSettingsDialog(@NotNull Project project, ConfigurableGroup @NotNull ... groups);
 
   public abstract <T extends Configurable> void showSettingsDialog(@Nullable Project project, @NotNull Class<T> toSelect);
 
   public abstract void showSettingsDialog(@Nullable Project project, @NotNull String nameToSelect);
 
-  public abstract void showSettingsDialog(@NotNull final Project project, final Configurable toSelect);
+  public abstract void showSettingsDialog(@NotNull Project project, @Nullable Configurable toSelect);
 
   public abstract <T extends Configurable> void showSettingsDialog(@Nullable Project project,
                                                                    @NotNull Class<T> configurableClass,
-                                                                   @Nullable Consumer<T> additionalConfiguration);
+                                                                   @Nullable Consumer<? super T> additionalConfiguration);
 
   public abstract void showSettingsDialog(@Nullable Project project,
                                           @NotNull Predicate<? super Configurable> predicate,
                                           @Nullable Consumer<? super Configurable> additionalConfiguration);
 
-  public abstract boolean editConfigurable(Project project, Configurable configurable);
+  public abstract boolean editConfigurable(Project project, @NotNull Configurable configurable);
 
-  public abstract boolean editConfigurable(@Nullable Project project, Configurable configurable, @Nullable Runnable advancedInitialization);
+  public abstract boolean editConfigurable(@Nullable Project project, @NotNull Configurable configurable, @Nullable Runnable advancedInitialization);
 
   public abstract boolean editConfigurable(@Nullable Component parent, @NotNull Configurable configurable);
 
-  public abstract boolean editConfigurable(Component parent, Configurable configurable, Runnable advancedInitialization);
+  public abstract boolean editConfigurable(@Nullable Component parent, @NotNull String displayName);
 
-  public abstract boolean editConfigurable(Project project, @NonNls String dimensionServiceKey, Configurable configurable);
+  public abstract boolean editConfigurable(@Nullable Component parent, @NotNull String displayName, @Nullable Runnable advancedInitialization);
 
-  public abstract boolean editConfigurable(Project project, @NonNls String dimensionServiceKey, Configurable configurable, boolean showApplyButton);
+  public abstract boolean editConfigurable(Component parent, @NotNull Configurable configurable, Runnable advancedInitialization);
 
-  public abstract boolean editConfigurable(Component parent, String dimensionServiceKey, Configurable configurable);
+  public abstract boolean editConfigurable(Project project, @NonNls @NotNull String dimensionServiceKey, @NotNull Configurable configurable);
 
-  /**
-   * @deprecated create a new instance of configurable instead
-   * to remove in IDEA 15
-   */
-  @Deprecated
-  public abstract <T extends Configurable> T findProjectConfigurable(Project project, Class<T> confClass);
+  public abstract boolean editConfigurable(Project project, @NonNls @NotNull String dimensionServiceKey, @NotNull Configurable configurable, boolean showApplyButton);
+
+  public abstract boolean editConfigurable(Component parent, @NonNls @NotNull String dimensionServiceKey, @NotNull Configurable configurable);
 
   public static String getSettingsMenuName() {
     return SystemInfo.isMac ? "Preferences" : "Settings";

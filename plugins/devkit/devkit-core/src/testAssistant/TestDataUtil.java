@@ -108,8 +108,8 @@ public class TestDataUtil {
   }
 
   private static boolean isBeforeAfterPrefixedPair(@NotNull @NonNls String name1, @NotNull @NonNls String name2) {
-    String lcName1 = name1.toLowerCase();
-    String lcName2 = name2.toLowerCase();
+    String lcName1 = StringUtil.toLowerCase(name1);
+    String lcName2 = StringUtil.toLowerCase(name2);
     if (lcName1.startsWith(TESTDATA_FILE_BEFORE_MARKER) && lcName2.startsWith(TESTDATA_FILE_AFTER_MARKER)) {
       String lcName1MainPart = StringUtil.substringAfter(lcName1, TESTDATA_FILE_BEFORE_MARKER);
       if (lcName1MainPart != null && lcName1MainPart.equals(StringUtil.substringAfter(lcName2, TESTDATA_FILE_AFTER_MARKER))) {
@@ -120,7 +120,7 @@ public class TestDataUtil {
   }
 
   private static boolean isAfterSuffixed(@NonNls String nameToCheck, @NonNls String secondName, int commonPrefixLength) {
-    String nameToCheckLastPart = nameToCheck.substring(commonPrefixLength).toLowerCase();
+    String nameToCheckLastPart = StringUtil.toLowerCase(nameToCheck.substring(commonPrefixLength));
     if (!nameToCheckLastPart.contains(TESTDATA_FILE_AFTER_MARKER)) {
       return false;
     }
@@ -129,15 +129,15 @@ public class TestDataUtil {
     String nameToCheckExt = StringUtil.substringAfterLast(nameToCheck, ".");
     String nameToCheckWithoutAfterAndExt = StringUtil.substringBeforeLast(nameToCheckWithoutAfter, ".");
 
-    String secondNameLastPart = secondName.substring(commonPrefixLength).toLowerCase();
+    String secondNameLastPart = StringUtil.toLowerCase(secondName.substring(commonPrefixLength));
     String secondNameExt = nameToCheckExt == null ? secondNameLastPart : secondNameLastPart.replace(nameToCheckExt, "");
 
     return !StringUtil.containsAlphaCharacters(nameToCheckWithoutAfterAndExt) &&
            !StringUtil.containsAlphaCharacters(secondNameExt.replace(TESTDATA_FILE_BEFORE_MARKER, ""));
   }
 
-  static VirtualFile createFileByPath(final Project project, final String path) {
-    return ApplicationManager.getApplication().runWriteAction(new Computable<VirtualFile>() {
+  static void createFileAndNavigate(final Project project, final String path) {
+    VirtualFile file = ApplicationManager.getApplication().runWriteAction(new Computable<VirtualFile>() {
       @Override
       public VirtualFile compute() {
         try {
@@ -151,6 +151,9 @@ public class TestDataUtil {
         }
       }
     });
+    if (file != null) {
+      PsiNavigationSupport.getInstance().createNavigatable(project, file, -1).navigate(true);
+    }
   }
 
   static void openOrAskToCreateFile(@NotNull Project project, @NotNull TestDataFile testDataFile) {
@@ -163,15 +166,9 @@ public class TestDataUtil {
       int rc = Messages.showYesNoDialog(project, DevKitBundle.message("testdata.file.doesn.not.exist", displayPath),
                                         DevKitBundle.message("testdata.create.dialog.title"), Messages.getQuestionIcon());
       if (rc == Messages.YES) {
-        VirtualFile vFile = createFileByPath(project, testDataFile.getPath());
-        PsiNavigationSupport.getInstance().createNavigatable(project, vFile, -1).navigate(true);
+        createFileAndNavigate(project, testDataFile.getPath());
       }
     }
-  }
-
-  @Nullable
-  static VirtualFile getFileByPath(String path) {
-    return LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
   }
 
   @Nullable

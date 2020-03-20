@@ -1,23 +1,11 @@
-/*
- * Copyright 2000-2010 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.fileChooser;
 
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
+import com.intellij.util.nls.NlsContexts.FileChooserDescription;
+import com.intellij.util.nls.NlsContexts.FileChooserTitle;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
@@ -41,8 +29,8 @@ public class FileSaverDescriptor extends FileChooserDescriptor implements Clonea
    * @param description description
    * @param extensions accepted file extensions: "txt", "jpg", etc. Accepts all if empty
    */
-  public FileSaverDescriptor(@Nls(capitalization = Nls.Capitalization.Title) @NotNull String title,
-                             @Nls(capitalization = Nls.Capitalization.Sentence) @NotNull String description, String... extensions) {
+  public FileSaverDescriptor(@Nls @FileChooserTitle @NotNull String title,
+                             @Nls @FileChooserDescription @NotNull String description, String... extensions) {
     super(true, true, true, true, false, false);
     setTitle(title);
     setDescription(description);
@@ -63,6 +51,6 @@ public class FileSaverDescriptor extends FileChooserDescriptor implements Clonea
    * @return accepted file extensions
    */
   public String[] getFileExtensions() {
-    return ArrayUtil.toStringArray(extensions);
+    return ArrayUtilRt.toStringArray(extensions);
   }
 }

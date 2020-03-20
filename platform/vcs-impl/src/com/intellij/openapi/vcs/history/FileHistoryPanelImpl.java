@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.history;
 
 import com.intellij.CommonBundle;
@@ -73,7 +73,6 @@ import static java.util.Comparator.reverseOrder;
  * author: lesya
  */
 public class FileHistoryPanelImpl extends JPanel implements DataProvider, Disposable, EditorColorsListener, CopyProvider {
-  private static final String COMMIT_MESSAGE_TITLE = VcsBundle.message("label.selected.revision.commit.message");
   private static final String VCS_HISTORY_POPUP_ACTION_GROUP = "VcsHistoryInternalGroup.Popup";
   private static final String VCS_HISTORY_TOOLBAR_ACTION_GROUP = "VcsHistoryInternalGroup.Toolbar";
 
@@ -86,8 +85,8 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
   @NotNull private final FileHistoryRefresherI myRefresherI;
   @NotNull private final FilePath myFilePath;
   @Nullable private final VcsRevisionNumber myStartingRevision;
-  @NotNull private final Map<VcsRevisionNumber, Integer> myRevisionsOrder = ContainerUtil.newHashMap();
-  @NotNull private final Map<VcsFileRevision, VirtualFile> myRevisionToVirtualFile = ContainerUtil.newHashMap();
+  @NotNull private final Map<VcsRevisionNumber, Integer> myRevisionsOrder = new HashMap<>();
+  @NotNull private final Map<VcsFileRevision, VirtualFile> myRevisionToVirtualFile = new HashMap<>();
   @NotNull private final DetailsPanel myDetails;
   @NotNull private final DualView myDualView;
   @Nullable private final JComponent myAdditionalDetails;
@@ -153,11 +152,11 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
     listener.installOn(myDualView.getTreeView());
     myDualView.setEmptyText(CommonBundle.getLoadingTreeNodeText());
 
-    setupDualView(fillActionGroup(true, new DefaultActionGroup(null, false)));
+    setupDualView(fillActionGroup(true, new DefaultActionGroup()));
     if (isStaticEmbedded) {
       setIsStaticAndEmbedded(true);
     }
-    DefaultActionGroup toolbarGroup = new DefaultActionGroup(null, false);
+    DefaultActionGroup toolbarGroup = new DefaultActionGroup();
     fillActionGroup(false, toolbarGroup);
 
     ActionToolbar toolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.FILEHISTORY_VIEW_TOOLBAR, toolbarGroup,
@@ -196,13 +195,16 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
   public static String getPresentableText(@NotNull VcsFileRevision revision, boolean withMessage) {
     // implementation reflected by com.intellij.vcs.log.ui.frame.VcsLogGraphTable.getPresentableText()
     StringBuilder sb = new StringBuilder();
-    sb.append(VcsUtil.getShortRevisionString(revision.getRevisionNumber())).append(" ");
-    sb.append(revision.getAuthor());
     long time = revision.getRevisionDate().getTime();
-    sb.append(" on ").append(DateFormatUtil.formatDate(time)).append(" at ").append(DateFormatUtil.formatTime(time));
+    sb.append(VcsBundle.message("file.history.details.hash.author.on.date.at.time",
+                                VcsUtil.getShortRevisionString(revision.getRevisionNumber()),
+                                revision.getAuthor(),
+                                DateFormatUtil.formatDate(time),
+                                DateFormatUtil.formatTime(time)));
     if (revision instanceof VcsFileRevisionEx) {
       if (!Comparing.equal(revision.getAuthor(), ((VcsFileRevisionEx)revision).getCommitterName())) {
-        sb.append(" (committed by ").append(((VcsFileRevisionEx)revision).getCommitterName()).append(")");
+        sb.append(" (").append(VcsBundle.message("file.history.details.committer.info",
+                                                 ((VcsFileRevisionEx)revision).getCommitterName())).append(")");
       }
     }
     if (withMessage) {
@@ -227,10 +229,9 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
     return filePath1.equals(filePath2) && Comparing.equal(existingRevision, newRevision);
   }
 
-  @NotNull
-  private DualViewColumnInfo[] createColumnList(@NotNull Project project,
-                                                @NotNull VcsHistoryProvider provider,
-                                                @Nullable ColumnInfo[] additionalColumns) {
+  private DualViewColumnInfo @NotNull [] createColumnList(@NotNull Project project,
+                                                          @NotNull VcsHistoryProvider provider,
+                                                          ColumnInfo @Nullable [] additionalColumns) {
     ArrayList<DualViewColumnInfo> columns = new ArrayList<>();
     columns.add(new TreeNodeColumnInfoWrapper<>(
       new RevisionColumnInfo(comparing(revision -> myRevisionsOrder.get(revision.getRevisionNumber()), reverseOrder()))));
@@ -301,7 +302,7 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
       myDualView.setEmptyText(CommonBundle.getLoadingTreeNodeText());
     }
     else {
-      myDualView.setEmptyText(StatusText.DEFAULT_EMPTY_TEXT);
+      myDualView.setEmptyText(StatusText.getDefaultEmptyText());
     }
   }
 
@@ -482,8 +483,7 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
     return null;
   }
 
-  @Nullable
-  private Change[] getChanges() {
+  private Change @Nullable [] getChanges() {
     final VcsFileRevision[] revisions = getSelectedRevisions();
 
     if (revisions.length > 0) {
@@ -514,8 +514,7 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
     return myRevisionToVirtualFile.get(revision);
   }
 
-  @NotNull
-  public VcsFileRevision[] getSelectedRevisions() {
+  public VcsFileRevision @NotNull [] getSelectedRevisions() {
     //noinspection unchecked
     List<TreeNodeOnVcsRevision> selection = (List<TreeNodeOnVcsRevision>)myDualView.getSelection();
     VcsFileRevision[] result = new VcsFileRevision[selection.size()];
@@ -754,7 +753,7 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
           StringBuilder sb = new StringBuilder(StringUtil.notNullize(ex.getAuthor()));
           if (ex.getAuthorEmail() != null) sb.append(" &lt;").append(ex.getAuthorEmail()).append("&gt;");
           if (ex.getCommitterName() != null && !Comparing.equal(ex.getAuthor(), ex.getCommitterName())) {
-            sb.append(", via ").append(ex.getCommitterName());
+            sb.append(", ").append(VcsBundle.message("file.history.details.committer.tooltip.info", ex.getCommitterName()));
             if (ex.getCommitterEmail() != null) sb.append(" &lt;").append(ex.getCommitterEmail()).append("&gt;");
           }
           ((AuthorCellRenderer)renderer).setTooltipText(sb.toString());
@@ -793,7 +792,7 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
     private final IssueLinkRenderer myIssueLinkRenderer;
 
     public MessageColumnInfo(Project project) {
-      super(COMMIT_MESSAGE_TITLE);
+      super(getCommitMessageTitle());
       myRenderer = new BaseHistoryCellRenderer() {
         @Override
         protected void customizeCellRenderer(JTable table, Object value, boolean selected, boolean hasFocus, int row, int column) {
@@ -862,9 +861,8 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
       }
     }
 
-    @Nullable
     @Override
-    public byte[] getContentAsBytes() throws VcsException {
+    public byte @Nullable [] getContentAsBytes() throws VcsException {
       try {
         return VcsHistoryUtil.loadRevisionContent(myRevision);
       }
@@ -919,7 +917,7 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
         ((JComponent)result).setOpaque(false);
       }
       else if (selected) {
-        result.setBackground(UIUtil.getTableSelectionBackground());
+        result.setBackground(UIUtil.getTableSelectionBackground(true));
       }
       else {
         result.setBackground(UIUtil.getTableBackground());
@@ -954,7 +952,7 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
 
   private class MyShowAsTreeAction extends ToggleAction implements DumbAware {
     MyShowAsTreeAction() {
-      super(VcsBundle.message("action.name.show.files.as.tree"), null, PlatformIcons.SMALL_VCS_CONFIGURABLE);
+      super(VcsBundle.messagePointer("action.name.show.files.as.tree"), PlatformIcons.SMALL_VCS_CONFIGURABLE);
     }
 
     @Override
@@ -972,7 +970,8 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
   private class MyShowDetailsAction extends ToggleAction implements DumbAware {
 
     MyShowDetailsAction() {
-      super("Show Details", "Display details panel", AllIcons.Actions.PreviewDetailsVertically);
+      super(VcsBundle.messagePointer("action.ToggleAction.text.show.details"),
+            VcsBundle.messagePointer("action.ToggleAction.description.show.details"), AllIcons.Actions.PreviewDetailsVertically);
     }
 
     @Override
@@ -985,5 +984,9 @@ public class FileHistoryPanelImpl extends JPanel implements DataProvider, Dispos
       VcsConfiguration.getInstance(myVcs.getProject()).SHOW_FILE_HISTORY_DETAILS = state;
       setupDetails();
     }
+  }
+
+  private static String getCommitMessageTitle() {
+    return VcsBundle.message("label.selected.revision.commit.message");
   }
 }

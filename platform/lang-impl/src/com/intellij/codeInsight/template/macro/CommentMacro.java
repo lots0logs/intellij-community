@@ -31,12 +31,12 @@ public abstract class CommentMacro extends MacroBase {
 
   @Nullable
   @Override
-  protected Result calculateResult(@NotNull Expression[] params, ExpressionContext context, boolean quick) {
+  protected Result calculateResult(Expression @NotNull [] params, ExpressionContext context, boolean quick) {
     Editor editor = context.getEditor();
     Language language = editor == null ? null : PsiUtilBase.getLanguageInEditor(editor, context.getProject());
     Commenter commenter = language == null ? null : LanguageCommenters.INSTANCE.forLanguage(language);
     String lineCommentPrefix = commenter == null ? null : myCommenterFunction.apply(commenter);
-    return lineCommentPrefix == null ? null : new TextResult(lineCommentPrefix);
+    return lineCommentPrefix == null ? null : new TextResult(lineCommentPrefix.trim());
   }
 
   public static class LineCommentStart extends CommentMacro {

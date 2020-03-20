@@ -1404,6 +1404,7 @@ Angela
 Angela's
 Angele
 Angele's
+Angeles
 Angeli
 Angeli's
 Angelia
@@ -45945,6 +45946,8 @@ checkroom
 checkroom's
 checkrooms
 checks
+checksum
+checksums
 checkup
 checkup's
 checkups
@@ -51125,6 +51128,8 @@ coroners
 coronet
 coronet's
 coronets
+coroutine
+coroutines
 corpora
 corpora's
 corporal
@@ -55428,6 +55433,8 @@ denominator
 denominator's
 denominators
 denormalize
+denormalized
+denormalizes
 denotation
 denotation's
 denotational
@@ -55932,6 +55939,8 @@ desensitize
 desensitized
 desensitizes
 desensitizing
+deserialize
+deserializes
 desert
 desert's
 deserted
@@ -61423,6 +61432,7 @@ empiricism's
 empiricist
 empiricist's
 empiricists
+emplace
 emplacement
 emplacement's
 emplacements
@@ -63718,6 +63728,7 @@ expectation's
 expectational
 expectations
 expected
+expectedly
 expecting
 expectorant
 expectorants
@@ -79899,6 +79910,7 @@ invoice's
 invoiced
 invoices
 invoicing
+invocable
 invokable
 invoke
 invoked
@@ -89272,7 +89284,6 @@ monopoly's
 monorail
 monorail's
 monorails
-monorepo
 monostable
 monosyllabic
 monosyllable
@@ -95989,6 +96000,7 @@ paralleling
 parallelism
 parallelism's
 parallelisms
+parallelization
 parallelize
 parallelled
 parallelling
@@ -101345,6 +101357,9 @@ prelims
 preliterate
 preliterates
 preload
+preloaded
+preloading
+preloads
 prelude
 prelude's
 preludes
@@ -101436,6 +101451,10 @@ prepayment
 prepayment's
 prepayments
 prepays
+prepend
+prepended
+prepending
+prepends
 preplanned
 preponderance
 preponderance's
@@ -110069,6 +110088,7 @@ roundhouse
 roundhouse's
 roundhouses
 rounding
+roundings
 roundish
 roundly
 roundness
@@ -112119,6 +112139,7 @@ screenplay
 screenplay's
 screenplays
 screens
+screenshot
 screenwriter
 screenwriters
 screenwriting
@@ -117889,6 +117910,7 @@ spinet's
 spinets
 spinier
 spiniest
+spinlock
 spinnaker
 spinnaker's
 spinnakers
@@ -120120,6 +120142,8 @@ stringer's
 stringers
 stringier
 stringiest
+stringify
+stringifies
 stringiness
 stringiness's
 stringing
@@ -126099,6 +126123,11 @@ transcendentally
 transcendentals
 transcending
 transcends
+transcode
+transcoder
+transcoders
+transcoder's
+transcoding
 transcontinental
 transcribe
 transcribed
@@ -126172,6 +126201,7 @@ transfusing
 transfusion
 transfusion's
 transfusions
+transgender
 transgendered
 transgenic
 transgress
@@ -128456,6 +128486,7 @@ undefended
 undefiled
 undefinable
 undefined
+undelegated
 undeliverable
 undelivered
 undemanding
@@ -129487,7 +129518,10 @@ unmanned
 unmannerly
 unmanning
 unmans
+unmap
+unmaps
 unmapped
+unmapping
 unmarked
 unmarketable
 unmarred
@@ -130107,6 +130141,7 @@ unsurvivable
 unsuspected
 unsuspecting
 unsuspectingly
+unsuspended
 unsustainable
 unswappable
 unswayed
@@ -134952,6 +134987,7 @@ writ
 writ's
 writable
 write
+writeable
 writer
 writer's
 writers

@@ -19,12 +19,11 @@ import org.apache.tools.ant.Project;
 import org.apache.tools.ant.types.Path;
 
 import java.io.File;
+import java.util.Locale;
 
 /**
  * Allows to specify relative output prefix for Path.
  * Used to support searching for nested form files under source roots with package prefixes.
- *
- * @author nik
  */
 public class PrefixedPath extends Path {
   private String myPrefix;
@@ -50,7 +49,7 @@ public class PrefixedPath extends Path {
     String prefix = myPrefix;
     if (prefix != null) {
       prefix = trimStartSlash(ensureEndsWithSlash(prefix));
-      if (!relativePath.toLowerCase().startsWith(prefix.toLowerCase())) {
+      if (!relativePath.toLowerCase(Locale.ENGLISH).startsWith(prefix.toLowerCase(Locale.ENGLISH))) {
         return null;
       }
       relativePath = relativePath.substring(prefix.length());

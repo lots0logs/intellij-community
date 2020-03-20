@@ -20,10 +20,10 @@ private const val DEFAULT_COMMIT_DELAY = 10 * Time.MINUTE
 
 class MyPrettyPrinter : DefaultPrettyPrinter() {
   init {
-    _arrayIndenter = DefaultPrettyPrinter.NopIndenter.instance
+    _arrayIndenter = NopIndenter.instance
   }
 
-  override fun createInstance(): MyPrettyPrinter = MyPrettyPrinter()
+  override fun createInstance() = MyPrettyPrinter()
 
   override fun writeObjectFieldValueSeparator(jg: JsonGenerator) {
     jg.writeRaw(": ")
@@ -86,17 +86,12 @@ class ReadonlySource(var url: String? = null, var active: Boolean = true) {
   val path: String?
     @JsonIgnore
     get() {
-      if (url == null) {
-        return null
+      var fileName = PathUtilRt.getFileName(url ?: return null)
+      val suffix = ".git"
+      if (fileName.endsWith(suffix)) {
+        fileName = fileName.substring(0, fileName.length - suffix.length)
       }
-      else {
-        var fileName = PathUtilRt.getFileName(url!!)
-        val suffix = ".git"
-        if (fileName.endsWith(suffix)) {
-          fileName = fileName.substring(0, fileName.length - suffix.length)
-        }
-        // the convention is that the .git extension should be used for bare repositories
-        return "${sanitizeFileName(fileName)}.${Integer.toHexString(url!!.hashCode())}.git"
-      }
+      // the convention is that the .git extension should be used for bare repositories
+      return "${sanitizeFileName(fileName)}.${Integer.toHexString(url!!.hashCode())}.git"
     }
 }

@@ -16,6 +16,9 @@
 package com.intellij.refactoring.move.moveInner;
 
 import com.intellij.featureStatistics.FeatureUsageTracker;
+import com.intellij.java.refactoring.JavaRefactoringBundle;
+import com.intellij.lang.Language;
+import com.intellij.lang.jvm.JvmLanguage;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.editor.Editor;
@@ -30,11 +33,12 @@ import com.intellij.refactoring.move.MoveCallback;
 import com.intellij.refactoring.move.MoveHandlerDelegate;
 import com.intellij.refactoring.move.moveClassesOrPackages.JavaMoveClassesOrPackagesHandler;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class MoveInnerToUpperHandler extends MoveHandlerDelegate {
   @Override
-  public boolean canMove(final PsiElement[] elements, @Nullable final PsiElement targetContainer) {
+  public boolean canMove(final PsiElement[] elements, @Nullable final PsiElement targetContainer, @Nullable PsiReference reference) {
     if (elements.length != 1) return false;
     PsiElement element = elements [0];
     return isNonStaticInnerClass(element);
@@ -58,7 +62,7 @@ public class MoveInnerToUpperHandler extends MoveHandlerDelegate {
       FeatureUsageTracker.getInstance().triggerFeatureUsed("refactoring.move.moveInner");
       final PsiClass containingClass = aClass.getContainingClass();
       if (containingClass instanceof JspClass) {
-        CommonRefactoringUtil.showErrorHint(project, editor, RefactoringBundle.message("move.nonstatic.class.from.jsp.not.supported"),
+        CommonRefactoringUtil.showErrorHint(project, editor, JavaRefactoringBundle.message("move.nonstatic.class.from.jsp.not.supported"),
                                             RefactoringBundle.message("move.title"), null);
         return true;
       }
@@ -66,5 +70,16 @@ public class MoveInnerToUpperHandler extends MoveHandlerDelegate {
       return true;
     }
     return false;
+  }
+
+  @Nullable
+  @Override
+  public String getActionName(PsiElement @NotNull [] elements) {
+    return JavaRefactoringBundle.message("move.inner.class.to.upper.level.action.name");
+  }
+
+  @Override
+  public boolean supportsLanguage(@NotNull Language language) {
+    return language instanceof JvmLanguage;
   }
 }

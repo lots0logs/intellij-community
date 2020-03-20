@@ -15,7 +15,7 @@ import com.siyeh.ig.psiutils.CommentTracker;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
-import static com.intellij.codeInspection.InspectionsBundle.message;
+import static com.intellij.java.JavaBundle.message;
 
 /**
  * @author Pavel.Dolgov
@@ -102,7 +102,8 @@ public class SwitchLabeledRuleCanBeCodeBlockInspection extends LocalInspectionTo
 
     private static void wrapExpression(PsiExpressionStatement expressionStatement) {
       CommentTracker tracker = new CommentTracker();
-      tracker.replaceAndRestoreComments(expressionStatement, "{ break " + tracker.text(expressionStatement) + " }");
+      String valueKeyword = PsiKeyword.YIELD;
+      tracker.replaceAndRestoreComments(expressionStatement, "{ " + valueKeyword + " " + tracker.text(expressionStatement) + " }");
     }
 
     private static void wrapStatement(@NotNull PsiStatement statement) {

@@ -1,33 +1,37 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui.laf.intellij;
 
 import com.intellij.ide.ui.laf.darcula.DarculaUIUtil;
 import com.intellij.ide.ui.laf.darcula.ui.DarculaTextBorder;
 import com.intellij.ui.Gray;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.JBValue;
 import com.intellij.util.ui.MacUIUtil;
 import com.intellij.util.ui.UIUtil;
+import org.jetbrains.annotations.ApiStatus;
 
 import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.geom.Path2D;
 import java.awt.geom.RoundRectangle2D;
 
-import static com.intellij.ide.ui.laf.darcula.DarculaUIUtil.paintOutlineBorder;
-
 /**
- * @author Konstantin Bulenkov
+ * @deprecated For plugin writers: add dependency from com.intellij.laf.macos plugin
+ * and use similar class from the plugin.
  */
+@ApiStatus.ScheduledForRemoval (inVersion = "2020.2")
+@Deprecated
 public class MacIntelliJTextBorder extends DarculaTextBorder {
   private static final Color OUTLINE_COLOR = Gray.xBC;
   private static final Insets PADDINGS = JBUI.emptyInsets();
 
-  static final JBValue MINIMUM_HEIGHT = new JBValue.Float(21);
   static final JBValue BW = new JBValue.Float(3);
   static final JBValue ARC = new JBValue.Float(6);
+
   static float LW(Graphics2D g2) {
-    return JBUI.scale(UIUtil.isRetina(g2) ? 0.5f : 1.0f);
+    float f = UIUtil.isRetina(g2) ? 0.5f : 1.0f;
+    return JBUIScale.scale(f);
   }
 
   @Override
@@ -54,7 +58,8 @@ public class MacIntelliJTextBorder extends DarculaTextBorder {
     Graphics2D g2 = (Graphics2D)g.create();
     try {
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, MacUIUtil.USE_QUARTZ ? RenderingHints.VALUE_STROKE_PURE : RenderingHints.VALUE_STROKE_NORMALIZE);
+      g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL,
+                          MacUIUtil.USE_QUARTZ ? RenderingHints.VALUE_STROKE_PURE : RenderingHints.VALUE_STROKE_NORMALIZE);
       g2.translate(r.x, r.y);
 
       float arc = ARC.getFloat();
@@ -68,7 +73,8 @@ public class MacIntelliJTextBorder extends DarculaTextBorder {
 
       Path2D path = new Path2D.Float(Path2D.WIND_EVEN_ODD);
       path.append(outerShape, false);
-      path.append(new RoundRectangle2D.Float(bw + lw, bw + lw, r.width - (bw + lw)*2, r.height - (bw + lw)*2, arc - lw, arc - lw), false);
+      path.append(new RoundRectangle2D.Float(
+        bw + lw, bw + lw, r.width - (bw + lw) * 2, r.height - (bw + lw) * 2, arc - lw, arc - lw), false);
 
       g2.setColor(OUTLINE_COLOR);
       g2.fill(path);
@@ -76,8 +82,9 @@ public class MacIntelliJTextBorder extends DarculaTextBorder {
       if (c.hasFocus()) {
         Object op = c.getClientProperty("JComponent.outline");
         if (op != null) {
-          paintOutlineBorder(g2, r.width, r.height, arc, true, true, DarculaUIUtil.Outline.valueOf(op.toString()));
-        } else {
+          DarculaUIUtil.paintOutlineBorder(g2, r.width, r.height, arc, true, true, DarculaUIUtil.Outline.valueOf(op.toString()));
+        }
+        else {
           DarculaUIUtil.paintFocusBorder(g2, r.width, r.height, arc, true);
         }
       }

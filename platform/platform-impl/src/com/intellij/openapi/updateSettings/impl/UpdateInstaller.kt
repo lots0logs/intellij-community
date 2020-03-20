@@ -1,7 +1,8 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.updateSettings.impl
 
 import com.intellij.ide.IdeBundle
+import com.intellij.ide.plugins.IdeaPluginDescriptor
 import com.intellij.ide.util.DelegatingProgressIndicator
 import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.PathManager
@@ -14,16 +15,17 @@ import com.intellij.openapi.util.BuildNumber
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.ArrayUtil
-import com.intellij.util.Restarter
 import com.intellij.util.io.HttpRequests
-import com.intellij.util.lang.JavaVersion
 import java.io.File
 import java.io.IOException
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.zip.ZipFile
+import javax.swing.JComponent
 import javax.swing.UIManager
+
+data class PluginUpdateResult(val pluginsInstalled: List<IdeaPluginDescriptor>, val restartRequired: Boolean)
 
 object UpdateInstaller {
   const val UPDATER_MAIN_CLASS = "com.intellij.updater.Runner"
@@ -32,11 +34,11 @@ object UpdateInstaller {
   private const val UPDATER_ENTRY = "com/intellij/updater/Runner.class"
 
   private val patchesUrl: URL
-    get() = URL(System.getProperty("idea.patches.url") ?: ApplicationInfoEx.getInstanceEx().updateUrls.patchesUrl)
+    get() = URL(System.getProperty("idea.patches.url") ?: ApplicationInfoEx.getInstanceEx().updateUrls!!.patchesUrl)
 
   @JvmStatic
   @Throws(IOException::class)
-  fun downloadPatchChain(chain: List<BuildNumber>, forceHttps: Boolean, indicator: ProgressIndicator): List<File> {
+  fun downloadPatchChain(chain: List<BuildNumber>, indicator: ProgressIndicator): List<File> {
     indicator.text = IdeBundle.message("update.downloading.patch.progress")
 
     val files = mutableListOf<File>()
@@ -48,7 +50,6 @@ object UpdateInstaller {
       val from = chain[i - 1].withoutProductCode().asString()
       val to = chain[i].withoutProductCode().asString()
       val patchName = "${product}-${from}-${to}-patch${jdk}-${PatchInfo.OS_SUFFIX}.jar"
-      System.out.println( "  patchName: $patchName" )
       val patchFile = File(getTempDir(), patchName)
       val url = URL(patchesUrl, patchName).toString()
       val partIndicator = object : DelegatingProgressIndicator(indicator) {
@@ -56,7 +57,7 @@ object UpdateInstaller {
           super.setFraction((i - 1) * share + fraction / share)
         }
       }
-      HttpRequests.request(url).gzip(false).forceHttps(forceHttps).saveToFile(patchFile, partIndicator)
+      HttpRequests.request(url).gzip(false).saveToFile(patchFile, partIndicator)
       ZipFile(patchFile).use {
         if (it.getEntry(PATCH_FILE_NAME) == null || it.getEntry(UPDATER_ENTRY) == null) {
           throw IOException("Corrupted patch file: ${patchFile.name}")
@@ -69,16 +70,16 @@ object UpdateInstaller {
   }
 
   @JvmStatic
-  fun installPluginUpdates(downloaders: Collection<PluginDownloader>, indicator: ProgressIndicator): Boolean {
+  fun downloadPluginUpdates(downloaders: Collection<PluginDownloader>, indicator: ProgressIndicator): List<PluginDownloader> {
     indicator.text = IdeBundle.message("update.downloading.plugins.progress")
 
     UpdateChecker.saveDisabledToUpdatePlugins()
 
-    val disabledToUpdate = UpdateChecker.disabledToUpdatePlugins
+    val disabledToUpdate = UpdateChecker.disabledToUpdate
     val readyToInstall = mutableListOf<PluginDownloader>()
     for (downloader in downloaders) {
       try {
-        if (downloader.pluginId !in disabledToUpdate && downloader.prepareToInstall(indicator)) {
+        if (downloader.id !in disabledToUpdate && downloader.prepareToInstall(indicator)) {
           readyToInstall += downloader
         }
         indicator.checkCanceled()
@@ -88,22 +89,37 @@ object UpdateInstaller {
         Logger.getInstance(UpdateChecker::class.java).info(e)
       }
     }
+    return readyToInstall
+  }
 
-    var installed = false
+  @JvmStatic
+  fun installDownloadedPluginUpdates(downloaders: Collection<PluginDownloader>, ownerComponent: JComponent?, allowInstallWithoutRestart: Boolean): PluginUpdateResult {
+    val pluginsInstalled = mutableListOf<IdeaPluginDescriptor>()
+    var restartRequired = false
 
-
-    ProgressManager.getInstance().executeNonCancelableSection {
-      for (downloader in readyToInstall) {
-        try {
+    for (downloader in downloaders) {
+      try {
+        if (!allowInstallWithoutRestart || !downloader.tryInstallWithoutRestart(ownerComponent)) {
           downloader.install()
-          installed = true
+          restartRequired = true
         }
-        catch (e: Exception) {
-          Logger.getInstance(UpdateChecker::class.java).info(e)
-        }
+
+        pluginsInstalled.add(downloader.descriptor)
+      }
+      catch (e: Exception) {
+        Logger.getInstance(UpdateChecker::class.java).info(e)
       }
     }
-    return installed
+    return PluginUpdateResult(pluginsInstalled, restartRequired)
+  }
+
+  @JvmStatic
+  fun installPluginUpdates(downloaders: Collection<PluginDownloader>, indicator: ProgressIndicator): Boolean {
+    val downloadedPluginUpdates = downloadPluginUpdates(downloaders, indicator)
+    val result = ProgressManager.getInstance().computeInNonCancelableSection<PluginUpdateResult, RuntimeException> {
+      installDownloadedPluginUpdates(downloadedPluginUpdates, null, false)
+    }
+    return result.pluginsInstalled.isNotEmpty()
   }
 
   @JvmStatic
@@ -139,8 +155,11 @@ object UpdateInstaller {
     val jnaUtilsCopy = jnaUtils.copyTo(File(tempDir, jnaUtils.name), true)
 
     var java = System.getProperty("java.home")
-    if (FileUtil.isAncestor(PathManager.getHomePath(), java, true)) {
+    val jrePath = Paths.get(java)
+    val idePath = Paths.get(PathManager.getHomePath()).toRealPath()
+    if (jrePath.startsWith(idePath)) {
       val javaCopy = File(tempDir, "jre")
+      if (javaCopy.exists()) FileUtil.delete(javaCopy)
       FileUtil.copyDir(File(java), javaCopy)
       java = javaCopy.path
     }
@@ -151,13 +170,13 @@ object UpdateInstaller {
       val launcher = PathManager.findBinFile("launcher.exe")
       val elevator = PathManager.findBinFile("elevator.exe")  // "launcher" depends on "elevator"
       if (launcher != null && elevator != null && launcher.canExecute() && elevator.canExecute()) {
-        args += Restarter.createTempExecutable(launcher).path
-        Restarter.createTempExecutable(elevator)
+        args += launcher.copyTo(File(tempDir, launcher.name), true).path
+        elevator.copyTo(File(tempDir, elevator.name), true)
       }
     }
 
     args += File(java, if (SystemInfo.isWindows) "bin\\java.exe" else "bin/java").path
-    args += "-Xmx900m"
+    args += if (getJdkSuffix().startsWith("-jbr1")) "-Xmx2000m" else "-Xmx900m"
     args += "-cp"
     args += arrayOf(patchFiles.last().path, log4jCopy.path, jnaCopy.path, jnaUtilsCopy.path).joinToString(File.pathSeparator)
 
@@ -186,14 +205,9 @@ object UpdateInstaller {
 
   private fun getTempDir() = File(PathManager.getTempPath(), "patch-update")
 
-  private fun getJdkSuffix(): String {
-    val jreHome = File(PathManager.getHomePath(), if (SystemInfo.isMac) "jdk" else "jre64")
-    if (!jreHome.exists()) return "-no-jbr"
-    val releaseFile = File(jreHome, if (SystemInfo.isMac) "Contents/Home/release" else "release")
-    val version = try {
-      releaseFile.readLines().first { it.startsWith("JAVA_VERSION=") }.let { JavaVersion.parse(it) }.feature
-    }
-    catch (e: Exception) { 0 }
-    return if (version == 11) "-jbr11" else ""
+  private fun getJdkSuffix(): String = when {
+    !SystemInfo.isMac && Files.isDirectory(Paths.get(PathManager.getHomePath(), "jbr-x86")) -> "-jbr11-x86"
+    Files.isDirectory(Paths.get(PathManager.getHomePath(), "jbr")) -> "-jbr11"
+    else -> "-no-jbr"
   }
 }

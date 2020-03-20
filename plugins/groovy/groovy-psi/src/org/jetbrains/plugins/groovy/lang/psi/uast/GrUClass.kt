@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.uast
 
 import com.intellij.psi.*
@@ -9,7 +9,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMe
 import org.jetbrains.uast.*
 
 class GrUClass(val grElement: GrTypeDefinition,
-               parentProvider: () -> UElement?) : UClassTypeSpecific, JvmDeclarationUElement, UAnchorOwner, UDeclarationEx, PsiClass by grElement {
+               parentProvider: () -> UElement?) : UClass, UAnchorOwner, UDeclarationEx, PsiClass by grElement {
 
   override val sourcePsi: GrTypeDefinition = grElement
 
@@ -35,7 +35,7 @@ class GrUClass(val grElement: GrTypeDefinition,
 
   override val uastParent: UElement? by lazy(parentProvider)
 
-  override val annotations: List<UAnnotation> by lazy { grAnnotations(grElement.modifierList, this) }
+  override val uAnnotations: List<UAnnotation> by lazy { grAnnotations(grElement.modifierList, this) }
 
   override fun getSuperClass(): UClass? = super.getSuperClass()
 
@@ -52,7 +52,7 @@ class GrUClass(val grElement: GrTypeDefinition,
 
 
 class GrUMethod(val grElement: GrMethod,
-                parentProvider: () -> UElement?) : UMethodTypeSpecific, JvmDeclarationUElement, UAnchorOwner, UDeclarationEx, PsiMethod by grElement {
+                parentProvider: () -> UElement?) : UMethod, UAnchorOwner, UDeclarationEx, PsiMethod by grElement {
   override val uastParent: UElement? by lazy(parentProvider)
 
   override val sourcePsi: PsiElement = grElement
@@ -64,12 +64,10 @@ class GrUMethod(val grElement: GrMethod,
 
   override val uastParameters: List<UParameter> by lazy { grElement.parameters.map { GrUParameter(it, { this }) } }
 
-  override val isOverride: Boolean by lazy { psi.modifierList.hasAnnotation("java.lang.Override") }
-
   override val uastAnchor: UIdentifier
     get() = UIdentifier(grElement.nameIdentifierGroovy, this)
 
-  override val annotations: List<UAnnotation> by lazy { grAnnotations(grElement.modifierList, this) }
+  override val uAnnotations: List<UAnnotation> by lazy { grAnnotations(grElement.modifierList, this) }
 
   override fun getBody(): PsiCodeBlock? = null
 
@@ -78,7 +76,7 @@ class GrUMethod(val grElement: GrMethod,
 }
 
 class GrUParameter(val grElement: GrParameter,
-                   parentProvider: () -> UElement?) : UParameterEx, JvmDeclarationUElement, UAnchorOwner, PsiParameter by grElement {
+                   parentProvider: () -> UElement?) : UParameterEx, UAnchorOwner, PsiParameter by grElement {
   override val uastParent: UElement? by lazy(parentProvider)
 
   override val sourcePsi: PsiElement = grElement
@@ -88,7 +86,7 @@ class GrUParameter(val grElement: GrParameter,
 
   override val uastInitializer: UExpression? by lazy {
     val initializer = grElement.initializerGroovy ?: return@lazy null
-    getLanguagePlugin().convertElement(initializer, this) as? UExpression
+    UastFacade.findPlugin(initializer)?.convertElement(initializer, this) as? UExpression
   }
 
   override val typeReference: UTypeReferenceExpression? = null //not implemented
@@ -96,7 +94,7 @@ class GrUParameter(val grElement: GrParameter,
   override val uastAnchor: UIdentifier
     get() = UIdentifier(grElement.nameIdentifierGroovy, this)
 
-  override val annotations: List<UAnnotation> by lazy { grAnnotations(grElement.modifierList, this) }
+  override val uAnnotations: List<UAnnotation> by lazy { grAnnotations(grElement.modifierList, this) }
 
   override fun getInitializer(): PsiExpression? = grElement.initializer
 

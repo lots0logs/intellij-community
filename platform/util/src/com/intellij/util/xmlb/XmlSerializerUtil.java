@@ -1,13 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.xmlb;
 
+import com.intellij.serialization.MutableAccessor;
 import com.intellij.util.ReflectionUtil;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-public class XmlSerializerUtil {
+public final class XmlSerializerUtil {
   private XmlSerializerUtil() {
   }
 
@@ -34,23 +34,5 @@ public class XmlSerializerUtil {
   @NotNull
   public static List<MutableAccessor> getAccessors(@NotNull Class<?> aClass) {
     return BeanBinding.getAccessors(aClass);
-  }
-
-  @Nullable
-  public static Object stringToEnum(@NotNull String value, @NotNull Class<? extends Enum<?>> valueClass, boolean isAlwaysIgnoreCase) {
-    Enum<?>[] enumConstants = valueClass.getEnumConstants();
-    if (!isAlwaysIgnoreCase) {
-      for (Object enumConstant : enumConstants) {
-        if (enumConstant.toString().equals(value)) {
-          return enumConstant;
-        }
-      }
-    }
-    for (Object enumConstant : enumConstants) {
-      if (enumConstant.toString().equalsIgnoreCase(value)) {
-        return enumConstant;
-      }
-    }
-    return null;
   }
 }

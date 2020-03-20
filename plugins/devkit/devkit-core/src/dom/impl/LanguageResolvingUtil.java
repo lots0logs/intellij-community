@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2019 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.dom.impl;
 
 import com.intellij.codeInsight.completion.CompletionConfidenceEP;
@@ -43,12 +29,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.devkit.dom.Extension;
 import org.jetbrains.idea.devkit.dom.ExtensionPoint;
+import org.jetbrains.uast.*;
 
 import javax.swing.*;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 class LanguageResolvingUtil {
   private static final String ANY_LANGUAGE_DEFAULT_ID = Language.ANY.getID();
@@ -71,7 +55,7 @@ class LanguageResolvingUtil {
 
         final GlobalSearchScope projectProductionScope = GlobalSearchScopesCore.projectProductionScope(project);
         GlobalSearchScope allScope = projectProductionScope.union(ProjectScope.getLibrariesScope(project));
-        final Collection<PsiClass> allInheritors = ClassInheritorsSearch.search(languageClass, allScope, true).findAll();
+        Collection<PsiClass> allInheritors = new HashSet<>(ClassInheritorsSearch.search(languageClass, allScope, true).findAll());
         return Result.create(allInheritors, PsiModificationTracker.JAVA_STRUCTURE_MODIFICATION_COUNT);
       });
     if (allLanguages.isEmpty()) {
@@ -85,7 +69,7 @@ class LanguageResolvingUtil {
       ContainerUtil.filter(allLanguages, aClass -> PsiSearchScopeUtil.isInScope(projectProductionScope, aClass));
     final List<LanguageDefinition> projectDefinitions = collectProjectLanguages(projectLanguages, libraryDefinitions);
 
-    final List<LanguageDefinition> all = ContainerUtil.newArrayList(libraryDefinitions);
+    final List<LanguageDefinition> all = new ArrayList<>(libraryDefinitions);
     all.addAll(projectDefinitions);
     return all;
   }
@@ -126,7 +110,7 @@ class LanguageResolvingUtil {
           languageId = computeConstantReturnValue(language, "getID");
         }
         if (StringUtil.isEmpty(languageId)) {
-          return Result.create((LanguageDefinition)null, language);
+          return Result.create(null, language);
         }
 
         String displayName = computeConstantReturnValue(language, "getDisplayName");
@@ -148,14 +132,16 @@ class LanguageResolvingUtil {
   }
 
   private static String computeConstantSuperCtorCallParameter(PsiClass languagePsiClass, int index) {
-    if (languagePsiClass instanceof PsiAnonymousClass) {
-      return getStringConstantExpression(((PsiAnonymousClass)languagePsiClass).getArgumentList(), index);
+    UClass languageClass = UastContextKt.toUElement(languagePsiClass, UClass.class);
+    if (languageClass == null) return null;
+    if (languageClass instanceof UAnonymousClass) {
+      return getStringConstantExpression(UastUtils.findContaining(languageClass.getSourcePsi(), UObjectLiteralExpression.class), index);
     }
 
-    PsiMethod defaultConstructor = null;
-    for (PsiMethod constructor : languagePsiClass.getConstructors()) {
-      if (constructor.getParameterList().isEmpty()) {
-        defaultConstructor = constructor;
+    UMethod defaultConstructor = null;
+    for (UMethod method : languageClass.getMethods()) {
+      if (method.isConstructor() && method.getUastParameters().isEmpty()) {
+        defaultConstructor = method;
         break;
       }
     }
@@ -163,41 +149,46 @@ class LanguageResolvingUtil {
       return null;
     }
 
-    final PsiCodeBlock body = defaultConstructor.getBody();
-    if (body == null) {
+    final UExpression body = defaultConstructor.getUastBody();
+    if (!(body instanceof UBlockExpression)) {
       return null;
     }
-    final PsiStatement[] statements = body.getStatements();
-    if (statements.length < 1) {
-      return null;
-    }
+    final List<UExpression> expressions = ((UBlockExpression)body).getExpressions();
 
     // super() must be first
-    PsiStatement statement = statements[0];
-    if (!(statement instanceof PsiExpressionStatement)) {
+    UExpression expression = ContainerUtil.getFirstItem(expressions);
+
+    if (!(expression instanceof UCallExpression)) {
       return null;
     }
-    PsiExpression expression = ((PsiExpressionStatement)statement).getExpression();
-    if (!(expression instanceof PsiMethodCallExpression)) {
+    UCallExpression methodCallExpression = (UCallExpression)expression;
+
+    if (!isSuperConstructorCall(methodCallExpression)) {
       return null;
     }
-    PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)expression;
-    PsiExpressionList expressionList = methodCallExpression.getArgumentList();
-    return getStringConstantExpression(expressionList, index);
+    return getStringConstantExpression(methodCallExpression, index);
+  }
+
+  private static boolean isSuperConstructorCall(@Nullable UCallExpression callExpression) {
+    if (callExpression == null) return false;
+    UastCallKind kind = callExpression.getKind();
+    String name = callExpression.getMethodName();
+
+    // TODO: Simplify once IDEA-229756 fixed
+    return kind == UastCallKind.CONSTRUCTOR_CALL && "<init>".equals(name) // Kotlin way
+           || kind == UastCallKind.METHOD_CALL && "super".equals(name); // Java way
   }
 
   @Nullable
-  private static String getStringConstantExpression(@Nullable PsiExpressionList expressionList, int index) {
-    if (expressionList == null) {
+  private static String getStringConstantExpression(@Nullable UCallExpression callExpression, int index) {
+    if (callExpression == null) {
       return null;
     }
-
-    final PsiExpression[] argumentExpressions = expressionList.getExpressions();
-    if (argumentExpressions.length < index + 1) {
+    UExpression argument = callExpression.getArgumentForParameter(index);
+    if (argument == null) {
       return null;
     }
-
-    return getStringConstantExpression(argumentExpressions[index]);
+    return UastUtils.evaluateString(argument);
   }
 
   @Nullable

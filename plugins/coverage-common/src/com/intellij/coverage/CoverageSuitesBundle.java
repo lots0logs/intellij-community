@@ -1,3 +1,4 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.coverage;
 
 import com.intellij.execution.configurations.ModuleBasedConfiguration;
@@ -130,12 +131,11 @@ public class CoverageSuitesBundle {
     return myEngine.getLineMarkerRenderer(lineNumber, className, lines, coverageByTestApplicable, coverageSuite, newToOldConverter, oldToNewConverter, subCoverageActive);
   }
 
-  public CoverageAnnotator getAnnotator(Project project) {
+  public CoverageAnnotator getAnnotator(@NotNull Project project) {
     return myEngine.getCoverageAnnotator(project);
   }
 
-  @NotNull
-  public CoverageSuite[] getSuites() {
+  public CoverageSuite @NotNull [] getSuites() {
     return mySuites;
   }
 
@@ -188,7 +188,7 @@ public class CoverageSuitesBundle {
         () -> new CachedValueProvider.Result<>(getSearchScopeInner(project), ProjectRootModificationTracker.getInstance(project)), false);
     }
     return myCachedValue.getValue();
-    
+
   }
 
   private GlobalSearchScope getSearchScopeInner(Project project) {

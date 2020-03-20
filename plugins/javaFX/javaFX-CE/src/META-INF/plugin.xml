@@ -2,9 +2,10 @@
   <name>JavaFX</name>
   <id>org.jetbrains.plugins.javaFX</id>
   <vendor>JetBrains</vendor>
+  <category>JVM Frameworks</category>
   <description>
       <![CDATA[
-      This plugin enables <a href="http://www.oracle.com/technetwork/java/javafx/overview/index.html">JavaFX</a> support.
+      Enables <a href="http://www.oracle.com/technetwork/java/javafx/overview/index.html">JavaFX</a> support.
       The following features are available:
         <ul>
         <li>Dedicated file type.</li>

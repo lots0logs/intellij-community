@@ -25,7 +25,7 @@ import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.packaging.artifacts.Artifact;
 import com.intellij.packaging.artifacts.ArtifactManager;
 import com.intellij.packaging.impl.artifacts.ArtifactUtil;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,9 +37,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-/**
- * @author nik
- */
 public class AppEngineUtil {
   @NonNls public static final String APP_ENGINE_WEB_XML_NAME = "appengine-web.xml";
   @NonNls public static final String APP_ENGINE_APPLICATION_XML_NAME = "appengine-application.xml";
@@ -49,16 +46,13 @@ public class AppEngineUtil {
   private AppEngineUtil() {
   }
 
-  public static void setupAppEngineArtifactCombobox(@NotNull Project project, final @NotNull JComboBox comboBox, final boolean withAppEngineFacetOnly) {
-    comboBox.setRenderer(new ListCellRendererWrapper<Artifact>() {
-      @Override
-      public void customize(JList list, Artifact value, int index, boolean selected, boolean hasFocus) {
-        if (value != null) {
-          setIcon(value.getArtifactType().getIcon());
-          setText(value.getName());
-        }
+  public static void setupAppEngineArtifactCombobox(@NotNull Project project, final @NotNull JComboBox<Artifact> comboBox, final boolean withAppEngineFacetOnly) {
+    comboBox.setRenderer(SimpleListCellRenderer.create((label, value, index) -> {
+      if (value != null) {
+        label.setIcon(value.getArtifactType().getIcon());
+        label.setText(value.getName());
       }
-    });
+    }));
 
     comboBox.removeAllItems();
     for (Artifact artifact : collectAppEngineArtifacts(project, withAppEngineFacetOnly)) {

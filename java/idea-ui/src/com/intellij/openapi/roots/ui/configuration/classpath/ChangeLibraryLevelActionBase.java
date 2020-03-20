@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots.ui.configuration.classpath;
 
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.Presentation;
@@ -52,11 +39,8 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * @author nik
- */
 public abstract class ChangeLibraryLevelActionBase extends AnAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.roots.ui.configuration.classpath.ChangeLibraryLevelActionBase");
+  private static final Logger LOG = Logger.getInstance(ChangeLibraryLevelActionBase.class);
   protected final Project myProject;
   protected final String myTargetTableLevel;
   protected final boolean myCopy;
@@ -65,7 +49,7 @@ public abstract class ChangeLibraryLevelActionBase extends AnAction {
     myProject = project;
     myTargetTableLevel = targetTableLevel;
     myCopy = copy;
-    getTemplatePresentation().setText(getActionName() + " to " + targetTableName + "...");
+    getTemplatePresentation().setText(JavaUiBundle.message("action.text.library.0.to.1", getActionName(), targetTableName));
   }
 
   protected abstract LibraryTableModifiableModelProvider getModifiableTableModelProvider();
@@ -114,13 +98,13 @@ public abstract class ChangeLibraryLevelActionBase extends AnAction {
                                     @NotNull final String targetDirPath,
                                     final Map<String, String> copiedFiles) {
     final Ref<Boolean> finished = Ref.create(false);
-    new Task.Modal(myProject, (myCopy ? "Copying" : "Moving") + " Library Files", true) {
+    new Task.Modal(myProject, JavaUiBundle.message("progress.title.0.library.files", myCopy ? "Copying" : "Moving"), true) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
         final File targetDir = new File(FileUtil.toSystemDependentName(targetDirPath));
         for (final File from : filesToProcess) {
           indicator.checkCanceled();
-          final File to = FileUtil.findSequentNonexistentFile(targetDir, FileUtil.getNameWithoutExtension(from),
+          final File to = FileUtil.findSequentNonexistentFile(targetDir, FileUtilRt.getNameWithoutExtension(from.getName()),
                                                               FileUtilRt.getExtension(from.getName()));
           try {
             if (from.isDirectory()) {
@@ -142,8 +126,9 @@ public abstract class ChangeLibraryLevelActionBase extends AnAction {
           }
           catch (IOException e) {
             final String actionName = getActionName();
-            final String message = "Cannot " + actionName.toLowerCase() + " file " + from.getAbsolutePath() + ": " + e.getMessage();
-            Messages.showErrorDialog(ChangeLibraryLevelActionBase.this.myProject, message, "Cannot " + actionName);
+            final String message = "Cannot " + StringUtil.toLowerCase(actionName) + " file " + from.getAbsolutePath() + ": " + e.getMessage();
+            Messages.showErrorDialog(ChangeLibraryLevelActionBase.this.myProject, message, JavaUiBundle.message(
+              "dialog.title.cannot.change.library.0", actionName));
             LOG.info(e);
             return;
           }
@@ -177,8 +162,7 @@ public abstract class ChangeLibraryLevelActionBase extends AnAction {
   public void update(@NotNull AnActionEvent e) {
     final Presentation presentation = e.getPresentation();
     boolean enabled = isEnabled();
-    presentation.setVisible(enabled);
-    presentation.setEnabled(enabled);
+    presentation.setEnabledAndVisible(enabled);
   }
 
   private String getActionName() {

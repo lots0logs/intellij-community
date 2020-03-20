@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui.laf.darcula.ui;
 
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.*;
 import org.intellij.lang.annotations.MagicConstant;
 
@@ -40,7 +27,7 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
   private static final JBValue ARROW_HEIGHT = new JBValue.Float(5);
 
   protected Insets editorMargins() {
-    return isCompact(spinner) ? JBUI.insets(0, 5) : JBUI.insets(1, 5);
+    return isCompact(spinner) ? JBInsets.create(0, 5) : JBInsets.create(1, 5);
   }
 
   protected JButton prevButton;
@@ -120,13 +107,16 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
 
       g2.setColor(getBackground());
       g2.fill(new RoundRectangle2D.Float(bw, bw, r.width - bw * 2, r.height - bw * 2, arc, arc));
-    } finally {
+    }
+    finally {
       g2.dispose();
     }
   }
 
   protected Color getBackground() {
-    return spinner.isEnabled() && spinner.getEditor() != null ? spinner.getEditor().getComponent(0).getBackground() : UIUtil.getPanelBackground();
+    return spinner.isEnabled() && spinner.getEditor() != null
+           ? spinner.getEditor().getComponent(0).getBackground()
+           : UIUtil.getPanelBackground();
   }
 
   @Override
@@ -152,7 +142,8 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
     button.setBorder(JBUI.Borders.empty());
     if (direction == SwingConstants.NORTH) {
       installNextButtonListeners(button);
-    } else {
+    }
+    else {
       installPreviousButtonListeners(button);
     }
     return button;
@@ -185,8 +176,8 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
     int h = spinner.getHeight();
 
     Dimension abSize = nextButton.getPreferredSize();
-    nextButton.setBounds(w - abSize.width, JBUI.scale(1), abSize.width, h / 2);
-    prevButton.setBounds(w - abSize.width, h/2, abSize.width, h - h/2);
+    nextButton.setBounds(w - abSize.width, JBUIScale.scale(1), abSize.width, h / 2);
+    prevButton.setBounds(w - abSize.width, h / 2, abSize.width, h - h / 2);
 
     JComponent editor = spinner.getEditor();
     if (editor != null) {
@@ -211,8 +202,8 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
     Insets i = spinner.getInsets();
     int x = (button.getWidth() - i.right - ARROW_WIDTH.get()) / 2;
     int y = direction == SwingConstants.NORTH ?
-            button.getHeight() - JBUI.scale(2) :
-            JBUI.scale(2);
+            button.getHeight() - JBUIScale.scale(2) :
+            JBUIScale.scale(2);
 
     button.paintTriangle(g, x, y, 0, direction, spinner.isEnabled());
   }
@@ -240,11 +231,11 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
           float lw = LW.getFloat();
           float bw = BW.getFloat();
 
-          g2.setColor(getArrowButtonBackgroundColor(isEnabled, true));
+          g2.setColor(JBUI.CurrentTheme.Arrow.backgroundColor(isEnabled, true));
           g2.fill(getInnerShape(lw, bw));
 
           // Paint side line
-          int h = getHeight() - JBUI.scale(1);
+          int h = getHeight() - JBUIScale.scale(1);
           Rectangle2D sideLine = direction == NORTH ?
                                  new Rectangle2D.Float(0, bw + lw, lw, h - (bw + lw)) :
                                  new Rectangle2D.Float(0, 0, lw, h - (bw + lw));
@@ -254,18 +245,18 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
 
           // Paint arrow
           g2.translate(x, y);
-          g2.setColor(getArrowButtonForegroundColor(isEnabled));
+          g2.setColor(JBUI.CurrentTheme.Arrow.foregroundColor(isEnabled));
           g2.fill(getArrowShape());
-
-        } finally {
+        }
+        finally {
           g2.dispose();
         }
       }
 
       private Shape getInnerShape(float lw, float bw) {
         Path2D shape = new Path2D.Float();
-        int w = getWidth() - JBUI.scale(1);
-        int h = getHeight() - JBUI.scale(1);
+        int w = getWidth() - JBUIScale.scale(1);
+        int h = getHeight() - JBUIScale.scale(1);
         float arc = COMPONENT_ARC.getFloat();
         arc = arc > bw + lw ? arc - bw - lw : 0.0f;
 
@@ -282,12 +273,13 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
           case NORTH:
             shape.moveTo(lw, bw + lw);
             shape.lineTo(w - bw - lw - arc, bw + lw);
-            shape.quadTo(w - bw - lw, bw + lw , w - bw - lw, bw + lw + arc);
+            shape.quadTo(w - bw - lw, bw + lw, w - bw - lw, bw + lw + arc);
             shape.lineTo(w - bw - lw, h);
             shape.lineTo(lw, h);
             shape.closePath();
             break;
-          default: break;
+          default:
+            break;
         }
         return shape;
       }
@@ -311,7 +303,8 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
             arrow.lineTo(aw / 2.0, -ah);
             arrow.closePath();
             break;
-          default: break;
+          default:
+            break;
         }
 
         return arrow;
@@ -320,7 +313,7 @@ public class DarculaSpinnerUI extends BasicSpinnerUI {
       @Override
       public Dimension getPreferredSize() {
         Insets i = spinner.getInsets();
-        int minHeight = isCompact(spinner) ? JBUI.scale(10) : JBUI.scale(12);
+        int minHeight = isCompact(spinner) ? JBUIScale.scale(10) : JBUIScale.scale(12);
         return new Dimension(ARROW_BUTTON_WIDTH.get() + i.left,
                              minHeight + (direction == SwingConstants.NORTH ? i.top : i.bottom));
       }

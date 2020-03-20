@@ -6,11 +6,13 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBox;
+import com.intellij.tasks.TaskBundle;
 import com.intellij.tasks.config.BaseRepositoryEditor;
 import com.intellij.tasks.impl.TaskUiUtil;
 import com.intellij.tasks.trello.model.TrelloBoard;
 import com.intellij.tasks.trello.model.TrelloList;
 import com.intellij.ui.DocumentAdapter;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.util.Consumer;
@@ -31,8 +33,8 @@ import java.util.List;
 public class TrelloRepositoryEditor extends BaseRepositoryEditor<TrelloRepository> {
   private static final Logger LOG = Logger.getInstance(TrelloRepositoryEditor.class);
 
-  private ComboBox myBoardComboBox;
-  private ComboBox myListComboBox;
+  private ComboBox<TrelloBoard> myBoardComboBox;
+  private ComboBox<TrelloList> myListComboBox;
   private JBLabel myListLabel;
   private JBLabel myBoardLabel;
   private JBCheckBox myAllCardsCheckBox;
@@ -95,13 +97,8 @@ public class TrelloRepositoryEditor extends BaseRepositoryEditor<TrelloRepositor
         doApply();
       }
     });
-    myBoardComboBox.setRenderer(new TaskUiUtil.SimpleComboBoxRenderer<TrelloBoard>("Set token first") {
-      @NotNull
-      @Override
-      protected String getDescription(@NotNull TrelloBoard board) {
-        return board.isClosed() ? board.getName() + " (closed)" : board.getName();
-      }
-    });
+    myBoardComboBox.setRenderer(SimpleListCellRenderer.create("Set token first", board ->
+      board.isClosed() ? board.getName() + " (closed)" : board.getName()));
 
     myListComboBox.addItemListener(new ItemListener() {
       @Override
@@ -114,23 +111,19 @@ public class TrelloRepositoryEditor extends BaseRepositoryEditor<TrelloRepositor
         }
       }
     });
-    myListComboBox.setRenderer(new TaskUiUtil.SimpleComboBoxRenderer<TrelloList>("Select board first") {
-      @NotNull
-      @Override
-      protected String getDescription(@NotNull TrelloList list) {
-        String text = list.getName();
-        if (list.isClosed() && list.isMoved()) {
-          text += " (archived,moved)";
-        }
-        else if (list.isMoved()) {
-          text += " (moved)";
-        }
-        else if (list.isClosed()) {
-          text += " (archived)";
-        }
-        return text;
+    myListComboBox.setRenderer(SimpleListCellRenderer.create("Select board first", list -> {
+      String text = list.getName();
+      if (list.isClosed() && list.isMoved()) {
+        text += " (archived,moved)";
       }
-    });
+      else if (list.isMoved()) {
+        text += " (moved)";
+      }
+      else if (list.isClosed()) {
+        text += " (archived)";
+      }
+      return text;
+    }));
 
     installListener(myAllCardsCheckBox);
 
@@ -183,15 +176,15 @@ public class TrelloRepositoryEditor extends BaseRepositoryEditor<TrelloRepositor
   @Nullable
   @Override
   protected JComponent createCustomPanel() {
-    myBoardComboBox = new ComboBox(300);
+    myBoardComboBox = new ComboBox<>(300);
     myBoardLabel = new JBLabel("Board:", SwingConstants.RIGHT);
     myBoardLabel.setLabelFor(myBoardComboBox);
 
-    myListComboBox = new ComboBox(300);
+    myListComboBox = new ComboBox<>(300);
     myListLabel = new JBLabel("List:", SwingConstants.RIGHT);
     myListLabel.setLabelFor(myListComboBox);
 
-    myAllCardsCheckBox = new JBCheckBox("Include cards not assigned to me");
+    myAllCardsCheckBox = new JBCheckBox(TaskBundle.message("checkbox.include.cards.not.assigned.to.me"));
 
     return FormBuilder.createFormBuilder()
       .addLabeledComponent(myBoardLabel, myBoardComboBox)

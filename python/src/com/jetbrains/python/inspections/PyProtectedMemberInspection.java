@@ -77,7 +77,7 @@ public class PyProtectedMemberInspection extends PyInspection {
       final PsiDirectory currentFileDirectory = importSource.getContainingFile().getContainingDirectory();
 
       if (currentFileDirectory != null && PyUtil.isPackage(currentFileDirectory, true, importSource)) {
-        final PyResolveContext resolveContext = PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext);
+        final PyResolveContext resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext);
 
         return StreamEx
           .of(importSource.getReference(resolveContext).multiResolve(false))
@@ -122,7 +122,7 @@ public class PyProtectedMemberInspection extends PyInspection {
           if (resolvedClass != null) {
 
             final String qFixName = resolvedClass.getProperties().containsKey(newName) ?
-                              PyBundle.message("QFIX.use.property") : PyBundle.message("QFIX.add.property");
+                                    PyBundle.message("QFIX.use.property") : PyBundle.message("QFIX.add.property");
             quickFixes.add(new PyAddPropertyForFieldQuickFix(qFixName));
 
             final PyClassType classType = PyUtil.as(myTypeEvalContext.getType(resolvedClass), PyClassType.class);
@@ -160,7 +160,7 @@ public class PyProtectedMemberInspection extends PyInspection {
         }
         final PyType type = myTypeEvalContext.getType(qualifier);
         final String bundleKey = type instanceof PyModuleType ? "INSP.protected.member.$0.access.module" : "INSP.protected.member.$0.access";
-        registerProblem(node, PyBundle.message(bundleKey, name), ProblemHighlightType.GENERIC_ERROR_OR_WARNING,  null, quickFixes.toArray(new LocalQuickFix[quickFixes.size()-1]));
+        registerProblem(node, PyBundle.message(bundleKey, name), ProblemHighlightType.GENERIC_ERROR_OR_WARNING, null, quickFixes.toArray(new LocalQuickFix[quickFixes.size() - 1]));
       }
     }
 
@@ -205,7 +205,7 @@ public class PyProtectedMemberInspection extends PyInspection {
 
     @Nullable
     private Set<String> collectDunderAlls(@NotNull PyReferenceExpression source) {
-      final PyResolveContext resolveContext = PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext);
+      final PyResolveContext resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext);
 
       final List<List<String>> resolvedDunderAlls = StreamEx
         .of(source.getReference(resolveContext).multiResolve(false))
@@ -224,7 +224,7 @@ public class PyProtectedMemberInspection extends PyInspection {
     }
 
     private boolean resolvesToFileSystemItem(@NotNull PyReferenceExpression referenceExpression) {
-      final PyResolveContext resolveContext = PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext);
+      final PyResolveContext resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext);
 
       return ContainerUtil.exists(referenceExpression.getReference(resolveContext).multiResolve(false),
                                   result -> result.getElement() instanceof PsiFileSystemItem);
@@ -235,8 +235,8 @@ public class PyProtectedMemberInspection extends PyInspection {
   @Override
   public JComponent createOptionsPanel() {
     MultipleCheckboxOptionsPanel panel = new MultipleCheckboxOptionsPanel(this);
-    panel.addCheckbox("Ignore test functions", "ignoreTestFunctions");
-    panel.addCheckbox("Ignore annotations", "ignoreAnnotations");
+    panel.addCheckbox(PyBundle.message("INSP.protected.member.ignore.test.functions"), "ignoreTestFunctions");
+    panel.addCheckbox(PyBundle.message("INSP.protected.member.ignore.annotations"), "ignoreAnnotations");
     return panel;
   }
 }

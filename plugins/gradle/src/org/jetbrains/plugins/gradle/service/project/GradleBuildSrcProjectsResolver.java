@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service.project;
 
 import com.intellij.openapi.externalSystem.model.DataNode;
@@ -8,8 +8,9 @@ import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId;
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskNotificationListener;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Function;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.MultiMap;
+import gnu.trove.THashSet;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.model.build.BuildEnvironment;
 import org.jetbrains.annotations.NotNull;
@@ -72,8 +73,8 @@ public class GradleBuildSrcProjectsResolver {
     ProjectData mainBuildProjectData = mainBuildProjectDataNode.getData();
     String projectPath = mainBuildProjectData.getLinkedExternalProjectPath();
 
-    Map<String, String> includedBuildsPaths = ContainerUtil.newHashMap();
-    Map<String, String> buildNames = ContainerUtil.newHashMap();
+    Map<String, String> includedBuildsPaths = new HashMap<>();
+    Map<String, String> buildNames = new HashMap<>();
     buildNames.put(projectPath, mainBuildProjectData.getExternalName());
     DataNode<CompositeBuildData> compositeBuildData = find(mainBuildProjectDataNode, CompositeBuildData.KEY);
     if (compositeBuildData != null) {
@@ -87,7 +88,7 @@ public class GradleBuildSrcProjectsResolver {
     }
 
     MultiMap<String, DataNode<BuildScriptClasspathData>> buildClasspathNodesMap = MultiMap.createSmart();
-    Map<String, ModuleData> includedModulesPaths = ContainerUtil.newHashMap();
+    Map<String, ModuleData> includedModulesPaths = new HashMap<>();
     for (DataNode<ModuleData> moduleDataNode : findAll(mainBuildProjectDataNode, ProjectKeys.MODULE)) {
       String path = moduleDataNode.getData().getLinkedExternalProjectPath();
       includedModulesPaths.put(path, moduleDataNode.getData());
@@ -98,7 +99,7 @@ public class GradleBuildSrcProjectsResolver {
       }
     }
 
-    List<String> jvmOptions = ContainerUtil.newSmartList();
+    List<String> jvmOptions = new SmartList<>();
     // the BuildEnvironment jvm arguments of the main build should be used for the 'buildSrc' import
     // to avoid spawning of the second gradle daemon
     BuildEnvironment mainBuildEnvironment = myResolverContext.getModels().getBuildEnvironment();
@@ -141,7 +142,7 @@ public class GradleBuildSrcProjectsResolver {
 
       final String buildSrcProjectPath = buildPath + "/buildSrc";
       DefaultProjectResolverContext buildSrcResolverCtx =
-        new DefaultProjectResolverContext(mySyncTaskId, buildSrcProjectPath, buildSrcProjectSettings, myListener, false);
+        new DefaultProjectResolverContext(mySyncTaskId, buildSrcProjectPath, buildSrcProjectSettings, myListener, myResolverContext.getPolicy(), false);
       myResolverContext.copyUserDataTo(buildSrcResolverCtx);
       String buildName = buildNames.get(buildPath);
 
@@ -169,6 +170,11 @@ public class GradleBuildSrcProjectsResolver {
       return;
     }
 
+    if (includedModulesPaths.containsKey(projectPath)) {
+      // `buildSrc` has been already included into the main build (prohibited since 6.0, https://docs.gradle.org/current/userguide/upgrading_version_5.html#buildsrc_is_now_reserved_as_a_project_and_subproject_build_name)
+      return;
+    }
+
     if (ArrayUtil.isEmpty(projectPathFile.list((dir, name) -> !name.equals(".gradle") && !name.equals("build")))) {
       return;
     }
@@ -182,11 +188,11 @@ public class GradleBuildSrcProjectsResolver {
     }
 
     final DataNode<ProjectData> buildSrcProjectDataNode = myProjectResolver.getHelper().execute(
-      projectPath, buildSrcResolverCtx.getSettings(), projectConnectionDataNodeFunction);
+      projectPath, buildSrcResolverCtx.getSettings(), mySyncTaskId, myListener, null, projectConnectionDataNodeFunction);
 
     if (buildSrcProjectDataNode == null) return;
 
-    Map<String, DataNode<? extends ModuleData>> buildSrcModules = ContainerUtil.newHashMap();
+    Map<String, DataNode<? extends ModuleData>> buildSrcModules = new HashMap<>();
 
     boolean modulePerSourceSet = buildSrcResolverCtx.isResolveModulePerSourceSet();
     DataNode<? extends ModuleData> buildSrcModuleNode = null;
@@ -230,8 +236,8 @@ public class GradleBuildSrcProjectsResolver {
       }
     }
     if (buildSrcModuleNode != null) {
-      Set<String> buildSrcRuntimeSourcesPaths = ContainerUtil.newHashSet();
-      Set<String> buildSrcRuntimeClassesPaths = ContainerUtil.newHashSet();
+      Set<String> buildSrcRuntimeSourcesPaths = new THashSet<>();
+      Set<String> buildSrcRuntimeClassesPaths = new THashSet<>();
 
       addSourcePaths(buildSrcRuntimeSourcesPaths, buildSrcModuleNode);
 
@@ -257,16 +263,18 @@ public class GradleBuildSrcProjectsResolver {
 
       if (!buildSrcRuntimeSourcesPaths.isEmpty() || !buildSrcRuntimeClassesPaths.isEmpty()) {
         buildClasspathNodes.forEach(classpathNode -> {
-          BuildScriptClasspathData data = classpathNode.getData();
-          List<BuildScriptClasspathData.ClasspathEntry> classpathEntries = ContainerUtil.newArrayList();
-          classpathEntries.addAll(data.getClasspathEntries());
-          classpathEntries.add(new BuildScriptClasspathData.ClasspathEntry(
-            new HashSet<>(buildSrcRuntimeClassesPaths),
-            new HashSet<>(buildSrcRuntimeSourcesPaths),
+          BuildScriptClasspathData copyFrom = classpathNode.getData();
+
+          List<BuildScriptClasspathData.ClasspathEntry> classpathEntries = new ArrayList<>(copyFrom.getClasspathEntries().size() + 1);
+          classpathEntries.addAll(copyFrom.getClasspathEntries());
+          classpathEntries.add(BuildScriptClasspathData.ClasspathEntry.create(
+            new THashSet<>(buildSrcRuntimeClassesPaths),
+            new THashSet<>(buildSrcRuntimeSourcesPaths),
             Collections.emptySet()
           ));
+
           BuildScriptClasspathData buildScriptClasspathData = new BuildScriptClasspathData(GradleConstants.SYSTEM_ID, classpathEntries);
-          buildScriptClasspathData.setGradleHomeDir(data.getGradleHomeDir());
+          buildScriptClasspathData.setGradleHomeDir(copyFrom.getGradleHomeDir());
 
           DataNode<?> parent = classpathNode.getParent();
           assert parent != null;

@@ -48,7 +48,7 @@ public class PopupPositionManager {
   public static void positionPopupInBestPosition(final JBPopup hint,
                                                  @Nullable final Editor editor,
                                                  @Nullable DataContext dataContext,
-                                                 @NotNull Position... relationToExistingPopup) {
+                                                 Position @NotNull ... relationToExistingPopup) {
     final LookupEx lookup = LookupManager.getActiveLookup(editor);
     if (lookup != null && lookup.getCurrentItem() != null && lookup.getComponent().isShowing()) {
       new PositionAdjuster(lookup.getComponent()).adjust(hint, relationToExistingPopup);
@@ -92,7 +92,7 @@ public class PopupPositionManager {
 
     final DataContext dataContext = DataManager.getInstance().getDataContext(focusOwner);
     final JBPopup popup = datakey.getData(dataContext);
-    if (popup != null && popup.isVisible()) {
+    if (popup != null && popup.isVisible() && !popup.isDisposed()) {
       return popup.getContent();
     }
 
@@ -105,7 +105,7 @@ public class PopupPositionManager {
     if (focusOwner == null) return null;
 
     JBPopup popup = PopupUtil.getPopupContainerFor(focusOwner);
-    if (popup != null && popup != hint) {
+    if (popup != null && popup != hint && !popup.isDisposed()) {
       return new PositionAdjuster(popup.getContent());
     }
 

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.action;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -35,7 +21,6 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
@@ -53,9 +38,9 @@ public class IgnoreExternalProjectAction extends ExternalSystemToggleAction {
   private static final Logger LOG = Logger.getInstance(IgnoreExternalProjectAction.class);
 
   public IgnoreExternalProjectAction() {
-    getTemplatePresentation().setText(ExternalSystemBundle.message("action.ignore.external.projects.text", "external", "project"));
+    getTemplatePresentation().setText(ExternalSystemBundle.messagePointer("action.ignore.external.projects.text", "External", 1));
     getTemplatePresentation()
-      .setDescription(ExternalSystemBundle.message("action.ignore.external.projects.description", "external", "project"));
+      .setDescription(ExternalSystemBundle.messagePointer("action.ignore.external.projects.description", "external", 1));
   }
 
   @Override
@@ -102,15 +87,17 @@ public class IgnoreExternalProjectAction extends ExternalSystemToggleAction {
   public boolean isSelected(@NotNull AnActionEvent e) {
     boolean selected = super.isSelected(e);
     ProjectSystemId systemId = getSystemId(e);
-    final String systemIdName = systemId != null ? systemId.getReadableName() : "external";
-    final String pluralizedProjects = StringUtil.pluralize("project", getProjectNodes(e).size());
+    final String systemIdNameText = systemId != null ? systemId.getReadableName() : "External";
+    final String systemIdNameDescription = systemId != null ? systemId.getReadableName() : "external";
+
+    int size = getProjectNodes(e).size();
     if (selected) {
-      setText(e, ExternalSystemBundle.message("action.unignore.external.projects.text", systemIdName, pluralizedProjects));
-      setDescription(e, ExternalSystemBundle.message("action.unignore.external.projects.description", systemIdName, pluralizedProjects));
+      setText(e, ExternalSystemBundle.message("action.unignore.external.projects.text", systemIdNameText, size));
+      setDescription(e, ExternalSystemBundle.message("action.unignore.external.projects.description", systemIdNameDescription, size));
     }
     else {
-      setText(e, ExternalSystemBundle.message("action.ignore.external.projects.text", systemIdName, pluralizedProjects));
-      setDescription(e, ExternalSystemBundle.message("action.ignore.external.projects.description", systemIdName, pluralizedProjects));
+      setText(e, ExternalSystemBundle.message("action.ignore.external.projects.text", systemIdNameText, size));
+      setDescription(e, ExternalSystemBundle.message("action.ignore.external.projects.description", systemIdNameDescription, size));
     }
     return selected;
   }
@@ -128,7 +115,7 @@ public class IgnoreExternalProjectAction extends ExternalSystemToggleAction {
 
   @NotNull
   private static List<ExternalSystemNode<ExternalConfigPathAware>> getProjectNodes(@NotNull AnActionEvent e) {
-    final List<ExternalSystemNode> selectedNodes = ExternalSystemDataKeys.SELECTED_NODES.getData(e.getDataContext());
+    final List<ExternalSystemNode> selectedNodes = e.getData(ExternalSystemDataKeys.SELECTED_NODES);
     if (selectedNodes == null || selectedNodes.isEmpty()) return Collections.emptyList();
 
     return selectedNodes.stream()

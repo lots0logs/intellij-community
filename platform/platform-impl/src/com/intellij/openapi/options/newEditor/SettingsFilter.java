@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.options.newEditor;
 
 import com.intellij.ide.ui.search.ConfigurableHit;
@@ -8,7 +8,6 @@ import com.intellij.openapi.options.ConfigurableGroup;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.options.ex.ConfigurableWrapper;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.ActionCallback;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.DocumentAdapter;
 import com.intellij.ui.LightColors;
@@ -21,16 +20,15 @@ import org.jetbrains.annotations.NotNull;
 import javax.swing.event.DocumentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 import java.util.Set;
 
 public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNode> {
   final OptionsEditorContext myContext = new OptionsEditorContext();
-  final Project myProject;
-
-  boolean myDocumentWasChanged;
+  private final Project myProject;
 
   private final SearchTextField mySearch;
-  private final ConfigurableGroup[] myGroups;
+  private final List<? extends ConfigurableGroup> myGroups;
 
   private final SearchableOptionsRegistrar myRegistrar = SearchableOptionsRegistrar.getInstance();
   private Set<Configurable> myFiltered;
@@ -39,7 +37,7 @@ public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNod
   private boolean myUpdateRejected;
   private Configurable myLastSelected;
 
-  SettingsFilter(Project project, ConfigurableGroup[] groups, SearchTextField search) {
+  SettingsFilter(Project project, List<? extends ConfigurableGroup> groups, SearchTextField search) {
     myProject = project;
     myGroups = groups;
     mySearch = search;
@@ -111,16 +109,16 @@ public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNod
     return "";
   }
 
-  void setHoldingFilter(boolean holding) {
+  private void setHoldingFilter(boolean holding) {
     myContext.setHoldingFilter(holding);
     updateSpotlight(false);
   }
 
-  boolean contains(Configurable configurable) {
+  boolean contains(@NotNull Configurable configurable) {
     return myHits != null && myHits.getNameHits().contains(configurable);
   }
 
-  ActionCallback update(String text, boolean adjustSelection, boolean now) {
+  void update(String text, boolean adjustSelection, boolean now) {
     try {
       myUpdateRejected = true;
       mySearch.setText(text);
@@ -128,12 +126,12 @@ public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNod
     finally {
       myUpdateRejected = false;
     }
-    return update(DocumentEvent.EventType.CHANGE, adjustSelection, now);
+    update(DocumentEvent.EventType.CHANGE, adjustSelection, now);
   }
 
-  private ActionCallback update(@NotNull DocumentEvent.EventType type, boolean adjustSelection, boolean now) {
+  private void update(@NotNull DocumentEvent.EventType type, boolean adjustSelection, boolean now) {
     if (myUpdateRejected) {
-      return ActionCallback.REJECTED;
+      return;
     }
     String text = getFilterText();
     if (text.isEmpty()) {
@@ -152,9 +150,8 @@ public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNod
 
     Configurable current = myContext.getCurrentConfigurable();
 
-    boolean shouldMoveSelection = myHits == null || (
-      !myHits.getNameFullHits().contains(current) &&
-      !myHits.getContentHits().contains(current));
+    boolean shouldMoveSelection = myHits == null || !myHits.getNameFullHits().contains(current) &&
+                                                    !myHits.getContentHits().contains(current);
 
     if (shouldMoveSelection && type != DocumentEvent.EventType.INSERT && (myFiltered == null || myFiltered.contains(current))) {
       shouldMoveSelection = false;
@@ -179,12 +176,10 @@ public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNod
       myLastSelected = current;
     }
     SimpleNode node = !adjustSelection ? null : findNode(candidate);
-    ActionCallback callback = fireUpdate(node, adjustSelection, now);
-    myDocumentWasChanged = true;
-    return callback;
+    fireUpdate(node, adjustSelection, now);
   }
 
-  private static Configurable findConfigurable(Set<Configurable> configurables, Set<Configurable> hits) {
+  private static Configurable findConfigurable(Set<? extends Configurable> configurables, Set<? extends Configurable> hits) {
     Configurable candidate = null;
     for (Configurable configurable : configurables) {
       if (hits != null && hits.contains(configurable)) {
@@ -200,5 +195,13 @@ public abstract class SettingsFilter extends ElementFilter.Active.Impl<SimpleNod
   private static boolean isEmptyParent(Configurable configurable) {
     SearchableConfigurable.Parent parent = ConfigurableWrapper.cast(SearchableConfigurable.Parent.class, configurable);
     return parent != null && !parent.hasOwnContent();
+  }
+
+  void reload() {
+    myLastSelected = null;
+    myFiltered = null;
+    myHits = null;
+    mySearch.setText("");
+    myContext.reload();
   }
 }

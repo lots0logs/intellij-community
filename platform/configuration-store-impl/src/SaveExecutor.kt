@@ -1,12 +1,13 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore
 
-import com.intellij.openapi.application.runUndoTransparentWriteAction
+import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.components.StateStorage
 import com.intellij.openapi.components.impl.stores.SaveSessionAndFile
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.util.SmartList
 import kotlinx.coroutines.withContext
+import org.jetbrains.annotations.ApiStatus
 import java.util.*
 
 internal interface SaveExecutor {
@@ -16,7 +17,8 @@ internal interface SaveExecutor {
   suspend fun save(): SaveResult
 }
 
-internal open class SaveSessionProducerManager : SaveExecutor {
+@ApiStatus.Internal
+open class SaveSessionProducerManager : SaveExecutor {
   private val producers = LinkedHashMap<StateStorage, SaveSessionProducer>()
 
   // actually, all storages for component store shares the same value, but for flexibility and to simplify code, just compute on the fly
@@ -67,8 +69,8 @@ internal open class SaveSessionProducerManager : SaveExecutor {
     }
 
     if (isVfsRequired) {
-      return withContext(storeEdtCoroutineContext) {
-        runUndoTransparentWriteAction(task)
+      return withContext(storeEdtCoroutineDispatcher) {
+        runWriteAction(task)
       }
     }
     else {

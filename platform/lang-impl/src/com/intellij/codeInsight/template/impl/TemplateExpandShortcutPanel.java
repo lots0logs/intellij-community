@@ -6,6 +6,7 @@ import com.intellij.ide.DataManager;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.actionSystem.Shortcut;
+import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.keymap.impl.ui.KeymapPanel;
 import com.intellij.openapi.options.ShowSettingsUtil;
@@ -14,12 +15,12 @@ import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.HyperlinkAdapter;
 import com.intellij.ui.HyperlinkLabel;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import javax.swing.event.HyperlinkEvent;
 import java.awt.*;
 import java.awt.event.ItemEvent;
@@ -28,13 +29,8 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 
 public class TemplateExpandShortcutPanel extends JPanel {
-  private final JComboBox myExpandByCombo;
+  private final JComboBox<String> myExpandByCombo;
   private final HyperlinkLabel myOpenKeymapLabel;
-
-  private static final String SPACE = CodeInsightBundle.message("template.shortcut.space");
-  private static final String TAB = CodeInsightBundle.message("template.shortcut.tab");
-  private static final String ENTER = CodeInsightBundle.message("template.shortcut.enter");
-  private static final String CUSTOM = CodeInsightBundle.message("template.shortcut.custom");
 
   public TemplateExpandShortcutPanel(@NotNull String label) {
     super(new GridBagLayout());
@@ -45,51 +41,37 @@ public class TemplateExpandShortcutPanel extends JPanel {
     add(new JLabel(label), gbConstraints);
 
     gbConstraints.gridx = 1;
-    gbConstraints.insets = new Insets(0, 4, 0, 0);
-    myExpandByCombo = new ComboBox();
+    gbConstraints.insets = JBUI.insetsLeft(4);
+    myExpandByCombo = new ComboBox<>();
     add(myExpandByCombo, gbConstraints);
 
-    myOpenKeymapLabel = new HyperlinkLabel("Change");
+    myOpenKeymapLabel = new HyperlinkLabel(CodeInsightBundle.message("link.change.context"));
     gbConstraints.gridx = 2;
     add(myOpenKeymapLabel, gbConstraints);
 
     gbConstraints.gridx = 3;
     gbConstraints.weightx = 1;
     add(new JPanel(), gbConstraints);
-    setBorder(new EmptyBorder(0, 0, 10, 0));
+    setBorder(JBUI.Borders.emptyBottom(10));
 
     myExpandByCombo.addItemListener(new ItemListener() {
       @Override
       public void itemStateChanged(ItemEvent e) {
-        myOpenKeymapLabel.setVisible(myExpandByCombo.getSelectedItem() == CUSTOM);
+        myOpenKeymapLabel.setVisible(myExpandByCombo.getSelectedItem() == getCustom());
       }
     });
-    for (String s : ContainerUtil.ar(SPACE, TAB, ENTER, CUSTOM)) {
-      //noinspection unchecked
+    for (String s : ContainerUtil.ar(getSpace(), getTab(), getEnter(), getCustom())) {
       myExpandByCombo.addItem(s);
     }
-    //noinspection unchecked
-    myExpandByCombo.setRenderer(new ListCellRendererWrapper() {
-      @Override
-      public void customize(JList list, Object value, int index, boolean selected, boolean hasFocus) {
-        if (value == CUSTOM) {
-          Shortcut[] shortcuts = getCurrentCustomShortcuts();
-          String shortcutText = shortcuts.length == 0 ? "" : KeymapUtil.getShortcutsText(shortcuts);
-          setText(StringUtil.isEmpty(shortcutText) ? "Custom..." : "Custom (" + shortcutText + ")");
-        }
+    myExpandByCombo.setRenderer(SimpleListCellRenderer.create("", value -> {
+      if (value == getCustom()) {
+        Shortcut[] shortcuts = getCurrentCustomShortcuts();
+        String shortcutText = shortcuts.length == 0 ? "" : KeymapUtil.getShortcutsText(shortcuts);
+        return StringUtil.isEmpty(shortcutText) ? ApplicationBundle.message("custom.option") : "Custom (" + shortcutText + ")";
       }
+      return value;
+    }));
 
-      private Shortcut[] getCurrentCustomShortcuts() {
-        Settings allSettings = Settings.KEY.getData(DataManager.getInstance().getDataContext(myOpenKeymapLabel));
-        KeymapPanel keymapPanel = allSettings == null ? null : allSettings.find(KeymapPanel.class);
-        Shortcut[] shortcuts = keymapPanel == null ? null : keymapPanel.getCurrentShortcuts(IdeActions.ACTION_EXPAND_LIVE_TEMPLATE_CUSTOM);
-        if (shortcuts == null) {
-          Shortcut shortcut = ActionManager.getInstance().getKeyboardShortcut(IdeActions.ACTION_EXPAND_LIVE_TEMPLATE_CUSTOM);
-          shortcuts = shortcut == null ? Shortcut.EMPTY_ARRAY : new Shortcut[]{shortcut};
-        }
-        return shortcuts;
-      }
-    });
     addPropertyChangeListener(new PropertyChangeListener() {
       @Override
       public void propertyChange(final PropertyChangeEvent evt) {
@@ -122,22 +104,33 @@ public class TemplateExpandShortcutPanel extends JPanel {
     });
   }
 
+  private Shortcut[] getCurrentCustomShortcuts() {
+    Settings allSettings = Settings.KEY.getData(DataManager.getInstance().getDataContext(myOpenKeymapLabel));
+    KeymapPanel keymapPanel = allSettings == null ? null : allSettings.find(KeymapPanel.class);
+    Shortcut[] shortcuts = keymapPanel == null ? null : keymapPanel.getCurrentShortcuts(IdeActions.ACTION_EXPAND_LIVE_TEMPLATE_CUSTOM);
+    if (shortcuts == null) {
+      Shortcut shortcut = ActionManager.getInstance().getKeyboardShortcut(IdeActions.ACTION_EXPAND_LIVE_TEMPLATE_CUSTOM);
+      shortcuts = shortcut == null ? Shortcut.EMPTY_ARRAY : new Shortcut[]{shortcut};
+    }
+    return shortcuts;
+  }
+
   public String getSelectedString() {
     return (String)myExpandByCombo.getSelectedItem();
   }
 
   public void setSelectedChar(char ch) {
-    myExpandByCombo.setSelectedItem(ch == TemplateSettings.CUSTOM_CHAR ? CUSTOM :
-                                    ch == TemplateSettings.TAB_CHAR ? TAB :
-                                    ch == TemplateSettings.ENTER_CHAR ? ENTER :
-                                    SPACE);
+    myExpandByCombo.setSelectedItem(ch == TemplateSettings.CUSTOM_CHAR ? getCustom() :
+                                    ch == TemplateSettings.TAB_CHAR ? getTab() :
+                                    ch == TemplateSettings.ENTER_CHAR ? getEnter() :
+                                    getSpace());
   }
 
   public char getSelectedChar() {
     Object selectedItem = myExpandByCombo.getSelectedItem();
-    if (TAB.equals(selectedItem)) return TemplateSettings.TAB_CHAR;
-    if (ENTER.equals(selectedItem)) return TemplateSettings.ENTER_CHAR;
-    if (SPACE.equals(selectedItem)) {
+    if (getTab().equals(selectedItem)) return TemplateSettings.TAB_CHAR;
+    if (getEnter().equals(selectedItem)) return TemplateSettings.ENTER_CHAR;
+    if (getSpace().equals(selectedItem)) {
       return TemplateSettings.SPACE_CHAR;
     }
     else {
@@ -145,11 +138,26 @@ public class TemplateExpandShortcutPanel extends JPanel {
     }
   }
 
-  @SuppressWarnings("unchecked")
   private void resizeComboToFitCustomShortcut() {
     myExpandByCombo.setPrototypeDisplayValue(null);
-    myExpandByCombo.setPrototypeDisplayValue(CUSTOM);
+    myExpandByCombo.setPrototypeDisplayValue(getCustom());
     myExpandByCombo.revalidate();
     myExpandByCombo.repaint();
+  }
+
+  private static String getSpace() {
+    return CodeInsightBundle.message("template.shortcut.space");
+  }
+
+  private static String getTab() {
+    return CodeInsightBundle.message("template.shortcut.tab");
+  }
+
+  private static String getEnter() {
+    return CodeInsightBundle.message("template.shortcut.enter");
+  }
+
+  private static String getCustom() {
+    return CodeInsightBundle.message("template.shortcut.custom");
   }
 }

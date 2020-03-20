@@ -4,7 +4,7 @@ package org.jetbrains.jps.javac;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import javax.tools.JavaFileObject;
+import javax.tools.*;
 import java.io.File;
 import java.io.IOException;
 import java.util.Set;
@@ -18,7 +18,7 @@ import java.util.Set;
 public interface FileOperations {
   interface Archive {
     @NotNull
-    Iterable<JavaFileObject> list(String relPath, Set<JavaFileObject.Kind> kinds, boolean recurse) throws IOException;
+    Iterable<JavaFileObject> list(String relPath, Set<? extends JavaFileObject.Kind> kinds, boolean recurse) throws IOException;
 
     void close() throws IOException;
   }
@@ -30,7 +30,7 @@ public interface FileOperations {
   @Nullable
   Archive lookupArchive(File file);
   
-  Archive openArchive(File file, final String contentEncoding) throws IOException;
+  Archive openArchive(File file, final String contentEncoding, final JavaFileManager.Location location) throws IOException;
 
   boolean isFile(File file);
 

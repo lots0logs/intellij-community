@@ -133,9 +133,8 @@ public class TemplateEditorUtil {
     }
 
     @Override
-    @NotNull
-    public TextAttributesKey[] getTokenHighlights(IElementType tokenType) {
-      return tokenType == TemplateTokenType.VARIABLE ? pack(TemplateColors.TEMPLATE_VARIABLE_ATTRIBUTES) : EMPTY;
+    public TextAttributesKey @NotNull [] getTokenHighlights(IElementType tokenType) {
+      return tokenType == TemplateTokenType.VARIABLE ? pack(TemplateColors.TEMPLATE_VARIABLE_ATTRIBUTES) : TextAttributesKey.EMPTY_ARRAY;
     }
   }
 }

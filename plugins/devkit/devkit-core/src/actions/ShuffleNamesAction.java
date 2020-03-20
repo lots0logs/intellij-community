@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.actions;
 
 import com.intellij.openapi.actionSystem.AnAction;
@@ -26,15 +26,15 @@ import java.util.*;
 public class ShuffleNamesAction extends AnAction {
   @Override
   public void update(@NotNull AnActionEvent e) {
-    Editor editor = CommonDataKeys.EDITOR.getData(e.getDataContext());
-    PsiFile file = CommonDataKeys.PSI_FILE.getData(e.getDataContext());
+    Editor editor = e.getData(CommonDataKeys.EDITOR);
+    PsiFile file = e.getData(CommonDataKeys.PSI_FILE);
     e.getPresentation().setEnabled(editor != null && file != null);
   }
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
-    final Editor editor = CommonDataKeys.EDITOR.getData(e.getDataContext());
-    PsiFile file = CommonDataKeys.PSI_FILE.getData(e.getDataContext());
+    final Editor editor = e.getData(CommonDataKeys.EDITOR);
+    PsiFile file = e.getData(CommonDataKeys.PSI_FILE);
     if (editor == null || file == null) return;
     final Project project = file.getProject();
     CommandProcessorEx commandProcessor = (CommandProcessorEx)CommandProcessorEx.getInstance();
@@ -54,7 +54,7 @@ public class ShuffleNamesAction extends AnAction {
     final ArrayList<String> split = new ArrayList<>(100);
     file.acceptChildren(new PsiRecursiveElementWalkingVisitor() {
       @Override
-      public void visitElement(PsiElement element) {
+      public void visitElement(@NotNull PsiElement element) {
         if (element instanceof LeafPsiElement) {
           String type = ((LeafPsiElement)element).getElementType().toString();
           String text = element.getText();
@@ -70,7 +70,7 @@ public class ShuffleNamesAction extends AnAction {
 
           boolean isQuoted = quote.length() > 0;
           boolean isNumber = false;
-          if (isQuoted || type.equals("ID") || type.contains("IDENT") && !"ts".equals(text) ||
+          if (isQuoted || type.equals("ID") || type.equals("word") || type.contains("IDENT") && !"ts".equals(text) ||
               (isNumber = text.matches("[0-9]+"))) {
             String replacement = map.get(text);
             if (replacement == null) {

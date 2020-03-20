@@ -3,6 +3,7 @@ package com.intellij.application.options.codeStyle.excludedFiles;
 
 import com.intellij.formatting.fileSet.FileSetDescriptor;
 import com.intellij.formatting.fileSet.NamedScopeDescriptor;
+import com.intellij.lang.LangBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.search.scope.packageSet.NamedScope;
 import org.jetbrains.annotations.NotNull;
@@ -19,26 +20,26 @@ public class ExcludedFilesScopeDialog extends ExcludedFilesDialogBase {
   public final static int EDIT_SCOPES = NEXT_USER_EXIT_CODE;
 
   private final Action myEditAction;
-  private final List<NamedScope> myAvailableScopes;
+  private final List<? extends NamedScope> myAvailableScopes;
 
   protected ExcludedFilesScopeDialog(@NotNull Project project,
-                                     @NotNull List<NamedScope> availableScopes) {
+                                     @NotNull List<? extends NamedScope> availableScopes) {
     super(project);
     myAvailableScopes = availableScopes;
-    setTitle("Add Scope");
+    setTitle(LangBundle.message("dialog.title.add.scope"));
     myEditAction = new AbstractAction() {
       @Override
       public void actionPerformed(ActionEvent e) {
         close(EDIT_SCOPES);
       }
     };
-    myEditAction.putValue(Action.NAME, "Edit Scopes...");
+    myEditAction.putValue(Action.NAME, LangBundle.message("button.edit.scopes"));
     init();
     fillScopesList(availableScopes);
   }
 
 
-  private void fillScopesList(@NotNull List<NamedScope> availableScopes) {
+  private void fillScopesList(@NotNull List<? extends NamedScope> availableScopes) {
     myScopeListModel = new DefaultComboBoxModel<>();
     for (NamedScope scope : availableScopes) {
       myScopeListModel.addElement(scope.getName());
@@ -69,9 +70,8 @@ public class ExcludedFilesScopeDialog extends ExcludedFilesDialogBase {
     return myForm.getTopPanel();
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
+  protected Action @NotNull [] createActions() {
     return new Action[] {getOKAction(), getCancelAction(), myEditAction};
   }
 

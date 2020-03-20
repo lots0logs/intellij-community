@@ -1,33 +1,32 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore
 
-import com.intellij.openapi.components.PersistentStateComponentWithModificationTracker
-import com.intellij.openapi.components.RoamingType
-import com.intellij.openapi.components.State
-import com.intellij.openapi.components.Storage
+import com.intellij.openapi.components.*
 import com.intellij.openapi.util.ModificationTracker
 import com.intellij.util.ThreeState
 import java.util.concurrent.TimeUnit
 
-internal fun createComponentInfo(component: Any, stateSpec: State?): ComponentInfo {
-  return when (component) {
-    is ModificationTracker -> ComponentWithModificationTrackerInfo(component, stateSpec)
-    is PersistentStateComponentWithModificationTracker<*> -> ComponentWithStateModificationTrackerInfo(component, stateSpec!!)
-    else -> {
-      val componentInfo = ComponentInfoImpl(component, stateSpec)
-      if (stateSpec != null && !stateSpec.storages.isEmpty() && stateSpec.storages.all(::isUseSaveThreshold)) {
-        componentInfo.lastSaved = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()).toInt()
-      }
-      componentInfo
-    }
+internal fun createComponentInfo(component: Any, stateSpec: State?, serviceDescriptor: ServiceDescriptor?): ComponentInfo {
+  val result = when (component) {
+    is PersistentStateComponentWithModificationTracker<*> -> ComponentWithStateModificationTrackerInfo(component, stateSpec, serviceDescriptor?.configurationSchemaKey)
+    is ModificationTracker -> ComponentWithModificationTrackerInfo(component, stateSpec, serviceDescriptor?.configurationSchemaKey)
+    else -> ComponentInfoImpl(component, stateSpec)
   }
+
+  if (stateSpec != null && stateSpec.storages.isNotEmpty() && stateSpec.storages.all { it.deprecated || isUseSaveThreshold(it) }) {
+    result.lastSaved = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis()).toInt()
+  }
+  return result
 }
 
 private fun isUseSaveThreshold(storage: Storage): Boolean {
   return storage.useSaveThreshold != ThreeState.NO && getEffectiveRoamingType(storage.roamingType, storage.path) === RoamingType.DISABLED
 }
 
-internal abstract class ComponentInfo {
+abstract class ComponentInfo {
+  open val configurationSchemaKey: String?
+    get() = null
+
   abstract val component: Any
   abstract val stateSpec: State?
 
@@ -38,7 +37,9 @@ internal abstract class ComponentInfo {
 
   var lastSaved: Int = -1
 
-  open fun updateModificationCount(newCount: Long = currentModificationCount) {
+  var affectedPropertyNames: List<String> = emptyList()
+
+  open fun updateModificationCount(newCount: Long) {
   }
 }
 
@@ -63,7 +64,8 @@ private abstract class ModificationTrackerAwareComponentInfo : ComponentInfo() {
 }
 
 private class ComponentWithStateModificationTrackerInfo(override val component: PersistentStateComponentWithModificationTracker<*>,
-                                                        override val stateSpec: State) : ModificationTrackerAwareComponentInfo() {
+                                                        override val stateSpec: State?,
+                                                        override val configurationSchemaKey: String?) : ModificationTrackerAwareComponentInfo() {
   override val currentModificationCount: Long
     get() = component.stateModificationCount
 
@@ -71,7 +73,8 @@ private class ComponentWithStateModificationTrackerInfo(override val component: 
 }
 
 private class ComponentWithModificationTrackerInfo(override val component: ModificationTracker,
-                                                   override val stateSpec: State?) : ModificationTrackerAwareComponentInfo() {
+                                                   override val stateSpec: State?,
+                                                   override val configurationSchemaKey: String?) : ModificationTrackerAwareComponentInfo() {
   override val currentModificationCount: Long
     get() = component.modificationCount
 

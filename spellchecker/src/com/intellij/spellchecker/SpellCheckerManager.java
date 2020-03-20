@@ -3,6 +3,7 @@ package com.intellij.spellchecker;
 
 import com.google.common.collect.Maps;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
+import com.intellij.ide.SaveAndSyncHandler;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.WriteCommandAction;
@@ -45,7 +46,7 @@ import static com.intellij.openapi.vfs.VfsUtilCore.visitChildrenRecursively;
 import static com.intellij.project.ProjectKt.getProjectStoreDirectory;
 
 public class SpellCheckerManager implements Disposable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.spellchecker.SpellCheckerManager");
+  private static final Logger LOG = Logger.getInstance(SpellCheckerManager.class);
 
   private static final int MAX_METRICS = 1;
   public static final String PROJECT = "project";
@@ -69,9 +70,9 @@ public class SpellCheckerManager implements Disposable {
     return ServiceManager.getService(project, SpellCheckerManager.class);
   }
 
-  public SpellCheckerManager(Project project, SpellCheckerSettings settings) {
+  public SpellCheckerManager(Project project) {
     this.project = project;
-    this.settings = settings;
+    this.settings = SpellCheckerSettings.getInstance(project);
     fullConfigurationReload();
 
     Disposer.register(project, this);
@@ -80,6 +81,9 @@ public class SpellCheckerManager implements Disposable {
     myAppDictionaryPath = getOptionsPath() + File.separator + CACHED_DICTIONARY_FILE;
     myCustomDictFileListener = new CustomDictFileListener(settings);
     LocalFileSystem.getInstance().addVirtualFileListener(myCustomDictFileListener);
+    BundledDictionaryProvider.EP_NAME.addExtensionPointListener(this::fillEngineDictionary, this);
+    RuntimeDictionaryProvider.EP_NAME.addExtensionPointListener(this::fillEngineDictionary, this);
+    CustomDictionaryProvider.EP_NAME.addExtensionPointListener(this::fillEngineDictionary, this);
   }
 
   @SuppressWarnings("unused")  // used in Rider
@@ -88,7 +92,7 @@ public class SpellCheckerManager implements Disposable {
   }
 
   public void fullConfigurationReload() {
-    spellChecker = SpellCheckerFactory.create(project);
+    spellChecker = SpellCheckerFactory.create(project, this);
     fillEngineDictionary();
   }
 
@@ -105,6 +109,20 @@ public class SpellCheckerManager implements Disposable {
         }
       }
     }
+
+    for (RuntimeDictionaryProvider provider : RuntimeDictionaryProvider.EP_NAME.getExtensionList()) {
+      for (Dictionary dictionary : provider.getDictionaries()) {
+        boolean dictionaryShouldBeLoad = settings == null || !settings.getRuntimeDisabledDictionariesNames().contains(dictionary.getName());
+        boolean dictionaryIsLoad = spellChecker.isDictionaryLoad(dictionary.getName());
+        if (dictionaryIsLoad && !dictionaryShouldBeLoad) {
+          spellChecker.removeDictionary(dictionary.getName());
+        }
+        else if (!dictionaryIsLoad && dictionaryShouldBeLoad) {
+          loadRuntimeDictionary(dictionary);
+        }
+      }
+    }
+
     if (settings != null && settings.getCustomDictionariesPaths() != null) {
       final Set<String> disabledDictionaries = settings.getDisabledDictionariesPaths();
       for (String dictionary : settings.getCustomDictionariesPaths()) {
@@ -137,20 +155,18 @@ public class SpellCheckerManager implements Disposable {
     return ContainerUtil.union(myProjectDictionary.getEditableWords(), myAppDictionary.getEditableWords());
   }
 
-
-  /**
-   * @deprecated will be removed in 2018.X, use
-   * {@link SpellCheckerManager#acceptWordAsCorrect(String, Project)} or
-   * {@link ProjectDictionaryState#getProjectDictionary() and {@link CachedDictionaryState#getDictionary()}} instead
-   */
-  @Deprecated
-  public EditableDictionary getUserDictionary() {
-    return new AggregatedDictionary(myProjectDictionary, myAppDictionary);
-  }
-
   private void fillEngineDictionary() {
     spellChecker.reset();
-    // Load bundled dictionaries from corresponding jars
+
+    loadBundledDictionaries();
+    loadRuntimeDictionaries();
+    loadCustomDictionaries();
+
+    // Load custom dictionaries
+    initUserDictionaries();
+  }
+
+  private void loadBundledDictionaries() {
     for (BundledDictionaryProvider provider : BundledDictionaryProvider.EP_NAME.getExtensionList()) {
       for (String dictionary : provider.getBundledDictionaries()) {
         if (settings == null || !settings.getBundledDisabledDictionariesPaths().contains(dictionary)) {
@@ -158,6 +174,19 @@ public class SpellCheckerManager implements Disposable {
         }
       }
     }
+  }
+
+  private void loadRuntimeDictionaries() {
+    for (RuntimeDictionaryProvider provider : RuntimeDictionaryProvider.EP_NAME.getExtensionList()) {
+      for (Dictionary dictionary : provider.getDictionaries()) {
+        if (settings == null || !settings.getRuntimeDisabledDictionariesNames().contains(dictionary.getName())) {
+          loadRuntimeDictionary(dictionary);
+        }
+      }
+    }
+  }
+
+  private void loadCustomDictionaries() {
     if (settings != null && settings.getCustomDictionariesPaths() != null) {
       final Set<String> disabledDictionaries = settings.getDisabledDictionariesPaths();
       for (String dictionary : settings.getCustomDictionariesPaths()) {
@@ -166,11 +195,10 @@ public class SpellCheckerManager implements Disposable {
         }
       }
     }
-    initUserDictionaries();
   }
 
   private void initUserDictionaries() {
-    final CachedDictionaryState cachedDictionaryState = ServiceManager.getService(project, CachedDictionaryState.class);
+    CachedDictionaryState cachedDictionaryState = CachedDictionaryState.getInstance();
     cachedDictionaryState.addCachedDictListener((dict) -> restartInspections());
     if (cachedDictionaryState.getDictionary() == null) {
       cachedDictionaryState.setDictionary(new UserDictionary(CachedDictionaryState.DEFAULT_NAME));
@@ -208,6 +236,10 @@ public class SpellCheckerManager implements Disposable {
     else {
       LOG.warn("Couldn't load dictionary '" + dictionary + "' with loader '" + loaderClass + "'");
     }
+  }
+
+  private void loadRuntimeDictionary(@NotNull Dictionary dictionary) {
+    spellChecker.addDictionary(dictionary);
   }
 
   public boolean hasProblem(@NotNull String word) {
@@ -258,7 +290,7 @@ public class SpellCheckerManager implements Disposable {
   private void fireDictionaryChanged(@NotNull EditableDictionary dictionary) {
     myUserDictionaryListenerEventDispatcher.getMulticaster().dictChanged(dictionary);
     restartInspections();
-    project.save();
+    SaveAndSyncHandler.getInstance().scheduleProjectSave(project);
   }
 
   public void updateUserDictionary(@NotNull Collection<String> words) {
@@ -288,6 +320,15 @@ public class SpellCheckerManager implements Disposable {
     final ArrayList<String> dictionaries = new ArrayList<>();
     for (BundledDictionaryProvider provider : BundledDictionaryProvider.EP_NAME.getExtensionList()) {
       ContainerUtil.addAll(dictionaries, provider.getBundledDictionaries());
+    }
+    return dictionaries;
+  }
+
+  @NotNull
+  public static List<Dictionary> getRuntimeDictionaries() {
+    final ArrayList<Dictionary> dictionaries = new ArrayList<>();
+    for (RuntimeDictionaryProvider provider : RuntimeDictionaryProvider.EP_NAME.getExtensionList()) {
+      ContainerUtil.addAll(dictionaries, provider.getDictionaries());
     }
     return dictionaries;
   }
@@ -466,7 +507,7 @@ public class SpellCheckerManager implements Disposable {
       final String path = toSystemDependentName(file.getPath());
       if (!affectCustomDicts(path)) return;
 
-      visitChildrenRecursively(file, new VirtualFileVisitor() {
+      visitChildrenRecursively(file, new VirtualFileVisitor<Void>() {
         @Override
         public boolean visitFile(@NotNull VirtualFile file) {
           final boolean isDirectory = file.isDirectory();

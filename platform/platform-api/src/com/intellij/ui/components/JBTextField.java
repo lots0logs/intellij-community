@@ -99,6 +99,7 @@ public class JBTextField extends JTextField implements ComponentWithEmptyText, T
 
       Rectangle rect = new Rectangle(getSize());
       JBInsets.removeFrom(rect, getInsets());
+      JBInsets.removeFrom(rect, getMargin());
       ((Graphics2D)g).fill(rect);
 
       g.setColor(getForeground());
@@ -111,17 +112,5 @@ public class JBTextField extends JTextField implements ComponentWithEmptyText, T
     TextUI ui = getUI();
     String text = ui == null ? null : ui.getToolTipText(this, event.getPoint());
     return text != null ? text : getToolTipText();
-  }
-
-  @Override
-  public Dimension getPreferredSize() {
-    Dimension size = super.getPreferredSize();
-    int columns = getColumns();
-    if (columns != 0) {
-      Insets insets = getInsets();
-      Insets margins = getMargin(); // Account for margins
-      size.width = columns * getColumnWidth() + insets.left + margins.left + margins.right + insets.right;
-    }
-    return size;
   }
 }

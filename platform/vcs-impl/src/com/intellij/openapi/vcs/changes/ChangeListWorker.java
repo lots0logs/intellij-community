@@ -30,13 +30,11 @@ import java.io.File;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static java.util.stream.Collectors.toSet;
-
 /** should work under _external_ lock
  * just logic here: do modifications to group of change lists
  */
 public class ChangeListWorker {
-  private final static Logger LOG = Logger.getInstance("#com.intellij.openapi.vcs.changes.ChangeListWorker");
+  private final static Logger LOG = Logger.getInstance(ChangeListWorker.class);
   @NotNull private final Project myProject;
   @NotNull private final DelayedNotificator myDelayedNotificator;
   private final boolean myMainWorker;
@@ -130,7 +128,7 @@ public class ChangeListWorker {
     if (myDefault != null) return;
 
     if (myLists.isEmpty()) {
-      putNewListData(new ListData(null, LocalChangeList.DEFAULT_NAME));
+      putNewListData(new ListData(null, LocalChangeList.getDefaultName()));
     }
 
     myDefault = myLists.iterator().next();
@@ -381,18 +379,6 @@ public class ChangeListWorker {
   public ThreeState haveChangesUnder(@NotNull VirtualFile virtualFile) {
     FilePath dir = VcsUtil.getFilePath(virtualFile);
     return myIdx.haveChangesUnder(dir);
-  }
-
-  @NotNull
-  public Set<Change> getChangesUnder(@NotNull FilePath dirPath) {
-    return myIdx.getChanges().stream().filter(change -> isChangeUnder(dirPath, change)).collect(toSet());
-  }
-
-  private static boolean isChangeUnder(@NotNull FilePath parent, @NotNull Change change) {
-    ContentRevision after = change.getAfterRevision();
-    ContentRevision before = change.getBeforeRevision();
-    return after != null && after.getFile().isUnder(parent, false) ||
-           before != null && before.getFile().isUnder(parent, false);
   }
 
   @Nullable
@@ -973,8 +959,7 @@ public class ChangeListWorker {
       if (revision == null) return true;
       return ReadAction.compute(() -> {
         if (project.isDisposed()) return false;
-        VirtualFile vFile = revision.getFile().getVirtualFile();
-        return vFile != null && ProjectLevelVcsManager.getInstance(project).isIgnored(vFile);
+        return ProjectLevelVcsManager.getInstance(project).isIgnored(revision.getFile());
       });
     }
 
@@ -1051,9 +1036,8 @@ public class ChangeListWorker {
       if (b1 != null && b2 != null) {
         final VcsRevisionNumber rn1 = b1.getRevisionNumber();
         final VcsRevisionNumber rn2 = b2.getRevisionNumber();
-        final boolean isBinary1 = (b1 instanceof BinaryContentRevision);
-        final boolean isBinary2 = (b2 instanceof BinaryContentRevision);
-        return rn1 != VcsRevisionNumber.NULL && rn2 != VcsRevisionNumber.NULL && rn1.compareTo(rn2) == 0 && isBinary1 == isBinary2;
+        return rn1 != VcsRevisionNumber.NULL && rn2 != VcsRevisionNumber.NULL &&
+               b1.getClass() == b2.getClass() && rn1.compareTo(rn2) == 0;
       }
       return b1 == null && b2 == null;
     }

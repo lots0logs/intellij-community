@@ -1,0 +1,24 @@
+SHELL_SCRIPT
+  COMMANDS_LIST
+    GENERIC_COMMAND_DIRECTIVE
+      PsiElement($)('$')
+      SHELL_PARAMETER_EXPANSION
+        PsiElement({)('{')
+        PsiElement(parameter_expansion_body)('A/a/x')
+        PsiElement(})('}')
+  PsiElement(\n)('\n')
+  COMMANDS_LIST
+    GENERIC_COMMAND_DIRECTIVE
+      PsiElement($)('$')
+      SHELL_PARAMETER_EXPANSION
+        PsiElement({)('{')
+        PsiElement(parameter_expansion_body)('A/\n/ ')
+        PsiElement(})('}')
+  PsiElement(\n)('\n')
+  COMMANDS_LIST
+    GENERIC_COMMAND_DIRECTIVE
+      PsiElement($)('$')
+      SHELL_PARAMETER_EXPANSION
+        PsiElement({)('{')
+        PsiElement(parameter_expansion_body)('A//\n/x')
+        PsiElement(})('}')

@@ -1,23 +1,9 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.codeStyle;
 
 import com.intellij.application.options.CodeStyle;
 import com.intellij.ide.actions.ShowSettingsUtilImpl;
-import com.intellij.ide.scratch.ScratchFileType;
+import com.intellij.ide.scratch.ScratchUtil;
 import com.intellij.lang.LanguageFormatting;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationDisplayType;
@@ -41,15 +27,14 @@ import com.intellij.psi.PsiFile;
 import com.intellij.testFramework.LightVirtualFile;
 import com.intellij.ui.ColorUtil;
 import com.intellij.ui.JBColor;
-import com.intellij.util.concurrency.SequentialTaskExecutor;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
 import static com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions;
 import static com.intellij.psi.codeStyle.DetectAndAdjustIndentOptionsTask.getDefaultIndentOptions;
@@ -58,12 +43,9 @@ import static com.intellij.psi.codeStyle.DetectAndAdjustIndentOptionsTask.getDef
  * @author Rustam Vishnyakov
  */
 public class DetectableIndentOptionsProvider extends FileIndentOptionsProvider {
-  private static final ExecutorService BOUNDED_EXECUTOR = SequentialTaskExecutor.createSequentialApplicationPoolExecutor(
-    "DetectableIndentOptionsProvider Pool");
-
   private static final NotificationGroup NOTIFICATION_GROUP =
     new NotificationGroup("Automatic indent detection", NotificationDisplayType.STICKY_BALLOON, true);
-  
+
   private boolean myIsEnabledInTest;
   private final Map<VirtualFile,IndentOptions> myDiscardedOptions = ContainerUtil.createWeakMap();
 
@@ -103,8 +85,7 @@ public class DetectableIndentOptionsProvider extends FileIndentOptionsProvider {
                                                @NotNull Document document,
                                                @NotNull TimeStampedIndentOptions options)
   {
-    DetectAndAdjustIndentOptionsTask task = new DetectAndAdjustIndentOptionsTask(project, document, options, BOUNDED_EXECUTOR);
-    task.scheduleInBackgroundForCommittedDocument();
+    new DetectAndAdjustIndentOptionsTask(project, document, options).scheduleInBackgroundForCommittedDocument();
   }
 
   @Override
@@ -118,10 +99,11 @@ public class DetectableIndentOptionsProvider extends FileIndentOptionsProvider {
   }
 
   private boolean isEnabled(@NotNull CodeStyleSettings settings, @NotNull PsiFile file) {
-    if (!file.isWritable() ||
-        (file instanceof PsiBinaryFile) ||
-        (file instanceof PsiCompiledFile) ||
-        file.getFileType() == ScratchFileType.INSTANCE) {
+    if (!file.isValid() ||
+        !file.isWritable() ||
+        file instanceof PsiBinaryFile ||
+        file instanceof PsiCompiledFile ||
+        ScratchUtil.isScratch(file.getVirtualFile())) {
       return false;
     }
     if (ApplicationManager.getApplication().isUnitTestMode()) {
@@ -215,11 +197,10 @@ public class DetectableIndentOptionsProvider extends FileIndentOptionsProvider {
       super(options);
     }
 
-    @Nullable
     @Override
-    public AnAction[] getActions(@NotNull PsiFile file) {
+    public AnAction @Nullable [] getActions(@NotNull PsiFile file) {
       IndentOptions indentOptions = getIndentOptions();
-      List<AnAction> actions = ContainerUtil.newArrayList();
+      List<AnAction> actions = new ArrayList<>();
       final VirtualFile virtualFile = file.getVirtualFile();
       final Project project = file.getProject();
       final IndentOptions projectOptions = CodeStyle.getSettings(project).getIndentOptions(file.getFileType());

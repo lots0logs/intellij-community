@@ -24,6 +24,7 @@ import com.jetbrains.python.PyNames;
 import com.jetbrains.python.codeInsight.controlflow.ScopeOwner;
 import com.jetbrains.python.psi.*;
 import com.jetbrains.python.psi.impl.PyPsiUtils;
+import com.jetbrains.python.ui.PyUiUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -131,7 +132,7 @@ public class ImportToggleAliasIntention extends PyBaseIntentionAction {
         Application application = ApplicationManager.getApplication();
         if (application != null && !application.isUnitTestMode()) {
           String alias = Messages.showInputDialog(project, PyBundle.message("INTN.alias.for.$0.dialog.title", imported_name),
-                                                  "Add Alias", Messages.getQuestionIcon(), "", new InputValidator() {
+                                                  PyBundle.message("INTN.add.alias.title"), Messages.getQuestionIcon(), "", new InputValidator() {
             @Override
             public boolean checkInput(String inputString) {
               return PyNames.isIdentifier(inputString);
@@ -236,7 +237,7 @@ public class ImportToggleAliasIntention extends PyBaseIntentionAction {
       }
     }
     catch (IncorrectOperationException ignored) {
-      PyUtil.showBalloon(project, PyBundle.message("QFIX.action.failed"), MessageType.WARNING);
+      PyUiUtil.showBalloon(project, PyBundle.message("QFIX.action.failed"), MessageType.WARNING);
     }
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.inspections;
 
 import com.intellij.codeInsight.controlflow.ControlFlow;
@@ -24,27 +24,17 @@ import com.jetbrains.python.codeInsight.dataflow.scope.ScopeVariable;
 import com.jetbrains.python.inspections.quickfix.AddGlobalQuickFix;
 import com.jetbrains.python.psi.*;
 import com.jetbrains.python.psi.impl.PyBuiltinCache;
+import com.jetbrains.python.psi.impl.PyDelStatementNavigator;
 import com.jetbrains.python.psi.impl.PyGlobalStatementNavigator;
 import com.jetbrains.python.psi.resolve.PyResolveUtil;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.Set;
 
-/**
- * @author oleg
- */
 public class PyUnboundLocalVariableInspection extends PyInspection {
   private static final Key<Set<ScopeOwner>> LARGE_FUNCTIONS_KEY = Key.create("PyUnboundLocalVariableInspection.LargeFunctions");
-
-  @Override
-  @NotNull
-  @Nls
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.unbound");
-  }
 
   @Override
   @NotNull
@@ -90,15 +80,16 @@ public class PyUnboundLocalVariableInspection extends PyInspection {
       if (owner == null || largeFunctions.contains(owner)) {
         return;
       }
-      // Ignore references declared in outer scopes
-      if (owner != ScopeUtil.getScopeOwner(node)) {
+      // Check if it is nonlocal to search in appropriate scope later
+      boolean isNonLocal = false;
+      ScopeOwner currentScopeOwner = ScopeUtil.getScopeOwner(node);
+      if (currentScopeOwner != null) {
+        isNonLocal = ControlFlowCache.getScope(currentScopeOwner).isNonlocal(name);
+      }
+      if (owner != currentScopeOwner && !isNonLocal) {
         return;
       }
-      final Scope scope = ControlFlowCache.getScope(owner);
-      // Ignore globals and if scope even doesn't contain such a declaration
-      if (scope.isGlobal(name) || (!scope.containsDeclaration(name))){
-        return;
-      }
+      final Scope scope = ControlFlowCache.getScope(isNonLocal ? currentScopeOwner : owner);
       // Start DFA from the assignment statement in case of augmented assignments
       final PsiElement anchor;
       final PyAugAssignmentStatement augAssignment = PsiTreeUtil.getParentOfType(node, PyAugAssignmentStatement.class);
@@ -129,10 +120,13 @@ public class PyUnboundLocalVariableInspection extends PyInspection {
             return;
           }
         }
-        if (resolvedUnderWithStatement(node, resolved)) {
+        if (PyDelStatementNavigator.getDelStatementByTarget(node) != null) {
           return;
         }
-        if (PyUnreachableCodeInspection.hasAnyInterruptedControlFlowPaths(node)) {
+        if (resolvedUnderWithStatement(node, resolved) || resolvedUnderAssignmentExpressionAndCondition(node, resolved)) {
+          return;
+        }
+        if (PyInspectionsUtil.hasAnyInterruptedControlFlowPaths(node)) {
           return;
         }
         if (owner instanceof PyFile) {
@@ -142,7 +136,13 @@ public class PyUnboundLocalVariableInspection extends PyInspection {
           if (resolved != null && !PyUtil.inSameFile(node, resolved)) {
             return;
           }
-          registerProblem(node, PyBundle.message("INSP.unbound.name.not.defined", name));
+          registerProblem(node, PyBundle.message("INSP.unbound.name.undefined", name));
+        }
+        else if (scope.isGlobal(name)) {
+          registerProblem(node, PyBundle.message("INSP.unbound.name.undefined", name));
+        }
+        else if (isNonLocal) {
+          registerProblem(node, PyBundle.message("INSP.unbound.local.variable", name));
         }
         else {
           registerProblem(node, PyBundle.message("INSP.unbound.local.variable", node.getName()),
@@ -157,6 +157,17 @@ public class PyUnboundLocalVariableInspection extends PyInspection {
       return resolved != null &&
              PyUtil.inSameFile(node, resolved) &&
              PsiTreeUtil.getParentOfType(resolved, PyWithStatement.class, true, ScopeOwner.class) != null;
+    }
+
+    private static boolean resolvedUnderAssignmentExpressionAndCondition(@NotNull PyReferenceExpression node,
+                                                                         @Nullable PsiElement resolved) {
+      return resolved instanceof PyTargetExpression &&
+             PyUtil.inSameFile(node, resolved) &&
+             resolved.getParent() instanceof PyAssignmentExpression &&
+             PsiTreeUtil.getParentOfType(
+               PsiTreeUtil.getParentOfType(resolved.getParent(), PyComprehensionElement.class, true, PyConditionalStatementPart.class),
+               PyConditionalStatementPart.class
+             ) != null;
     }
 
     private static boolean isFirstUnboundRead(@NotNull PyReferenceExpression node, @NotNull ScopeOwner owner) {

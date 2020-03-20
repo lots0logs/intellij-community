@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.io
 
 import com.intellij.openapi.progress.ProcessCanceledException
@@ -10,13 +10,12 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.URLConnection
 import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
 import java.util.regex.Pattern
 
 private const val BLOCK_SIZE = 16 * 1024
 private val CHARSET_PATTERN = Pattern.compile("charset=([^;]+)")
 
-internal object HttpUrlConnectionUtil {
+object HttpUrlConnectionUtil {
   @JvmStatic
   @Throws(IOException::class, ProcessCanceledException::class)
   fun readBytes(inputStream: InputStream, connection: URLConnection, progressIndicator: ProgressIndicator?): BufferExposingByteArrayOutputStream {
@@ -49,6 +48,6 @@ internal object HttpUrlConnectionUtil {
         }
       }
     }
-    return StandardCharsets.UTF_8
+    return Charsets.UTF_8
   }
 }

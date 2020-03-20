@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.intellij.psi.impl.source.tree.JavaElementType.*;
 
-public class JavaFunctionalExpressionIndex extends FileBasedIndexExtension<FunctionalExpressionKey, Map<Integer, FunExprOccurrence>> implements PsiDependentIndex {
+public class JavaFunctionalExpressionIndex extends FileBasedIndexExtension<FunctionalExpressionKey, Map<Integer, FunExprOccurrence>> {
   public static final ID<FunctionalExpressionKey, Map<Integer, FunExprOccurrence>> INDEX_ID = ID.create("java.fun.expression");
   private static final KeyDescriptor<FunctionalExpressionKey> KEY_DESCRIPTOR = new KeyDescriptor<FunctionalExpressionKey>() {
     @Override
@@ -353,13 +353,18 @@ public class JavaFunctionalExpressionIndex extends FileBasedIndexExtension<Funct
 
   @Override
   public int getVersion() {
-    return 3;
+    return 4;
   }
 
   @NotNull
   @Override
   public ID<FunctionalExpressionKey, Map<Integer, FunExprOccurrence>> getName() {
     return INDEX_ID;
+  }
+
+  @Override
+  public boolean hasSnapshotMapping() {
+    return true;
   }
 
   @NotNull
@@ -373,13 +378,12 @@ public class JavaFunctionalExpressionIndex extends FileBasedIndexExtension<Funct
       if (offsets.length == 0) return Collections.emptyMap();
 
       Map<FunctionalExpressionKey, Map<Integer, FunExprOccurrence>> result = new HashMap<>();
-      LighterAST tree = ((FileContentImpl)inputData).getLighterASTForPsiDependentIndex();
+      LighterAST tree = ((PsiDependentFileContent)inputData).getLighterAST();
       FileLocalResolver resolver = new FileLocalResolver(tree);
 
-      for (int offset : offsets) {
-        LighterASTNode leaf = LightTreeUtil.findLeafElementAt(tree, offset);
-        LighterASTNode element = leaf == null ? null : tree.getParent(leaf);
-        if (element == null) continue;
+      LightTreeUtil.processLeavesAtOffsets(offsets, tree, (leaf, offset) -> {
+        LighterASTNode element = tree.getParent(leaf);
+        if (element == null) return;
 
         if (element.getTokenType() == METHOD_REF_EXPRESSION || element.getTokenType() == LAMBDA_EXPRESSION) {
           FunctionalExpressionKey key = new FunctionalExpressionKey(getFunExprParameterCount(tree, element),
@@ -388,7 +392,7 @@ public class JavaFunctionalExpressionIndex extends FileBasedIndexExtension<Funct
           Map<Integer, FunExprOccurrence> map = result.computeIfAbsent(key, __ -> new LinkedHashMap<>());
           map.put(element.getStartOffset(), createOccurrence(element, resolver));
         }
-      }
+      });
 
       return result;
     };

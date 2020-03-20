@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.keymap.impl.ui;
 
 import com.intellij.icons.AllIcons;
@@ -6,6 +6,7 @@ import com.intellij.ide.DataManager;
 import com.intellij.ide.actionMacro.ActionMacro;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManagerCore;
+import com.intellij.ide.ui.customization.ActionUrl;
 import com.intellij.ide.ui.search.SearchUtil;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ActionManagerEx;
@@ -34,32 +35,29 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import java.util.*;
 
 public class ActionsTreeUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.keymap.impl.ui.ActionsTreeUtil");
+  private static final Logger LOG = Logger.getInstance(ActionsTreeUtil.class);
 
-  public static final String MAIN_MENU_TITLE = KeyMapBundle.message("main.menu.action.title");
-  public static final String MAIN_TOOLBAR = KeyMapBundle.message("main.toolbar.title");
-  public static final String EDITOR_POPUP = KeyMapBundle.message("editor.popup.menu.title");
-
-  public static final String EDITOR_TAB_POPUP = KeyMapBundle.message("editor.tab.popup.menu.title");
-  public static final String FAVORITES_POPUP = KeyMapBundle.message("favorites.popup.title");
-  public static final String PROJECT_VIEW_POPUP = KeyMapBundle.message("project.view.popup.menu.title");
-  public static final String COMMANDER_POPUP = KeyMapBundle.message("commender.view.popup.menu.title");
-  public static final String J2EE_POPUP = KeyMapBundle.message("j2ee.view.popup.menu.title");
+  /**
+   * @deprecated Use {@link #getMainMenuTitle()} instead
+   */
+  @Deprecated
+  public static final String MAIN_MENU_TITLE = "Main menu";
 
   @NonNls
   private static final String EDITOR_PREFIX = "Editor";
-  @NonNls private static final String TOOL_ACTION_PREFIX = "Tool_";
 
   private ActionsTreeUtil() {
   }
 
   public static Map<String, String> createPluginActionsMap() {
-    Set<PluginId> visited = ContainerUtil.newHashSet();
-    Map<String, String> result = ContainerUtil.newHashMap();
+    Set<PluginId> visited = new HashSet<>();
+    Map<String, String> result = new HashMap<>();
     for (IdeaPluginDescriptor descriptor : PluginManagerCore.getPlugins()) {
       PluginId id = descriptor.getPluginId();
       visited.add(id);
-      if (PluginManagerCore.CORE_PLUGIN_ID.equals(id.getIdString())) continue;
+      if (PluginManagerCore.CORE_ID == id) {
+        continue;
+      }
       for (String actionId : ActionManagerEx.getInstanceEx().getPluginActions(id)) {
         result.put(actionId, descriptor.getName());
       }
@@ -131,7 +129,7 @@ public class ActionsTreeUtil {
   }
 
   private static Group createMainMenuGroup(Condition<? super AnAction> filtered) {
-    Group group = new Group(MAIN_MENU_TITLE, IdeActions.GROUP_MAIN_MENU, AllIcons.Nodes.KeymapMainMenu);
+    Group group = new Group(getMainMenuTitle(), IdeActions.GROUP_MAIN_MENU, AllIcons.Nodes.KeymapMainMenu);
     ActionGroup mainMenuGroup = (ActionGroup)ActionManager.getInstance().getActionOrStub(IdeActions.GROUP_MAIN_MENU);
     fillGroupIgnorePopupFlag(mainMenuGroup, group, filtered);
     return group;
@@ -246,7 +244,6 @@ public class ActionsTreeUtil {
       else {
         String id = action instanceof ActionStub ? ((ActionStub)action).getId() : actionManager.getId(action);
         if (id != null) {
-          if (id.startsWith(TOOL_ACTION_PREFIX)) continue;
           if (filtered == null || filtered.value(action)) {
             group.addActionId(id);
           }
@@ -254,6 +251,63 @@ public class ActionsTreeUtil {
       }
     }
     if (normalizeSeparators) group.normalizeSeparators();
+    return group;
+  }
+
+  @NotNull
+  public static Group createCorrectedGroup(@NotNull ActionGroup actionGroup,
+                                           @NotNull String groupName,
+                                           @NotNull List<String> path,
+                                           @NotNull List<ActionUrl> actionUrls) {
+    path.add(groupName);
+
+    ActionManager actionManager = ActionManager.getInstance();
+    Group group = new Group(groupName, actionManager.getId(actionGroup), null);
+    List<AnAction> children = ContainerUtil.newArrayList(getActions(actionGroup));
+
+    for (ActionUrl actionUrl : actionUrls) {
+      if (path.equals(actionUrl.getGroupPath())) {
+        AnAction componentAction = actionUrl.getComponentAction();
+        if (componentAction != null) {
+          if (actionUrl.getActionType() == ActionUrl.ADDED) {
+            if (children.size() > actionUrl.getAbsolutePosition()) {
+              children.add(actionUrl.getAbsolutePosition(), componentAction);
+            }
+            else {
+              children.add(componentAction);
+            }
+          }
+          else if (actionUrl.getActionType() == ActionUrl.DELETED && children.size() > actionUrl.getAbsolutePosition()) {
+            AnAction anAction = children.get(actionUrl.getAbsolutePosition());
+            if (anAction.getTemplatePresentation().getText() == null
+                ? (componentAction.getTemplatePresentation().getText() != null &&
+                   componentAction.getTemplatePresentation().getText().length() > 0)
+                : !anAction.getTemplatePresentation().getText().equals(componentAction.getTemplatePresentation().getText())) {
+              continue;
+            }
+            children.remove(actionUrl.getAbsolutePosition());
+          }
+        }
+      }
+    }
+
+    for (AnAction action : children) {
+      if (action instanceof ActionGroup) {
+        group.addGroup(createCorrectedGroup((ActionGroup)action, getName(action), path, actionUrls));
+      }
+      else if (action instanceof Separator) {
+        group.addSeparator();
+      }
+      else {
+        String id = action instanceof ActionStub ? ((ActionStub)action).getId() : actionManager.getId(action);
+        if (id != null) {
+          group.addActionId(id);
+        }
+      }
+    }
+
+    path.remove(path.size() - 1);
+
     return group;
   }
 
@@ -490,7 +544,7 @@ public class ActionsTreeUtil {
       if (action == null) return false;
       action = tryUnstubAction(action);
 
-      final String insensitiveFilter = filter.toLowerCase();
+      final String insensitiveFilter = StringUtil.toLowerCase(filter);
       ArrayList<String> options = new ArrayList<>();
       options.add(action.getTemplatePresentation().getText());
       options.add(action.getTemplatePresentation().getDescription());
@@ -502,7 +556,7 @@ public class ActionsTreeUtil {
 
       for (String text : options) {
         if (text != null) {
-          final String lowerText = text.toLowerCase();
+          final String lowerText = StringUtil.toLowerCase(text);
 
           if (SearchUtil.isComponentHighlighted(lowerText, insensitiveFilter, force, null) || lowerText.contains(insensitiveFilter)) {
             return true;
@@ -516,15 +570,19 @@ public class ActionsTreeUtil {
   public static Condition<AnAction> isActionFiltered(final ActionManager actionManager,
                                                      final Keymap keymap,
                                                      final Shortcut shortcut) {
+    return isActionFiltered(actionManager, keymap, sc -> sc != null && sc.startsWith(shortcut));
+  }
+
+  public static Condition<AnAction> isActionFiltered(final ActionManager actionManager,
+                                                     final Keymap keymap,
+                                                     final Condition<? super Shortcut> predicat) {
     return action -> {
-      if (shortcut == null) return true;
       if (action == null) return false;
       final Shortcut[] actionShortcuts =
         keymap.getShortcuts(action instanceof ActionStub ? ((ActionStub)action).getId() : actionManager.getId(action));
       for (Shortcut actionShortcut : actionShortcuts) {
-        if (actionShortcut != null && actionShortcut.startsWith(shortcut)) {
+        if (predicat.value(actionShortcut))
           return true;
-        }
       }
       return false;
     };
@@ -571,7 +629,7 @@ public class ActionsTreeUtil {
     }
   }
 
-  public static AnAction[] getActions(String actionGroup) {
+  public static AnAction[] getActions(@NonNls String actionGroup) {
     return getActions((ActionGroup)ActionManager.getInstance().getActionOrStub(actionGroup));
   }
 
@@ -588,5 +646,53 @@ public class ActionsTreeUtil {
       if (newAction != null) return newAction;
     }
     return action;
+  }
+
+  public static String getMainMenuTitle() {
+    return KeyMapBundle.message("main.menu.action.title");
+  }
+
+  public static String getMainToolbar() {
+    return KeyMapBundle.message("main.toolbar.title");
+  }
+
+  public static String getEditorPopup() {
+    return KeyMapBundle.message("editor.popup.menu.title");
+  }
+
+  public static String getEditorGutterPopupMenu() {
+    return KeyMapBundle.message("editor.gutter.popup.menu");
+  }
+
+  public static String getScopeViewPopupMenu() {
+    return KeyMapBundle.message("scope.view.popup.menu");
+  }
+
+  public static String getNavigationBarPopupMenu() {
+    return KeyMapBundle.message("navigation.bar.popup.menu");
+  }
+
+  public static String getNavigationBarToolbar() {
+    return KeyMapBundle.message("navigation.bar.toolbar");
+  }
+
+  public static String getEditorTabPopup() {
+    return KeyMapBundle.message("editor.tab.popup.menu.title");
+  }
+
+  public static String getFavoritesPopup() {
+    return KeyMapBundle.message("favorites.popup.title");
+  }
+
+  public static String getProjectViewPopup() {
+    return KeyMapBundle.message("project.view.popup.menu.title");
+  }
+
+  public static String getCommanderPopup() {
+    return KeyMapBundle.message("commender.view.popup.menu.title");
+  }
+
+  public static String getJ2EEPopup() {
+    return KeyMapBundle.message("j2ee.view.popup.menu.title");
   }
 }

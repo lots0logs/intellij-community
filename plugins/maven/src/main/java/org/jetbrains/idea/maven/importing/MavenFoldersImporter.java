@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.importing;
 
 import com.intellij.ide.util.projectWizard.importSources.JavaModuleSourceRoot;
@@ -31,8 +17,7 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.containers.LinkedMultiMap;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.util.containers.NotNullList;
@@ -69,7 +54,8 @@ public class MavenFoldersImporter {
         MavenProject mavenProject = manager.findProject(each);
         if (mavenProject == null) continue;
 
-        MavenRootModelAdapter a = new MavenRootModelAdapter(mavenProject, each, new IdeModifiableModelsProviderImpl(project));
+        MavenRootModelAdapter a = new MavenRootModelAdapter(
+          new MavenRootModelAdapterLegacyImpl(mavenProject, each, new IdeModifiableModelsProviderImpl(project)));
         new MavenFoldersImporter(mavenProject, settings, a).config(updateTargetFoldersOnly);
 
         ModifiableRootModel model = a.getRootModel();
@@ -119,40 +105,61 @@ public class MavenFoldersImporter {
   }
 
   private void configSourceFolders() {
+    Map<String, JpsModuleSourceRootType<?>> sourceFolders = getSourceFolders(myMavenProject);
+
+    sourceFolders.forEach((p, t) -> myModel.addSourceFolder(p, t));
+  }
+
+  private static boolean alreadyAdded(String canonicalPath, Map<String, ?> addedPaths) {
+    for (String existing : addedPaths.keySet()) {
+      if (VfsUtilCore.isEqualOrAncestor(existing, canonicalPath)
+          || VfsUtilCore.isEqualOrAncestor(canonicalPath, existing)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @NotNull
+  public static Map<String, JpsModuleSourceRootType<?>> getSourceFolders(MavenProject mavenProject) {
     final MultiMap<JpsModuleSourceRootType<?>, String> roots = new LinkedMultiMap<>();
 
-    roots.putValues(JavaSourceRootType.SOURCE, myMavenProject.getSources());
-    roots.putValues(JavaSourceRootType.TEST_SOURCE, myMavenProject.getTestSources());
+    roots.putValues(JavaSourceRootType.SOURCE, mavenProject.getSources());
+    roots.putValues(JavaSourceRootType.TEST_SOURCE, mavenProject.getTestSources());
 
-    for (MavenImporter each : MavenImporter.getSuitableImporters(myMavenProject)) {
-      each.collectSourceRoots(myMavenProject, (s, type) -> roots.putValue(type, s));
+    for (MavenImporter each : MavenImporter.getSuitableImporters(mavenProject)) {
+      each.collectSourceRoots(mavenProject, (s, type) -> roots.putValue(type, s));
     }
 
-    for (MavenResource each : myMavenProject.getResources()) {
+    for (MavenResource each : mavenProject.getResources()) {
       roots.putValue(JavaResourceRootType.RESOURCE, each.getDirectory());
     }
-    for (MavenResource each : myMavenProject.getTestResources()) {
+    for (MavenResource each : mavenProject.getTestResources()) {
       roots.putValue(JavaResourceRootType.TEST_RESOURCE, each.getDirectory());
     }
 
-    addBuilderHelperPaths("add-source", roots.getModifiable(JavaSourceRootType.SOURCE));
-    addBuilderHelperPaths("add-test-source", roots.getModifiable(JavaSourceRootType.TEST_SOURCE));
+    addBuilderHelperPaths(mavenProject, "add-source", roots.getModifiable(JavaSourceRootType.SOURCE));
+    addBuilderHelperPaths(mavenProject, "add-test-source", roots.getModifiable(JavaSourceRootType.TEST_SOURCE));
 
-    addBuilderHelperResourcesPaths("add-resource", roots.getModifiable(JavaResourceRootType.RESOURCE));
-    addBuilderHelperResourcesPaths("add-test-resource", roots.getModifiable(JavaResourceRootType.TEST_RESOURCE));
+    addBuilderHelperResourcesPaths(mavenProject, "add-resource", roots.getModifiable(JavaResourceRootType.RESOURCE));
+    addBuilderHelperResourcesPaths(mavenProject, "add-test-resource", roots.getModifiable(JavaResourceRootType.TEST_RESOURCE));
 
-    List<String> addedPaths = new ArrayList<>();
+    Map<String, JpsModuleSourceRootType<?>> addedPaths = new LinkedHashMap<>();
     for (JpsModuleSourceRootType<?> type : roots.keySet()) {
       for (String path : roots.get(type)) {
         if (path != null) {
-          addSourceFolderIfNotOverlap(path, type, addedPaths);
+          String canonicalPath = MavenUtil.toPath(mavenProject, path).getPath();
+          if (!alreadyAdded(canonicalPath, addedPaths)) {
+            addedPaths.put(canonicalPath, type);
+          }
         }
       }
     }
+    return addedPaths;
   }
 
-  private void addBuilderHelperPaths(String goal, Collection<String> folders) {
-    final MavenPlugin plugin = myMavenProject.findPlugin("org.codehaus.mojo", "build-helper-maven-plugin");
+  private static void addBuilderHelperPaths(MavenProject mavenProject, String goal, Collection<String> folders) {
+    final MavenPlugin plugin = mavenProject.findPlugin("org.codehaus.mojo", "build-helper-maven-plugin");
     if (plugin != null) {
       for (MavenPlugin.Execution execution : plugin.getExecutions()) {
         if (execution.getGoals().contains(goal)) {
@@ -170,8 +177,8 @@ public class MavenFoldersImporter {
     }
   }
 
-  private void addBuilderHelperResourcesPaths(String goal, Collection<String> folders) {
-    final MavenPlugin plugin = myMavenProject.findPlugin("org.codehaus.mojo", "build-helper-maven-plugin");
+  private static void addBuilderHelperResourcesPaths(MavenProject mavenProject, String goal, Collection<String> folders) {
+    final MavenPlugin plugin = mavenProject.findPlugin("org.codehaus.mojo", "build-helper-maven-plugin");
     if (plugin != null) {
       for (MavenPlugin.Execution execution : plugin.getExecutions()) {
         if (execution.getGoals().contains(goal)) {
@@ -273,7 +280,7 @@ public class MavenFoldersImporter {
       }
     }
 
-    Set<String> topLevelSourceFolderUrls = ContainerUtil.newHashSet();
+    Set<String> topLevelSourceFolderUrls = new HashSet<>();
     for (String sourceRoot : sourceFoldersMap.keySet()) {
       if (topLevelSourceFolderUrls.stream().noneMatch(root -> FileUtil.isAncestor(root, sourceRoot, false))) {
         topLevelSourceFolderUrls.add(sourceRoot);
@@ -403,6 +410,6 @@ public class MavenFoldersImporter {
 
   private static File[] getChildren(File dir) {
     File[] result = dir.listFiles();
-    return result == null ? ArrayUtil.EMPTY_FILE_ARRAY : result;
+    return result == null ? ArrayUtilRt.EMPTY_FILE_ARRAY : result;
   }
 }

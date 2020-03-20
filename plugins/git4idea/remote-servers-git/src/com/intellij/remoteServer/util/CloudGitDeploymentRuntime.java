@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.remoteServer.util;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -17,12 +17,13 @@ import com.intellij.openapi.vcs.changes.ui.CommitChangeListDialog;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.remoteServer.CloudBundle;
 import com.intellij.remoteServer.agent.util.CloudAgentLoggingHandler;
 import com.intellij.remoteServer.agent.util.CloudGitApplication;
 import com.intellij.remoteServer.configuration.deployment.DeploymentSource;
 import com.intellij.remoteServer.runtime.deployment.DeploymentLogManager;
 import com.intellij.remoteServer.runtime.deployment.DeploymentTask;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.concurrency.Semaphore;
 import git4idea.GitUtil;
 import git4idea.actions.GitInit;
@@ -46,25 +47,23 @@ import java.util.List;
  * @author michael.golubev
  */
 public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
-
   private static final Logger LOG = Logger.getInstance(CloudGitDeploymentRuntime.class);
 
   private static final String COMMIT_MESSAGE = "Deploy";
 
   private static final CommitSession NO_COMMIT = new CommitSession() {
     @Override
-    public void execute(Collection<Change> changes, String commitMessage) {
-
+    public void execute(@NotNull Collection<Change> changes, @Nullable String commitMessage) {
     }
   };
 
   private static final List<CommitExecutor> ourCommitExecutors = Arrays.asList(
     new CommitExecutor() {
-
+      @NotNull
       @Nls
       @Override
       public String getActionText() {
-        return "Commit and Push";
+        return CloudBundle.message("action.text.commit.and.push");
       }
 
       @Override
@@ -74,21 +73,22 @@ public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
 
       @NotNull
       @Override
-      public CommitSession createCommitSession() {
+      public CommitSession createCommitSession(@NotNull CommitContext commitContext) {
         return CommitSession.VCS_COMMIT;
       }
     },
     new CommitExecutorBase() {
 
+      @NotNull
       @Nls
       @Override
       public String getActionText() {
-        return "Push without Commit";
+        return CloudBundle.message("action.text.push.without.commit");
       }
 
       @NotNull
       @Override
-      public CommitSession createCommitSession() {
+      public CommitSession createCommitSession(@NotNull CommitContext commitContext) {
         return NO_COMMIT;
       }
 
@@ -195,7 +195,12 @@ public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
                                                                                   }
 
                                                                                   @Override
-                                                                                  public void onFailure() {
+                                                                                  public void onCancel() {
+                                                                                    commitSemaphore.up();
+                                                                                  }
+
+                                                                                  @Override
+                                                                                  public void onFailure(@NotNull List<VcsException> errors) {
                                                                                     commitSemaphore.up();
                                                                                   }
                                                                                 },
@@ -312,11 +317,11 @@ public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
   }
 
   protected void addGitRemote(CloudGitApplication application) throws ServerRuntimeException {
-    doGitRemote(getRemoteName(), application, "add", CloudBundle.getText("failed.add.remote", getRemoteName()));
+    doGitRemote(getRemoteName(), application, "add", CloudBundle.message("failed.add.remote", getRemoteName()));
   }
 
   protected void resetGitRemote(CloudGitApplication application) throws ServerRuntimeException {
-    doGitRemote(getRemoteName(), application, "set-url", CloudBundle.getText("failed.reset.remote", getRemoteName()));
+    doGitRemote(getRemoteName(), application, "set-url", CloudBundle.message("failed.reset.remote", getRemoteName()));
   }
 
   protected void doGitRemote(String remoteName,
@@ -352,7 +357,6 @@ public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
   protected void refreshApplicationRepository() {
     Project project = getProject();
     GitInit.refreshAndConfigureVcsMappings(project, getRepositoryRoot(), getRepositoryRootFile().getAbsolutePath());
-    GitUtil.proposeUpdateGitignore(project, getRepositoryRoot());
   }
 
   protected void pushApplication(@NotNull CloudGitApplication application) throws ServerRuntimeException {
@@ -383,7 +387,7 @@ public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
     fetchHandler.setSilent(false);
     fetchHandler.addParameters(getRemoteName());
     fetchHandler.addLineListener(createGitLineHandlerListener());
-    performRemoteGitTask(fetchHandler, CloudBundle.getText("fetching.application", getCloudName()));
+    performRemoteGitTask(fetchHandler, CloudBundle.message("fetching.application", getCloudName()));
 
     repository.update();
   }
@@ -472,7 +476,7 @@ public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
       repositoryUrls.addAll(remote.getUrls());
     }
 
-    return getAgentTaskExecutor().execute(() -> getDeployment().findApplication4Repository(ArrayUtil.toStringArray(repositoryUrls)));
+    return getAgentTaskExecutor().execute(() -> getDeployment().findApplication4Repository(ArrayUtilRt.toStringArray(repositoryUrls)));
   }
 
   public class CloneJob {
@@ -527,7 +531,7 @@ public class CloudGitDeploymentRuntime extends CloudDeploymentRuntime {
       handler.addParameters("-o");
       handler.addParameters(getRemoteName());
       handler.addLineListener(createGitLineHandlerListener());
-      performRemoteGitTask(handler, CloudBundle.getText("cloning.existing.application", getCloudName()));
+      performRemoteGitTask(handler, CloudBundle.message("cloning.existing.application", getCloudName()));
     }
   }
 }

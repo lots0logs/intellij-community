@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.maddyhome.idea.copyright.ui;
 
+import com.intellij.copyright.CopyrightBundle;
 import com.intellij.copyright.CopyrightManager;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.util.scopeChooser.PackageSetChooserCombo;
@@ -17,7 +18,7 @@ import com.intellij.psi.search.scope.packageSet.NamedScope;
 import com.intellij.psi.search.scope.packageSet.NamedScopesHolder;
 import com.intellij.ui.HyperlinkLabel;
 import com.intellij.ui.JBColor;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.ToolbarDecorator;
 import com.intellij.ui.components.editors.JBComboBoxTableCellEditorComponent;
 import com.intellij.ui.table.TableView;
@@ -43,7 +44,7 @@ public class ProjectSettingsPanel {
 
   private final TableView<ScopeSetting> myScopeMappingTable;
   private final ListTableModel<ScopeSetting> myScopeMappingModel;
-  private final JComboBox myProfilesComboBox = new ComboBox();
+  private final JComboBox<CopyrightProfile> myProfilesComboBox = new ComboBox<>();
 
   private final HyperlinkLabel myScopesLink = new HyperlinkLabel();
 
@@ -74,20 +75,10 @@ public class ProjectSettingsPanel {
     myScopeMappingTable = new TableView<>(myScopeMappingModel);
 
     reloadCopyrightProfiles();
-    myProfilesComboBox.setRenderer(new ListCellRendererWrapper<CopyrightProfile>() {
-      @Override
-      public void customize(JList list, CopyrightProfile value, int index, boolean selected, boolean hasFocus) {
-        if (value == null) {
-          setText("No copyright");
-        }
-        else {
-          setText(value.getName());
-        }
-      }
-    });
+    myProfilesComboBox.setRenderer(SimpleListCellRenderer.create(CopyrightBundle.message("copyright.no.text"), CopyrightProfile::getName));
 
     myScopesLink.setVisible(!myProject.isDefault());
-    myScopesLink.setHyperlinkText("Select Scopes to add new scopes or modify existing ones");
+    myScopesLink.setHyperlinkText(CopyrightBundle.message("copyright.select.scopes.label"));
     myScopesLink.addHyperlinkListener(new HyperlinkListener() {
       @Override
       public void hyperlinkUpdate(final HyperlinkEvent e) {
@@ -116,7 +107,7 @@ public class ProjectSettingsPanel {
   public JComponent getMainComponent() {
 
     final LabeledComponent<JComboBox> component = new LabeledComponent<>();
-    component.setText("Default &project copyright:");
+    component.setText(CopyrightBundle.message("copyright.default.project.copyright"));
     component.setLabelLocation(BorderLayout.WEST);
     component.setComponent(myProfilesComboBox);
     ElementProducer<ScopeSetting> producer = new ElementProducer<ScopeSetting>() {
@@ -233,7 +224,7 @@ public class ProjectSettingsPanel {
 
   private class SettingColumn extends MyColumnInfo<CopyrightProfile> {
     private SettingColumn() {
-      super("Copyright");
+      super(CopyrightBundle.message("copyright.copyright.column"));
     }
 
     @Override
@@ -290,7 +281,7 @@ public class ProjectSettingsPanel {
 
   private class ScopeColumn extends MyColumnInfo<NamedScope> {
     private ScopeColumn() {
-      super("Scope");
+      super(CopyrightBundle.message("copyright.scope.column"));
     }
 
     @Override

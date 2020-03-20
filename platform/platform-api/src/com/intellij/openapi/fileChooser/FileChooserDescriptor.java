@@ -4,6 +4,7 @@ package com.intellij.openapi.fileChooser;
 import com.intellij.ide.highlighter.ArchiveFileType;
 import com.intellij.openapi.actionSystem.DataKey;
 import com.intellij.openapi.fileTypes.FileTypeManager;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.Iconable;
 import com.intellij.openapi.vfs.JarFileSystem;
@@ -13,6 +14,7 @@ import com.intellij.ui.LayeredIcon;
 import com.intellij.ui.UIBundle;
 import com.intellij.util.IconUtil;
 import com.intellij.util.PlatformIcons;
+import com.intellij.util.nls.NlsContexts;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -40,7 +42,7 @@ public class FileChooserDescriptor implements Cloneable {
   private boolean myShowFileSystemRoots = true;
   private boolean myTreeRootVisible = false;
   private boolean myShowHiddenFiles = false;
-  private Condition<VirtualFile> myFileFilter = null;
+  private Condition<? super VirtualFile> myFileFilter = null;
   private boolean myForcedToUseIdeaFileChooser = false;
 
   private final Map<String, Object> myUserData = new THashMap<>();
@@ -108,11 +110,11 @@ public class FileChooserDescriptor implements Cloneable {
     return myTitle;
   }
 
-  public void setTitle(@Nls(capitalization = Nls.Capitalization.Title) String title) {
+  public void setTitle(@Nls @NlsContexts.FileChooserTitle String title) {
     withTitle(title);
   }
 
-  public FileChooserDescriptor withTitle(@Nls(capitalization = Nls.Capitalization.Title) String title) {
+  public FileChooserDescriptor withTitle(@Nls @NlsContexts.FileChooserTitle String title) {
     myTitle = title;
     return this;
   }
@@ -121,11 +123,11 @@ public class FileChooserDescriptor implements Cloneable {
     return myDescription;
   }
 
-  public void setDescription(@Nls(capitalization = Nls.Capitalization.Sentence) String description) {
+  public void setDescription(@Nls @NlsContexts.FileChooserDescription String description) {
     withDescription(description);
   }
 
-  public FileChooserDescriptor withDescription(@Nls(capitalization = Nls.Capitalization.Sentence) String description) {
+  public FileChooserDescriptor withDescription(@Nls @NlsContexts.FileChooserDescription String description) {
     myDescription = description;
     return this;
   }
@@ -147,11 +149,11 @@ public class FileChooserDescriptor implements Cloneable {
     return Collections.unmodifiableList(myRoots);
   }
 
-  public void setRoots(@NotNull VirtualFile... roots) {
+  public void setRoots(VirtualFile @NotNull ... roots) {
     withRoots(roots);
   }
 
-  public void setRoots(@NotNull List<VirtualFile> roots) {
+  public void setRoots(@NotNull List<? extends VirtualFile> roots) {
     withRoots(roots);
   }
 
@@ -200,7 +202,7 @@ public class FileChooserDescriptor implements Cloneable {
   /**
    * Sets simple boolean condition for use in {@link #isFileVisible(VirtualFile, boolean)} and {@link #isFileSelectable(VirtualFile)}.
    */
-  public FileChooserDescriptor withFileFilter(@Nullable Condition<VirtualFile> filter) {
+  public FileChooserDescriptor withFileFilter(@Nullable Condition<? super VirtualFile> filter) {
     myFileFilter = filter;
     return this;
   }
@@ -281,7 +283,7 @@ public class FileChooserDescriptor implements Cloneable {
    * @param files - selected files to be checked
    * @throws Exception if the the files cannot be accepted
    */
-  public void validateSelectedFiles(@NotNull VirtualFile[] files) throws Exception {
+  public void validateSelectedFiles(VirtualFile @NotNull [] files) throws Exception {
   }
 
   public boolean isForcedToUseIdeaFileChooser() {
@@ -306,7 +308,7 @@ public class FileChooserDescriptor implements Cloneable {
     if (file.isDirectory() && (myChooseFolders || isFileSelectable(file))) {
       return file;
     }
-    boolean isJar = file.getFileType() == ArchiveFileType.INSTANCE;
+    boolean isJar = FileTypeRegistry.getInstance().isFileOfType(file, ArchiveFileType.INSTANCE);
     if (!isJar) {
       return acceptAsGeneralFile(file) ? file : null;
     }

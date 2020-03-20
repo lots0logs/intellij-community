@@ -4,10 +4,10 @@ package com.intellij.java.codeInspection;
 import com.intellij.JavaTestUtil;
 import com.intellij.codeInspection.redundantCast.RedundantCastInspection;
 import com.intellij.testFramework.LightProjectDescriptor;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import org.jetbrains.annotations.NotNull;
 
-public class RedundantCast15Test extends LightCodeInsightFixtureTestCase {
+public class RedundantCast15Test extends LightJavaCodeInsightFixtureTestCase {
   @Override
   protected String getBasePath() {
     return JavaTestUtil.getRelativeJavaTestDataPath() + "/inspection/redundantCast/generics";
@@ -35,6 +35,8 @@ public class RedundantCast15Test extends LightCodeInsightFixtureTestCase {
   public void testInference3() { doTest(); }
 
   public void testNullInVarargsParameter() { doTest(); }
+  public void testSingleArgForVarargsParameter() { doTest(); }
+  public void testSwitchSelector() { doTest(); }
 
   public void testWrapperToPrimitiveCast() { doTest(); }
 
@@ -55,6 +57,7 @@ public class RedundantCast15Test extends LightCodeInsightFixtureTestCase {
   public void testForEachValueIDEA126166() { doTest();}
   public void testCaseThrowable() { doTest();}
   public void testSafeTempVarName() { doTest();}
+  public void testBinaryComparison() { doTest();}
 
   public void testTypeParameterAccessChecksJava7() {
     doTest();
@@ -78,4 +81,7 @@ public class RedundantCast15Test extends LightCodeInsightFixtureTestCase {
     myFixture.testHighlighting(getTestName(false) + ".java");
   }
   public void testDifferentNullness() { doTest();}
+
+  public void testPrimitiveWidening() { doTest(); }
+  public void testCastLongLiteral() { doTest(); }
 }

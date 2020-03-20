@@ -67,7 +67,10 @@ public class Html5CustomAttributeDescriptorsProvider implements XmlAttributeDesc
       boolean add = true;
       if (inCompletion) {
         for (String attr : currentAttrs) {
-          if (attr.equals(key + CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED)) add = false;
+          if (attr.equals(key + CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED)) {
+            add = false;
+            break;
+          }
         }
       }
       if (add) result.add(new AnyXmlAttributeDescriptor(key));
@@ -78,7 +81,7 @@ public class Html5CustomAttributeDescriptorsProvider implements XmlAttributeDesc
 
   @Override
   public XmlAttributeDescriptor getAttributeDescriptor(String attributeName, XmlTag context) {
-    if (context != null && HtmlUtil.isCustomHtml5Attribute(attributeName) && HtmlUtil.tagHasHtml5Schema(context)) {
+    if (context != null && HtmlUtil.isCustomHtml5Attribute(attributeName) && HtmlUtil.isHtml5Context(context)) {
       return new AnyXmlAttributeDescriptor(attributeName);
     }
     return null;

@@ -11,6 +11,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.util.Key
 import com.intellij.util.xmlb.annotations.OptionTag
 import com.intellij.util.xmlb.annotations.XMap
+import org.jetbrains.annotations.NonNls
 import java.util.*
 
 @State(name = "DiffSettings", storages = [(Storage(value = DiffUtil.DIFF_CONFIG))])
@@ -45,10 +46,12 @@ class DiffSettingsHolder : PersistentStateComponent<DiffSettingsHolder.State> {
 
       @JvmStatic fun getSettings(): DiffSettings = getSettings(null)
       @JvmStatic fun getSettings(place: String?): DiffSettings = service<DiffSettingsHolder>().getSettings(place)
+      internal fun getDefaultSettings(place: String): DiffSettings =
+        DiffSettings(SharedSettings(), service<DiffSettingsHolder>().defaultPlaceSettings(place))
     }
   }
 
-  fun getSettings(place: String?): DiffSettings {
+  fun getSettings(@NonNls place: String?): DiffSettings {
     val placeKey = place ?: DiffPlaces.DEFAULT
     val placeSettings = myState.PLACES_MAP.getOrPut(placeKey) { defaultPlaceSettings(placeKey) }
     return DiffSettings(myState.SHARED_SETTINGS, placeSettings)
@@ -64,6 +67,9 @@ class DiffSettingsHolder : PersistentStateComponent<DiffSettingsHolder.State> {
   private fun defaultPlaceSettings(place: String): PlaceSettings {
     val settings = PlaceSettings()
     if (place == DiffPlaces.VCS_LOG_VIEW) {
+      settings.DIFF_TOOLS_ORDER = listOf(UnifiedDiffTool::class.java.canonicalName)
+    }
+    if (place == DiffPlaces.CHANGES_VIEW) {
       settings.DIFF_TOOLS_ORDER = listOf(UnifiedDiffTool::class.java.canonicalName)
     }
     return settings

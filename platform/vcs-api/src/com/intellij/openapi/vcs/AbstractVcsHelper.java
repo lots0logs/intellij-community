@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs;
 
 import com.intellij.ide.errorTreeView.HotfixData;
@@ -21,8 +21,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
-import java.util.*;
+import java.util.Map;
 
 /**
  * Component which provides means to invoke different VCS-related services.
@@ -51,39 +53,27 @@ public abstract class AbstractVcsHelper {
   public abstract List<VcsException> runTransactionRunnable(AbstractVcs vcs, TransactionRunnable runnable, Object vcsParameters);
 
   public void showError(final VcsException e, final String tabDisplayName) {
-    showErrors(Arrays.asList(e), tabDisplayName);
+    showErrors(Collections.singletonList(e), tabDisplayName);
   }
 
   public abstract void showAnnotation(FileAnnotation annotation, VirtualFile file, AbstractVcs vcs);
 
   public abstract void showAnnotation(FileAnnotation annotation, VirtualFile file, AbstractVcs vcs, int line);
 
-  public abstract void showChangesListBrowser(CommittedChangeList changelist, @Nls String title);
+  public abstract void showChangesListBrowser(@NotNull CommittedChangeList changelist, @Nullable @Nls String title);
 
-  public abstract void showChangesListBrowser(CommittedChangeList changelist, @Nullable VirtualFile toSelect, @Nls String title);
+  public abstract void showWhatDiffersBrowser(@NotNull Collection<Change> changes, @Nullable @Nls String title);
 
-  public abstract void showChangesBrowser(List<CommittedChangeList> changelists);
+  public abstract void showCommittedChangesBrowser(@NotNull CommittedChangesProvider provider,
+                                                   @NotNull RepositoryLocation location,
+                                                   @Nullable @Nls String title,
+                                                   @Nullable Component parent);
 
-  public abstract void showChangesBrowser(List<CommittedChangeList> changelists, @Nls String title);
-
-  public abstract void showChangesBrowser(CommittedChangesProvider provider,
-                                          final RepositoryLocation location,
-                                          @Nls String title,
-                                          @Nullable final Component parent);
-
-  public abstract void showWhatDiffersBrowser(@Nullable Component parent, Collection<Change> changes, @Nls String title);
-
-  public abstract void openCommittedChangesTab(AbstractVcs vcs,
-                                               VirtualFile root,
-                                               ChangeBrowserSettings settings,
+  public abstract void openCommittedChangesTab(@NotNull CommittedChangesProvider provider,
+                                               @NotNull RepositoryLocation location,
+                                               @NotNull ChangeBrowserSettings settings,
                                                int maxCount,
-                                               final String title);
-
-  public abstract void openCommittedChangesTab(CommittedChangesProvider provider,
-                                               RepositoryLocation location,
-                                               ChangeBrowserSettings settings,
-                                               int maxCount,
-                                               final String title);
+                                               @Nullable String title);
 
   /**
    * Shows the multiple file merge dialog for resolving conflicts in the specified set of virtual files.
@@ -129,13 +119,6 @@ public abstract class AbstractVcsHelper {
                                        @Nullable AnnotationProvider annotationProvider,
                                        @NotNull FilePath path,
                                        @NotNull AbstractVcs vcs);
-  
-  /**
-   * Shows the "Rollback Changes" dialog with the specified list of changes.
-   *
-   * @param changes the changes to show in the dialog.
-   */
-  public abstract void showRollbackChangesDialog(List<? extends Change> changes);
 
   @Nullable
   public abstract Collection<VirtualFile> selectFilesToProcess(List<? extends VirtualFile> files,
@@ -162,8 +145,8 @@ public abstract class AbstractVcsHelper {
                                                                 @NotNull VcsShowConfirmationOption confirmationOption,
                                                                 @Nullable String okActionName,
                                                                 @Nullable String cancelActionName);
-  
-  
+
+
   /**
    * <p>Shows commit dialog, fills it with the given changes and given commit message, initially selects the given changelist.</p>
    * <p>Note that the method is asynchronous: it returns right after user presses "Commit" or "Cancel" and after all pre-commit handlers

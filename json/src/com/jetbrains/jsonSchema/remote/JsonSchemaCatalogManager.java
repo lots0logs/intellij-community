@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.remote;
 
 import com.intellij.openapi.project.Project;
@@ -52,11 +52,12 @@ public class JsonSchemaCatalogManager {
 
   @Nullable
   public VirtualFile getSchemaFileForFile(@NotNull VirtualFile file) {
-    if (!JsonSchemaCatalogProjectConfiguration.getInstance(myProject).isCatalogEnabled()) return null;
-    for (JsonSchemaCatalogExclusion exclusion : JsonSchemaCatalogExclusion.EP_NAME.getExtensions()) {
-      if (exclusion.isExcluded(file)) {
-        return null;
-      }
+    if (!JsonSchemaCatalogProjectConfiguration.getInstance(myProject).isCatalogEnabled()) {
+      return null;
+    }
+
+    if (JsonSchemaCatalogExclusion.EP_NAME.findFirstSafe(exclusion -> exclusion.isExcluded(file)) != null) {
+      return null;
     }
 
     String name = file.getName();

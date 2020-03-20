@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.daemon.impl;
 
 import com.intellij.codeInsight.daemon.HighlightDisplayKey;
@@ -19,6 +17,8 @@ import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.event.DocumentEvent;
+import com.intellij.openapi.editor.event.DocumentListener;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
@@ -48,12 +48,12 @@ public class ExternalToolPass extends ProgressableTextEditorHighlightingPass {
   private final List<MyData> myAnnotationData = new ArrayList<>();
 
   private static class MyData {
-    private final ExternalAnnotator annotator;
-    private final PsiFile psiRoot;
-    private final Object collectedInfo;
-    private volatile Object annotationResult;
+    final ExternalAnnotator annotator;
+    final PsiFile psiRoot;
+    final Object collectedInfo;
+    volatile Object annotationResult;
 
-    private MyData(ExternalAnnotator annotator, PsiFile psiRoot, Object collectedInfo) {
+    MyData(ExternalAnnotator annotator, PsiFile psiRoot, Object collectedInfo) {
       this.annotator = annotator;
       this.psiRoot = psiRoot;
       this.collectedInfo = collectedInfo;
@@ -105,30 +105,45 @@ public class ExternalToolPass extends ProgressableTextEditorHighlightingPass {
     boolean errorFound = DaemonCodeAnalyzerEx.getInstanceEx(myProject).getFileStatusMap().wasErrorFound(myDocument);
     Editor editor = getEditor();
 
+    DumbService dumbService = DumbService.getInstance(myProject);
     for (PsiFile psiRoot : allAnnotators.keySet()) {
       for (ExternalAnnotator annotator : allAnnotators.get(psiRoot)) {
-        String shortName = annotator.getPairedBatchInspectionShortName();
-        if (shortName != null) {
-          HighlightDisplayKey key = HighlightDisplayKey.find(shortName);
-          LOG.assertTrue(key != null || ApplicationManager.getApplication().isUnitTestMode(),
-                         "Paired tool '" + shortName + "' not found for external annotator: " + annotator);
-          if (key == null || !profile.isToolEnabled(key, myFile)) {
-            continue; //test should register corresponding paired tool for annotator to run
+        progress.checkCanceled();
+
+        try {
+          if (dumbService.isDumb() && !DumbService.isDumbAware(annotator)) {
+            continue;
+          }
+
+          String shortName = annotator.getPairedBatchInspectionShortName();
+          if (shortName != null) {
+            HighlightDisplayKey key = HighlightDisplayKey.find(shortName);
+            if (key == null) {
+              if (!ApplicationManager.getApplication().isUnitTestMode()) {
+                // tests should care about registering corresponding paired tools
+                process(new Exception("Paired tool '" + shortName + "' not found"), annotator, psiRoot);
+              }
+              continue;
+            }
+            if (!profile.isToolEnabled(key, myFile)) {
+              continue;
+            }
+          }
+
+          Object collectedInfo = null;
+          try {
+            collectedInfo = editor != null ? annotator.collectInformation(psiRoot, editor, errorFound) : annotator.collectInformation(psiRoot);
+          }
+          catch (Throwable t) {
+            process(t, annotator, psiRoot);
+          }
+
+          if (collectedInfo != null) {
+            myAnnotationData.add(new MyData(annotator, psiRoot, collectedInfo));
           }
         }
-
-        Object collectedInfo = null;
-        try {
-          collectedInfo =
-            editor != null ? annotator.collectInformation(psiRoot, editor, errorFound) : annotator.collectInformation(psiRoot);
-        }
-        catch (Throwable t) {
-          process(t, annotator, psiRoot);
-        }
-
-        advanceProgress(1);
-        if (collectedInfo != null) {
-          myAnnotationData.add(new MyData(annotator, psiRoot, collectedInfo));
+        finally {
+          advanceProgress(1);
         }
       }
     }
@@ -163,7 +178,7 @@ public class ExternalToolPass extends ProgressableTextEditorHighlightingPass {
       public void run() {
         if (!documentChanged(modificationStampBefore) && !myProject.isDisposed()) {
           BackgroundTaskUtil.runUnderDisposeAwareIndicator(myProject, () -> {
-            doAnnotate();
+            runChangeAware(myDocument, ExternalToolPass.this::doAnnotate);
             ReadAction.run(() -> {
               ProgressManager.checkCanceled();
               if (!documentChanged(modificationStampBefore)) {
@@ -185,15 +200,12 @@ public class ExternalToolPass extends ProgressableTextEditorHighlightingPass {
 
   @SuppressWarnings("unchecked")
   private void doAnnotate() {
-    DumbService dumbService = DumbService.getInstance(myProject);
     for (MyData data : myAnnotationData) {
-      if (!dumbService.isDumb() || DumbService.isDumbAware(data.annotator)) {
-        try {
-          data.annotationResult = data.annotator.doAnnotate(data.collectedInfo);
-        }
-        catch (Throwable t) {
-          process(t, data.annotator, data.psiRoot);
-        }
+      try {
+        data.annotationResult = data.annotator.doAnnotate(data.collectedInfo);
+      }
+      catch (Throwable t) {
+        process(t, data.annotator, data.psiRoot);
       }
     }
   }
@@ -203,13 +215,14 @@ public class ExternalToolPass extends ProgressableTextEditorHighlightingPass {
     for (MyData data : myAnnotationData) {
       if (data.annotationResult != null && data.psiRoot != null && data.psiRoot.isValid()) {
         try {
-          data.annotator.apply(data.psiRoot, data.annotationResult, myAnnotationHolder);
+          myAnnotationHolder.applyExternalAnnotatorWithContext(data.psiRoot, data.annotator, data.annotationResult);
         }
         catch (Throwable t) {
           process(t, data.annotator, data.psiRoot);
         }
       }
     }
+    myAnnotationHolder.assertAllAnnotationsCreated();
   }
 
   private List<HighlightInfo> getHighlights() {
@@ -220,7 +233,7 @@ public class ExternalToolPass extends ProgressableTextEditorHighlightingPass {
     return infos;
   }
 
-  private void doFinish(List<HighlightInfo> highlights, long modificationStampBefore) {
+  private void doFinish(List<? extends HighlightInfo> highlights, long modificationStampBefore) {
     Editor editor = getEditor();
     assert editor != null;
     ApplicationManager.getApplication().invokeLater(() -> {
@@ -239,8 +252,26 @@ public class ExternalToolPass extends ProgressableTextEditorHighlightingPass {
     VirtualFile file = root.getVirtualFile();
     String path = file != null ? file.getPath() : root.getName();
 
-    final PluginException pluginException =
-      PluginException.createByClass("annotator: " + annotator + " (" + annotator.getClass() + ")", t, annotator.getClass());
-    LOG.error("ExternalToolPass: ", pluginException, new Attachment("root_path.txt", path));
+    String message = "annotator: " + annotator + " (" + annotator.getClass() + ")";
+    PluginException pe = PluginException.createByClass(message, t, annotator.getClass());
+    LOG.error("ExternalToolPass: ", pe, new Attachment("root_path.txt", path));
+  }
+
+  private static void runChangeAware(@NotNull Document document, @NotNull Runnable runnable) {
+    ProgressIndicator currentIndicator = ProgressManager.getInstance().getProgressIndicator();
+    assert currentIndicator != null;
+    DocumentListener cancellingListener = new DocumentListener() {
+      @Override
+      public void documentChanged(@NotNull DocumentEvent event) {
+        currentIndicator.cancel();
+      }
+    };
+    document.addDocumentListener(cancellingListener);
+    try {
+      runnable.run();
+    }
+    finally {
+      document.removeDocumentListener(cancellingListener);
+    }
   }
 }

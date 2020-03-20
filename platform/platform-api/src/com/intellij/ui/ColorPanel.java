@@ -15,7 +15,10 @@
  */
 package com.intellij.ui;
 
+import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.ui.picker.ColorListener;
 import com.intellij.util.ui.JBInsets;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.Nullable;
@@ -32,7 +35,6 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static java.beans.EventHandler.create;
-import static java.util.Locale.ENGLISH;
 
 public class ColorPanel extends JComponent {
   private static final RelativeFont MONOSPACED_FONT = RelativeFont.SMALL.family(Font.MONOSPACED);
@@ -41,6 +43,7 @@ public class ColorPanel extends JComponent {
   private boolean myEditable;
   private ActionEvent myEvent;
   private Color myColor;
+  private boolean mySupportTransparency;
 
   public ColorPanel() {
     addImpl(myTextField, null, 0);
@@ -62,21 +65,24 @@ public class ColorPanel extends JComponent {
 
   public void onPressed() {
     if (myEditable && isEnabled()) {
-      Color color = ColorChooser.chooseColor(this, UIBundle.message("color.panel.select.color.dialog.description"), myColor);
-      if (color != null) {
-        setSelectedColor(color);
-        if (!myListeners.isEmpty() && (myEvent == null)) {
-          try {
-            myEvent = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "colorPanelChanged");
-            for (ActionListener listener : myListeners) {
-              listener.actionPerformed(myEvent);
+      RelativePoint location = new RelativePoint(this, new Point(getWidth() / 2, getHeight()));
+      ColorChooserService.getInstance().showColorPickerPopup(null, myColor, new ColorListener() {
+        @Override
+        public void colorChanged(Color color, Object source) {
+          setSelectedColor(color);
+          if (!myListeners.isEmpty() && (myEvent == null)) {
+            try {
+              myEvent = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "colorPanelChanged");
+              for (ActionListener listener : myListeners) {
+                listener.actionPerformed(myEvent);
+              }
+            }
+            finally {
+              myEvent = null;
             }
           }
-          finally {
-            myEvent = null;
-          }
         }
-      }
+      }, location, mySupportTransparency);
     }
   }
 
@@ -133,7 +139,7 @@ public class ColorPanel extends JComponent {
     }
     Color color = enabled ? myColor : null;
     if (color != null) {
-      myTextField.setText(' ' + ColorUtil.toHex(color).toUpperCase(ENGLISH) + ' ');
+      myTextField.setText(StringUtil.toUpperCase(ColorUtil.toHex(color)));
     }
     else {
       myTextField.setText(null);
@@ -163,6 +169,10 @@ public class ColorPanel extends JComponent {
   public void setEnabled(boolean enabled) {
     super.setEnabled(enabled);
     updateSelectedColor();
+  }
+
+  public void setSupportTransparency(boolean supportTransparency) {
+    mySupportTransparency = supportTransparency;
   }
 
   private static class Painter implements Highlighter.HighlightPainter, PropertyChangeListener {

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.data;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -25,7 +11,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.Function;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcs.log.Hash;
 import com.intellij.vcs.log.TimedVcsCommit;
@@ -33,6 +18,7 @@ import com.intellij.vcs.log.VcsLogProvider;
 import com.intellij.vcs.log.graph.GraphCommit;
 import com.intellij.vcs.log.impl.*;
 import com.intellij.vcs.test.VcsPlatformTest;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -63,7 +49,7 @@ public class VcsLogRefresherTest extends VcsPlatformTest {
   public void setUp() throws Exception {
     super.setUp();
 
-    myLogProvider = new TestVcsLogProvider(projectRoot);
+    myLogProvider = new TestVcsLogProvider();
     myLogProviders = Collections.singletonMap(projectRoot, myLogProvider);
 
     myCommits = Arrays.asList("3|-a2|-a1", "2|-a1|-a", "1|-a|-");
@@ -133,7 +119,7 @@ public class VcsLogRefresherTest extends VcsPlatformTest {
     myLoader.refresh(Collections.singletonList(projectRoot));
     DataPack result = myDataWaiter.get();
 
-    List<String> allCommits = ContainerUtil.newArrayList();
+    List<String> allCommits = new ArrayList<>();
     allCommits.add(newCommit);
     allCommits.addAll(myCommits);
     assertDataPack(log(allCommits), result.getPermanentGraph().getAllCommits());
@@ -208,15 +194,15 @@ public class VcsLogRefresherTest extends VcsPlatformTest {
       }
 
       @Override
-      public void displayFatalErrorMessage(@NotNull String message) {
+      public void displayFatalErrorMessage(@Nls @NotNull String message) {
         LOG.error(message);
       }
     }, myProject);
     VcsLogRefresherImpl refresher =
       new VcsLogRefresherImpl(myProject, myLogData.getStorage(), myLogProviders, myLogData.getUserRegistry(),
                               myLogData.getModifiableIndex(),
-                              new VcsLogProgress(myProject, myLogData),
-                              myLogData.getTopCommitsCache(), dataPackConsumer, FAILING_EXCEPTION_HANDLER, RECENT_COMMITS_COUNT
+                              new VcsLogProgress(myLogData),
+                              myLogData.getTopCommitsCache(), dataPackConsumer, RECENT_COMMITS_COUNT
       ) {
         @Override
         protected SingleTaskController.SingleTask startNewBackgroundTask(@NotNull final Task.Backgroundable refreshTask) {
@@ -267,7 +253,7 @@ public class VcsLogRefresherTest extends VcsPlatformTest {
 
     @NotNull
     public DataPack get(long timeout, @NotNull TimeUnit timeUnit) throws InterruptedException {
-      return ObjectUtils.assertNotNull(myQueue.poll(timeout, timeUnit));
+      return Objects.requireNonNull(myQueue.poll(timeout, timeUnit));
     }
 
     public boolean failed() {

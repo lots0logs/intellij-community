@@ -152,13 +152,13 @@ public class GroovyMoveClassToInnerHandler implements MoveClassToInnerHandler {
 
   @Override
   public void retargetNonCodeUsages(@NotNull final Map<PsiElement, PsiElement> oldToNewElementMap,
-                                    @NotNull final NonCodeUsageInfo[] nonCodeUsages) {
+                                    final NonCodeUsageInfo @NotNull [] nonCodeUsages) {
     for (PsiElement newClass : oldToNewElementMap.values()) {
       if (!(newClass instanceof GrTypeDefinition)) continue;
 
       newClass.accept(new PsiRecursiveElementVisitor() {
         @Override
-        public void visitElement(final PsiElement element) {
+        public void visitElement(@NotNull final PsiElement element) {
           super.visitElement(element);
           List<NonCodeUsageInfo> list = element.getCopyableUserData(MoveClassToInnerProcessor.ourNonCodeUsageKey);
           if (list != null) {

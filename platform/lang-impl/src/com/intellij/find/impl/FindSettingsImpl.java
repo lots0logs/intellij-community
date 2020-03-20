@@ -1,13 +1,18 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.find.impl;
 
 import com.intellij.find.FindBundle;
 import com.intellij.find.FindModel;
 import com.intellij.find.FindSettings;
+import com.intellij.lang.IdeLanguageCustomization;
+import com.intellij.lang.Language;
 import com.intellij.openapi.components.*;
+import com.intellij.openapi.fileTypes.ExtensionFileNameMatcher;
+import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.PlatformUtils;
+import com.intellij.util.ArrayUtilRt;
+import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.JBIterable;
 import com.intellij.util.xmlb.XmlSerializerUtil;
 import com.intellij.util.xmlb.annotations.Property;
 import com.intellij.util.xmlb.annotations.Transient;
@@ -16,7 +21,9 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @State(name = "FindSettings", storages = @Storage("find.xml"))
 public class FindSettingsImpl extends FindSettings implements PersistentStateComponent<FindSettingsImpl> {
@@ -26,29 +33,26 @@ public class FindSettingsImpl extends FindSettings implements PersistentStateCom
   @NonNls private static final String FIND_ORIGIN_ENTIRE_SCOPE = "entire_scope";
   @NonNls private static final String FIND_SCOPE_GLOBAL = "global";
   @NonNls private static final String FIND_SCOPE_SELECTED = "selected";
-  private static final String DEFAULT_SEARCH_SCOPE = FindBundle.message("find.scope.all.project.classes");
 
   public FindSettingsImpl() {
-    recentFileMasks.add("*.properties");
-    recentFileMasks.add("*.html");
-    recentFileMasks.add("*.jsp");
-    recentFileMasks.add("*.xml");
-    recentFileMasks.add("*.java");
-    recentFileMasks.add("*.js");
-    recentFileMasks.add("*.as");
-    recentFileMasks.add("*.css");
-    recentFileMasks.add("*.mxml");
-    if (PlatformUtils.isPyCharm()) {
-      recentFileMasks.add("*.py");
+    Set<String> extensions = JBIterable.from(IdeLanguageCustomization.getInstance().getPrimaryIdeLanguages())
+      .filterMap(Language::getAssociatedFileType)
+      .flatten(o -> JBIterable.of(o.getDefaultExtension())
+        .append(JBIterable.from(FileTypeManager.getInstance().getAssociations(o))
+                  .filter(ExtensionFileNameMatcher.class)
+                  .filterMap(ExtensionFileNameMatcher::getExtension)))
+      .addAllTo(new LinkedHashSet<>());
+    if (extensions.contains("java")) {
+      extensions.add("properties");
+      extensions.add("jsp");
     }
-    else if (PlatformUtils.isRubyMine()) {
-      recentFileMasks.add("*.rb");
+    if (!extensions.contains("sql")) {
+      extensions.add("xml");
+      extensions.add("html");
+      extensions.add("css");
     }
-    else if (PlatformUtils.isPhpStorm()) {
-      recentFileMasks.add("*.php");
-    }
-    else if (PlatformUtils.isDataGrip()) {
-      recentFileMasks.add("*.sql");
+    for (String ext : ContainerUtil.reverse(new ArrayList<>(extensions))) {
+      recentFileMasks.add("*." + ext);
     }
   }
 
@@ -84,7 +88,7 @@ public class FindSettingsImpl extends FindSettings implements PersistentStateCom
   @SuppressWarnings("WeakerAccess") public boolean WITH_SUBDIRECTORIES = true;
   @SuppressWarnings("WeakerAccess") public boolean SHOW_RESULTS_IN_SEPARATE_VIEW;
 
-  @SuppressWarnings("WeakerAccess") public String SEARCH_SCOPE = DEFAULT_SEARCH_SCOPE;
+  @SuppressWarnings("WeakerAccess") public String SEARCH_SCOPE = getDefaultSearchScope();
   @SuppressWarnings("WeakerAccess") public String FILE_MASK;
 
   @Property(surroundWithTag = false)
@@ -266,22 +270,19 @@ public class FindSettingsImpl extends FindSettings implements PersistentStateCom
     FindRecents.getInstance().addStringToReplace(s);
   }
 
-  @NotNull
   @Override
-  public String[] getRecentFindStrings(){
+  public String @NotNull [] getRecentFindStrings(){
     return FindRecents.getInstance().getRecentFindStrings();
   }
 
-  @NotNull
   @Override
-  public String[] getRecentReplaceStrings(){
+  public String @NotNull [] getRecentReplaceStrings(){
     return FindRecents.getInstance().getRecentReplaceStrings();
   }
 
-  @NotNull
   @Override
-  public String[] getRecentFileMasks() {
-    return ArrayUtil.toStringArray(recentFileMasks);
+  public String @NotNull [] getRecentFileMasks() {
+    return ArrayUtilRt.toStringArray(recentFileMasks);
   }
 
   @Override
@@ -373,5 +374,9 @@ public class FindSettingsImpl extends FindSettings implements PersistentStateCom
     public static FindRecents getInstance() {
       return ServiceManager.getService(FindRecents.class);
     }
+  }
+
+  private static String getDefaultSearchScope() {
+    return FindBundle.message("find.scope.all.project.classes");
   }
 }

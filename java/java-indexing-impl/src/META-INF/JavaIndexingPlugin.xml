@@ -15,28 +15,25 @@
   -->
 <idea-plugin>
   <extensionPoints>
-    <extensionPoint qualifiedName="com.intellij.allOverridingMethodsSearch" interface="com.intellij.util.QueryExecutor"/>
+    <extensionPoint qualifiedName="com.intellij.allOverridingMethodsSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
     <extensionPoint qualifiedName="com.intellij.java.shortNamesCache" area="IDEA_PROJECT" interface="com.intellij.psi.search.PsiShortNamesCache"/>
-    <extensionPoint qualifiedName="com.intellij.hierarchy.indexer" interface="com.intellij.psi.stubsHierarchy.StubHierarchyIndexer"/>
-    <extensionPoint qualifiedName="com.intellij.classesWithAnnotatedMembersSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.allClassesSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.overridingMethodsSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.methodReferencesSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.directClassInheritorsSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.classInheritorsSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.annotatedElementsSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.annotatedPackagesSearch" interface="com.intellij.util.QueryExecutor"/>
+    <extensionPoint qualifiedName="com.intellij.classesWithAnnotatedMembersSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
+    <extensionPoint qualifiedName="com.intellij.allClassesSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
+    <extensionPoint qualifiedName="com.intellij.overridingMethodsSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
+    <extensionPoint qualifiedName="com.intellij.methodReferencesSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
+    <extensionPoint qualifiedName="com.intellij.directClassInheritorsSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
+    <extensionPoint qualifiedName="com.intellij.classInheritorsSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
+    <extensionPoint qualifiedName="com.intellij.annotatedElementsSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
+    <extensionPoint qualifiedName="com.intellij.annotatedPackagesSearch" interface="com.intellij.util.QueryExecutor" dynamic="true"/>
     <extensionPoint qualifiedName="com.intellij.functionalExpressionSearch" interface="com.intellij.util.QueryExecutor"/>
     <extensionPoint qualifiedName="com.intellij.implicitToStringSearch" interface="com.intellij.util.QueryExecutor"/>
-    <extensionPoint qualifiedName="com.intellij.customPropertyScopeProvider" interface="com.intellij.psi.impl.search.CustomPropertyScopeProvider"/>
+    <extensionPoint qualifiedName="com.intellij.customPropertyScopeProvider" interface="com.intellij.psi.impl.search.CustomPropertyScopeProvider" dynamic="true"/>
   </extensionPoints>
 
   <extensions defaultExtensionNs="com.intellij">
 
-    <projectService serviceInterface="com.intellij.psi.stubsHierarchy.HierarchyService"
-                    serviceImplementation="com.intellij.psi.stubsHierarchy.impl.HierarchyServiceImpl"/>
-    <resolveScopeProvider implementation="com.intellij.psi.impl.file.impl.JavaOutOfSourcesResolveScopeProvider"/>
     <fileBasedIndex implementation="com.intellij.psi.impl.java.stubs.index.JavaAutoModuleNameIndex"/>
+    <fileBasedIndex implementation="com.intellij.psi.impl.java.stubs.index.JavaSourceModuleNameIndex"/>
     <fileBasedIndex implementation="com.intellij.psi.impl.search.JavaNullMethodArgumentIndex"/>
     <fileBasedIndex implementation="com.intellij.psi.impl.JavaSimplePropertyIndex"/>
     <fileBasedIndex implementation="com.intellij.psi.impl.java.JavaFunctionalExpressionIndex"/>
@@ -60,8 +57,6 @@
                     serviceImplementation="com.intellij.openapi.roots.impl.ProjectPackageIndexImpl"/>
     <projectService
                     serviceImplementation="com.intellij.psi.impl.search.HighlightingCaches"/>
-    <projectService serviceInterface="com.intellij.psi.impl.file.impl.JavaFileManager"
-                    serviceImplementation="com.intellij.psi.impl.file.impl.JavaFileManagerImpl"/>
     <implicitToStringSearch implementation="com.intellij.psi.impl.search.ImplicitToStringSearcher"/>
     <functionalExpressionSearch implementation="com.intellij.psi.impl.search.JavaFunctionalExpressionSearcher"/>
     <definitionsScopedSearch implementation="com.intellij.codeInsight.navigation.ClassImplementationsSearch"/>
@@ -72,7 +67,6 @@
     <allOverridingMethodsSearch implementation="com.intellij.psi.impl.search.JavaAllOverridingMethodsSearcher"/>
     <overridingMethodsSearch implementation="com.intellij.psi.impl.search.JavaOverridingMethodsSearcher"/>
     <classInheritorsSearch implementation="com.intellij.psi.impl.search.JavaClassInheritorsSearcher"/>
-    <directClassInheritorsSearch implementation="com.intellij.psi.impl.search.StubHierarchyInheritorSearcher"/>
     <directClassInheritorsSearch implementation="com.intellij.psi.impl.search.JavaDirectInheritorsSearcher"/>
     <annotatedPackagesSearch implementation="com.intellij.psi.impl.search.AnnotatedPackagesSearcher"/>
     <annotatedElementsSearch implementation="com.intellij.psi.impl.search.AnnotatedElementsSearcher"/>
@@ -82,6 +76,7 @@
     <referencesSearch implementation="com.intellij.psi.impl.search.SPIReferencesSearcher"/>
     <referencesSearch implementation="com.intellij.psi.impl.search.ConstructorReferencesSearcher"/>
     <referencesSearch implementation="com.intellij.psi.impl.search.PsiAnnotationMethodReferencesSearcher"/>
+    <referencesSearch implementation="com.intellij.psi.impl.search.JavaRecordComponentSearcher"/>
     <fileBasedIndex implementation="com.intellij.psi.impl.java.JavaBinaryPlusExpressionIndex"/>
   </extensions>
 </idea-plugin>

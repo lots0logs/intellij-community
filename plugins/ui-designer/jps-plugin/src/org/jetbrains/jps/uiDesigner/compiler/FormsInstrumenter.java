@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.uiDesigner.compiler;
 
 import com.intellij.compiler.instrumentation.FailSafeClassReader;
@@ -13,6 +13,7 @@ import com.intellij.uiDesigner.lw.CompiledClassPropertiesProvider;
 import com.intellij.uiDesigner.lw.LwRootContainer;
 import gnu.trove.THashMap;
 import gnu.trove.THashSet;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.ModuleChunk;
 import org.jetbrains.jps.ProjectPaths;
@@ -116,6 +117,7 @@ public class FormsInstrumenter extends FormsBuilder {
     return ExitCode.OK;
   }
 
+  @NotNull
   @Override
   public List<String> getCompilableFileExtensions() {
     return Collections.emptyList();
@@ -192,8 +194,8 @@ public class FormsInstrumenter extends FormsBuilder {
         final ClassReader classReader =
           new FailSafeClassReader(originalContent.getBuffer(), originalContent.getOffset(), originalContent.getLength());
 
-        final int version = ClassProcessingBuilder.getClassFileVersion(classReader);
-        final InstrumenterClassWriter classWriter = new InstrumenterClassWriter(classReader, ClassProcessingBuilder.getAsmClassWriterFlags(version), finder);
+        final int flags = InstrumenterClassWriter.getAsmClassWriterFlags(InstrumenterClassWriter.getClassFileVersion(classReader));
+        final InstrumenterClassWriter classWriter = new InstrumenterClassWriter(classReader, flags, finder);
         final AsmCodeGenerator codeGenerator = new AsmCodeGenerator(rootContainer, finder, nestedFormsLoader, false, classWriter);
         final byte[] patchedBytes = codeGenerator.patchClass(classReader);
         if (patchedBytes != null) {

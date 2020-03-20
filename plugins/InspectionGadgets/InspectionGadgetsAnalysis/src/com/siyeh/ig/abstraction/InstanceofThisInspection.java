@@ -31,12 +31,6 @@ public class InstanceofThisInspection extends BaseInspection {
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("instanceof.check.for.this.display.name");
-  }
-
-  @Override
-  @NotNull
   public String buildErrorString(Object... infos) {
 
     return InspectionGadgetsBundle.message(infos[0] instanceof PsiInstanceOfExpression
@@ -53,8 +47,8 @@ public class InstanceofThisInspection extends BaseInspection {
     @Override
     public void visitMethodCallExpression(PsiMethodCallExpression call) {
       if (OBJECT_GET_CLASS.test(call)) {
-        PsiExpression qualifier = ExpressionUtils.getQualifierOrThis(call.getMethodExpression());
-        if (StreamEx.of(ExpressionUtils.nonStructuralChildren(qualifier)).select(PsiThisExpression.class)
+        PsiExpression qualifier = ExpressionUtils.getEffectiveQualifier(call.getMethodExpression());
+        if (qualifier != null && StreamEx.of(ExpressionUtils.nonStructuralChildren(qualifier)).select(PsiThisExpression.class)
                 .anyMatch(thisExpression -> thisExpression.getQualifier() == null)) {
           PsiExpression compared = ExpressionUtils.getExpressionComparedTo(call);
           if (compared instanceof PsiClassObjectAccessExpression) {

@@ -31,9 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author nik
- */
 public class ArtifactInstructionsBuilderImpl implements ArtifactInstructionsBuilder {
   private final Map<String, JarInfo> myJarByPath;
   private final List<ArtifactRootDescriptor> myDescriptors;
@@ -125,7 +122,7 @@ public class ArtifactInstructionsBuilderImpl implements ArtifactInstructionsBuil
                                                            @NotNull String pathInJar,
                                                            @NotNull SourceFileFilter filter,
                                                            @NotNull DestinationInfo destinationInfo,
-                                                           @NotNull Condition<String> pathInJarFilter) {
+                                                           @NotNull Condition<? super String> pathInJarFilter) {
     return new JarBasedArtifactRootDescriptor(jarFile, pathInJar, filter, myRootIndex++, myBuildTarget, destinationInfo, pathInJarFilter);
   }
 }

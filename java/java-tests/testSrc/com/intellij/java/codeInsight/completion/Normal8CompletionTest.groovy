@@ -350,6 +350,14 @@ class Test88 {
     myFixture.assertPreferredCompletionItems 0, 'Strings::goo'
   }
 
+  void testOnlyAccessibleClassesInChainedMethodReference() {
+    configureByTestName()
+    def p = LookupElementPresentation.renderElement(assertOneElement(myFixture.lookupElements))
+    assert p.itemText == 'Entry::getKey'
+    assert p.tailText == ' java.util.Map'
+    assert !p.typeText
+  }
+
   void testPreferVariableToLambda() {
     configureByTestName()
     myFixture.assertPreferredCompletionItems 0, 'output', 'out -> '
@@ -392,4 +400,18 @@ class Test88 {
     assert !('finalize' in myFixture.lookupElementStrings)
   }
 
+  void "test only importable suggestions in import"() {
+    CodeInsightSettings.getInstance().COMPLETION_CASE_SENSITIVE = CodeInsightSettings.NONE
+    myFixture.addClass("package com.foo; public class Comments { public static final int B = 2; }")
+    myFixture.configureByText("a.java", "import com.<caret>x.y;\n" +
+                                        "import static java.util.stream.Collectors.joining;")
+    myFixture.completeBasic()
+    assert myFixture.lookupElementStrings == ['foo']
+  }
+
+  void "test no overloaded method reference duplicates"() {
+    myFixture.configureByText 'a.java', 'class C { { Runnable r = this::wa<caret>x; } }'
+    myFixture.completeBasic()
+    assert myFixture.lookupElementStrings == ['wait']
+  }
 }

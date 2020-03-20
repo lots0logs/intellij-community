@@ -2,7 +2,10 @@
 package com.intellij.refactoring.introduceVariable;
 
 import com.intellij.codeInsight.BlockUtils;
+import com.intellij.codeInsight.Nullability;
+import com.intellij.codeInsight.NullabilityAnnotationInfo;
 import com.intellij.codeInsight.NullableNotNullManager;
+import com.intellij.codeInsight.daemon.impl.analysis.HighlightUtil;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.Logger;
@@ -17,6 +20,7 @@ import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
+import com.intellij.refactoring.introduceField.ElementToWorkOn;
 import com.intellij.refactoring.util.FieldConflictsResolver;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.ArrayUtilRt;
@@ -24,24 +28,19 @@ import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.ThreeState;
 import com.intellij.util.containers.ContainerUtil;
-import com.siyeh.ig.psiutils.CommentTracker;
-import com.siyeh.ig.psiutils.ControlFlowUtils;
-import com.siyeh.ig.psiutils.ExpressionUtils;
-import com.siyeh.ig.psiutils.ReorderingUtils;
+import com.siyeh.ig.psiutils.*;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Performs actual write action (see {@link #extractVariable()}) which introduces new variable and replaces all occurrences.
  * No user interaction is performed here.
  */
 class VariableExtractor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.introduceVariable.VariableExtractor");
+  private static final Logger LOG = Logger.getInstance(VariableExtractor.class);
 
   private final Project myProject;
   private final Editor myEditor;
@@ -73,73 +72,71 @@ class VariableExtractor {
     myPosition = editor != null ? editor.getCaretModel().getLogicalPosition() : null;
   }
 
+  @NotNull
   private SmartPsiElementPointer<PsiVariable> extractVariable() {
     ApplicationManager.getApplication().assertWriteAccessAllowed();
-    try {
-      final PsiExpression newExpr = myFieldConflictsResolver.fixInitializer(myExpression);
-      PsiExpression initializer = RefactoringUtil.unparenthesizeExpression(newExpr);
-      final SmartTypePointer selectedType = SmartTypePointerManager.getInstance(myProject).createSmartTypePointer(
-        mySettings.getSelectedType());
-      initializer = IntroduceVariableBase.simplifyVariableInitializer(initializer, selectedType.getType());
-      CommentTracker commentTracker = new CommentTracker();
-      commentTracker.markUnchanged(initializer);
-      initializer = (PsiExpression)initializer.copy();
+    final PsiExpression newExpr = myFieldConflictsResolver.fixInitializer(myExpression);
+    if (myAnchor == myExpression) {
+      myAnchor = newExpr;
+    }
+    PsiExpression initializer = RefactoringUtil.unparenthesizeExpression(newExpr);
+    final SmartTypePointer selectedType = SmartTypePointerManager.getInstance(myProject).createSmartTypePointer(
+      mySettings.getSelectedType());
+    initializer = IntroduceVariableBase.simplifyVariableInitializer(initializer, selectedType.getType());
+    CommentTracker commentTracker = new CommentTracker();
+    commentTracker.markUnchanged(initializer);
+    initializer = (PsiExpression)initializer.copy();
 
-      PsiType type = stripNullabilityAnnotationsFromTargetType(selectedType, myProject);
-      PsiElement declaration = createDeclaration(type, mySettings.getEnteredName(), initializer);
+    PsiType type = stripNullabilityAnnotationsFromTargetType(selectedType, newExpr);
+    PsiElement declaration = createDeclaration(type, mySettings.getEnteredName(), initializer);
 
-      replaceOccurrences(newExpr);
+    replaceOccurrences(newExpr);
 
-      ensureCodeBlock();
+    ensureCodeBlock();
 
-      PsiVariable var = addVariable(declaration, initializer);
+    PsiVariable var = addVariable(declaration, initializer);
 
-      if (myAnchor instanceof PsiExpressionStatement &&
-          ExpressionUtils.isReferenceTo(((PsiExpressionStatement)myAnchor).getExpression(), var)) {
-        commentTracker.deleteAndRestoreComments(myAnchor);
-        if (myEditor != null) {
-          myEditor.getCaretModel().moveToLogicalPosition(myPosition);
-          myEditor.getCaretModel().moveToOffset(var.getTextRange().getEndOffset());
-          myEditor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
-          myEditor.getSelectionModel().removeSelection();
-        }
+    if (myAnchor instanceof PsiExpressionStatement &&
+        ExpressionUtils.isReferenceTo(((PsiExpressionStatement)myAnchor).getExpression(), var)) {
+      commentTracker.deleteAndRestoreComments(myAnchor);
+      if (myEditor != null) {
+        myEditor.getCaretModel().moveToLogicalPosition(myPosition);
+        myEditor.getCaretModel().moveToOffset(var.getTextRange().getEndOffset());
+        myEditor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
+        myEditor.getSelectionModel().removeSelection();
       }
+    }
 
-      highlight(var);
+    highlight(var);
 
+    if (!(var instanceof PsiPatternVariable)) {
       PsiUtil.setModifierProperty(var, PsiModifier.FINAL, mySettings.isDeclareFinal());
       if (mySettings.isDeclareVarType()) {
         PsiTypeElement typeElement = var.getTypeElement();
         LOG.assertTrue(typeElement != null);
         IntroduceVariableBase.expandDiamondsAndReplaceExplicitTypeWithVar(typeElement, var);
       }
-      myFieldConflictsResolver.fix();
-      return SmartPointerManager.getInstance(myProject).createSmartPsiElementPointer(var);
     }
-    catch (IncorrectOperationException e) {
-      LOG.error(e);
-    }
-    return null;
+    myFieldConflictsResolver.fix();
+    return SmartPointerManager.getInstance(myProject).createSmartPsiElementPointer(var);
   }
 
   private void ensureCodeBlock() {
     if (myAnchor instanceof PsiStatement && RefactoringUtil.isLoopOrIf(myAnchor.getParent())) {
       myAnchor = BlockUtils.expandSingleStatementToBlockStatement((PsiStatement)myAnchor);
     }
+    if (myAnchor instanceof PsiInstanceOfExpression && PsiUtil.skipParenthesizedExprDown(myExpression) instanceof PsiTypeCastExpression) {
+      return;
+    }
     if (myAnchor instanceof PsiExpression) {
-      PsiExpression place = RefactoringUtil.ensureCodeBlock(((PsiExpression)myAnchor));
-      if (place == null) {
+      CodeBlockSurrounder surrounder = CodeBlockSurrounder.forExpression((PsiExpression)myAnchor);
+      if (surrounder == null) {
         throw new RuntimeExceptionWithAttachments(
           "Cannot ensure code block: myAnchor type is " + myAnchor.getClass() + "; parent type is " + myAnchor.getParent().getClass(),
           new Attachment("context.txt", myContainer.getText()));
       }
-      PsiElement statement = RefactoringUtil.getParentStatement(place, false);
-      if (statement == null) {
-        throw new RuntimeExceptionWithAttachments(
-          "Cannot find parent statement for " + place.getClass() + "; parent type is " + place.getParent().getClass(),
-          new Attachment("context.txt", myContainer.getText()));
-      }
-      myAnchor = statement;
+      CodeBlockSurrounder.SurroundResult result = surrounder.surround();
+      myAnchor = result.getAnchor();
     }
   }
 
@@ -189,6 +186,11 @@ class VariableExtractor {
   @NotNull
   private PsiElement createDeclaration(@NotNull PsiType type, @NotNull String name, PsiExpression initializer) {
     PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(myProject);
+    if (myAnchor instanceof PsiInstanceOfExpression && initializer instanceof PsiTypeCastExpression) {
+      PsiTypeElement castType = Objects.requireNonNull(((PsiTypeCastExpression)initializer).getCastType());
+      return elementFactory.createExpressionFromText(
+        ((PsiInstanceOfExpression)myAnchor).getOperand().getText() + " instanceof " + castType.getText() + " " + name, myContainer);
+    }
     if (myContainer instanceof PsiClass) {
       PsiField declaration = elementFactory.createField(name, type);
       declaration.setInitializer(initializer);
@@ -220,11 +222,15 @@ class VariableExtractor {
         }
       }
     }
+    if (anchor instanceof PsiInstanceOfExpression && declaration instanceof PsiInstanceOfExpression) {
+      PsiInstanceOfExpression newInstanceOf = (PsiInstanceOfExpression)anchor.replace(declaration);
+      return ((PsiTypeTestPattern)Objects.requireNonNull(newInstanceOf.getPattern())).getPatternVariable();
+    }
     if (anchor instanceof PsiResourceListElement) {
       PsiDeclarationStatement declarationStatement = (PsiDeclarationStatement)declaration;
       PsiLocalVariable localVariable = (PsiLocalVariable)declarationStatement.getDeclaredElements()[0];
       PsiResourceVariable resourceVariable = JavaPsiFacade.getElementFactory(anchor.getProject())
-        .createResourceVariable(Objects.requireNonNull(localVariable.getName()), localVariable.getType(), initializer, anchor);
+        .createResourceVariable(localVariable.getName(), localVariable.getType(), initializer, anchor);
       return anchor.replace(resourceVariable);
     }
     PsiElement parent = anchor.getParent();
@@ -235,20 +241,35 @@ class VariableExtractor {
   }
 
   @NotNull
-  private static PsiType stripNullabilityAnnotationsFromTargetType(SmartTypePointer selectedType, final Project project) {
+  private static PsiType stripNullabilityAnnotationsFromTargetType(SmartTypePointer selectedType, final PsiExpression expression) {
     PsiType type = selectedType.getType();
     if (type == null) {
       throw new IncorrectOperationException("Unexpected empty type pointer");
     }
+
+    PsiDeclarationStatement probe = JavaPsiFacade.getElementFactory(expression.getProject())
+      .createVariableDeclarationStatement("x", TypeUtils.getObjectType(expression), null, expression);
+    Project project = expression.getProject();
+    NullabilityAnnotationInfo nullabilityAnnotationInfo = 
+      NullableNotNullManager.getInstance(project).findExplicitNullability((PsiLocalVariable)probe.getDeclaredElements()[0]);
+
     final PsiAnnotation[] annotations = type.getAnnotations();
     return type.annotate(new TypeAnnotationProvider() {
-      @NotNull
       @Override
-      public PsiAnnotation[] getAnnotations() {
+      public PsiAnnotation @NotNull [] getAnnotations() {
         final NullableNotNullManager manager = NullableNotNullManager.getInstance(project);
         final Set<String> nullables = new HashSet<>();
-        nullables.addAll(manager.getNotNulls());
-        nullables.addAll(manager.getNullables());
+        Nullability nullability = nullabilityAnnotationInfo != null ? nullabilityAnnotationInfo.getNullability() : Nullability.UNKNOWN;
+        if (nullability == Nullability.UNKNOWN) {
+          nullables.addAll(manager.getNotNulls());
+          nullables.addAll(manager.getNullables());
+        }
+        else if (nullability == Nullability.NOT_NULL) {
+          nullables.addAll(manager.getNotNulls());
+        }
+        else if (nullability == Nullability.NULLABLE){
+          nullables.addAll(manager.getNullables());
+        }
         return Arrays.stream(annotations)
           .filter(annotation -> !nullables.contains(annotation.getQualifiedName()))
           .toArray(PsiAnnotation[]::new);
@@ -260,15 +281,41 @@ class VariableExtractor {
   private static PsiElement correctAnchor(PsiExpression expr,
                                           @NotNull PsiElement anchor,
                                           PsiExpression[] occurrences) {
-    PsiExpression firstOccurrence = StreamEx.of(occurrences).append(expr)
-      .minBy(e -> e.getTextRange().getStartOffset()).orElse(null);
+    if (!expr.isPhysical()) {
+      expr = ObjectUtils.tryCast(expr.getUserData(ElementToWorkOn.PARENT), PsiExpression.class);
+      if (expr == null) return anchor;
+    }
+    if (anchor instanceof PsiSwitchLabelStatementBase) {
+      PsiSwitchBlock block = ((PsiSwitchLabelStatementBase)anchor).getEnclosingSwitchBlock();
+      if (block == null) return anchor;
+      anchor = block;
+      if (anchor instanceof PsiExpression) {
+        expr = (PsiExpression)anchor;
+      }
+    }
+    Set<PsiExpression> allOccurrences = StreamEx.of(occurrences).filter(PsiElement::isPhysical).append(expr).toSet();
+    PsiExpression firstOccurrence = Collections.min(allOccurrences, Comparator.comparing(e -> e.getTextRange().getStartOffset()));
+    if (HighlightUtil.Feature.PATTERNS.isAvailable(anchor)) {
+      PsiTypeCastExpression cast = ObjectUtils.tryCast(PsiUtil.skipParenthesizedExprDown(firstOccurrence), PsiTypeCastExpression.class);
+      if (cast != null && !(cast.getType() instanceof PsiPrimitiveType) &&
+          !(PsiUtil.skipParenthesizedExprUp(firstOccurrence.getParent()) instanceof PsiExpressionStatement)) {
+        PsiInstanceOfExpression candidate = InstanceOfUtils.findPatternCandidate(cast);
+        if (candidate != null && allOccurrences.stream()
+          .map(occ -> ObjectUtils.tryCast(PsiUtil.skipParenthesizedExprDown(occ), PsiTypeCastExpression.class))
+          .allMatch(occ -> occ != null && (occ == firstOccurrence || InstanceOfUtils.findPatternCandidate(occ) == candidate))) {
+          return candidate;
+        }
+      }
+    }
     if (anchor instanceof PsiWhileStatement) {
-      PsiExpression condition = ((PsiWhileStatement)anchor).getCondition();
-      if (condition != null) {
+      PsiWhileStatement whileStatement = (PsiWhileStatement)anchor;
+      PsiExpression condition = whileStatement.getCondition();
+      if (condition != null && allOccurrences.stream().allMatch(occurrence -> PsiTreeUtil.isAncestor(whileStatement, occurrence, true))) {
         if (firstOccurrence != null && PsiTreeUtil.isAncestor(condition, firstOccurrence, false)) {
           PsiPolyadicExpression polyadic = ObjectUtils.tryCast(PsiUtil.skipParenthesizedExprDown(condition), PsiPolyadicExpression.class);
           if (polyadic != null && JavaTokenType.ANDAND.equals(polyadic.getOperationTokenType())) {
             PsiExpression operand = ContainerUtil.find(polyadic.getOperands(), op -> PsiTreeUtil.isAncestor(op, firstOccurrence, false));
+            operand = PsiUtil.skipParenthesizedExprDown(operand);
             LOG.assertTrue(operand != null);
             return operand;
           }
@@ -276,12 +323,18 @@ class VariableExtractor {
         }
       }
     }
-    if (firstOccurrence != null && ControlFlowUtils.canExtractStatement(firstOccurrence) && 
+    if (firstOccurrence != null && CodeBlockSurrounder.canSurround(firstOccurrence) && 
         !PsiUtil.isAccessedForWriting(firstOccurrence)) {
       PsiExpression ancestorCandidate = ExpressionUtils.getTopLevelExpression(firstOccurrence);
-      if (PsiTreeUtil.isAncestor(anchor, ancestorCandidate, false) &&
-          ReorderingUtils.canExtract(ancestorCandidate, firstOccurrence) == ThreeState.NO) {
-        return firstOccurrence;
+      if (PsiTreeUtil.isAncestor(anchor, ancestorCandidate, false)) {
+        PsiElement statement = RefactoringUtil.getParentStatement(ancestorCandidate, false);
+        PsiElement extractable = statement == null ? PsiTreeUtil.getParentOfType(ancestorCandidate, PsiField.class) : statement;
+        if (allOccurrences.stream().allMatch(occurrence ->
+                                               PsiTreeUtil.isAncestor(extractable, occurrence, false) &&
+                                               (!PsiTreeUtil.isAncestor(ancestorCandidate, occurrence, false) ||
+                                                ReorderingUtils.canExtract(ancestorCandidate, occurrence) == ThreeState.NO))) {
+          return firstOccurrence;
+        }
       }
     }
     if (anchor instanceof PsiTryStatement && firstOccurrence != null) {
@@ -294,12 +347,6 @@ class VariableExtractor {
     }
     if (anchor.getParent() instanceof PsiSwitchLabeledRuleStatement) {
       return ExpressionUtils.getTopLevelExpression(expr);
-    }
-    if (anchor instanceof PsiSwitchLabelStatement) {
-      PsiSwitchBlock block = ((PsiSwitchLabelStatement)anchor).getEnclosingSwitchBlock();
-      if (block instanceof PsiSwitchStatement) {
-        return block;
-      }
     }
     if (RefactoringUtil.isLoopOrIf(anchor.getParent())) return anchor;
     PsiElement child = locateAnchor(anchor);
@@ -323,6 +370,7 @@ class VariableExtractor {
     return child;
   }
 
+  @Nullable
   public static PsiVariable introduce(final Project project,
                                       final PsiExpression expr,
                                       final Editor editor,

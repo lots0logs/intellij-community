@@ -20,6 +20,7 @@ import com.intellij.lang.properties.PropertiesImplUtil;
 import com.intellij.lang.properties.PropertiesUtil;
 import com.intellij.lang.properties.ResourceBundle;
 import com.intellij.lang.properties.psi.PropertiesFile;
+import com.intellij.lang.properties.psi.PropertyKeyValueFormat;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -140,8 +141,9 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
     return addPropertyAfter(property.getKey(), property.getValue(), anchor).getPsiElement().getNavigationElement();
   }
 
+  @NotNull
   @Override
-  public IProperty addPropertyAfter(String key, String value, IProperty anchor) {
+  public IProperty addPropertyAfter(@NotNull String key, @NotNull String value, IProperty anchor) {
     return addPropertyAfter(key, value, anchor, true);
   }
 
@@ -154,9 +156,8 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
     return new XmlProperty(addedEntry, this);
   }
 
-  @NotNull
   @Override
-  public IProperty addProperty(String key, String value) {
+  public @NotNull IProperty addProperty(@NotNull String key, @NotNull String value, @NotNull PropertyKeyValueFormat format) {
     final XmlTag entry = createPropertyTag(key, value);
     synchronized (myLock) {
       ensurePropertiesLoaded();
@@ -221,6 +222,7 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
     return result;
   }
 
+  @NotNull
   @Override
   public String getName() {
     return getContainingFile().getName();
@@ -236,6 +238,7 @@ public class XmlPropertiesFileImpl extends XmlPropertiesFile {
     return getContainingFile().getParent();
   }
 
+  @NotNull
   @Override
   public Project getProject() {
     return getContainingFile().getProject();

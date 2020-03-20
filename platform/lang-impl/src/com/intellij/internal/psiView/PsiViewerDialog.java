@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.internal.psiView;
 
 import com.intellij.ide.util.treeView.NodeRenderer;
@@ -58,7 +58,6 @@ import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
@@ -87,7 +86,7 @@ import static com.intellij.openapi.wm.IdeFocusManager.getGlobalInstance;
 public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disposable {
   private static final String REFS_CACHE = "References Resolve Cache";
   public static final Color BOX_COLOR = new JBColor(new Color(0xFC6C00), new Color(0xDE6C01));
-  public static final Logger LOG = Logger.getInstance("#com.intellij.internal.psiView.PsiViewerDialog");
+  public static final Logger LOG = Logger.getInstance(PsiViewerDialog.class);
   private final Project myProject;
 
 
@@ -117,7 +116,7 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
   private RangeHighlighter myHighlighter;
 
 
-  private final Set<PsiViewerSourceWrapper> mySourceWrappers = ContainerUtil.newTreeSet();
+  private final Set<PsiViewerSourceWrapper> mySourceWrappers = new TreeSet<>();
   private final EditorEx myEditor;
   private final EditorListener myEditorListener = new EditorListener();
   private String myLastParsedText = null;
@@ -220,7 +219,7 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
 
   @NotNull
   private JBTabs createTabPanel(@NotNull Project project) {
-    JBEditorTabsBase tabs = JBTabsFactory.createEditorTabs(project, this);
+    JBEditorTabsBase tabs = JBTabsFactory.createEditorTabs(project, getDisposable());
     tabs.getPresentation().setAlphabeticalMode(false).setSupportsCompression(false);
     return tabs;
   }
@@ -336,16 +335,13 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
       }
     }
 
-    myFileTypeComboBox.setModel(new CollectionComboBoxModel<>(ContainerUtil.newArrayList(mySourceWrappers), lastUsed));
-    myFileTypeComboBox.setRenderer(new ListCellRendererWrapper<PsiViewerSourceWrapper>() {
-      @Override
-      public void customize(JList list, PsiViewerSourceWrapper value, int index, boolean selected, boolean hasFocus) {
-        if (value != null) {
-          setText(value.getText());
-          setIcon(value.getIcon());
-        }
+    myFileTypeComboBox.setModel(new CollectionComboBoxModel<>(new ArrayList<>(mySourceWrappers), lastUsed));
+    myFileTypeComboBox.setRenderer(SimpleListCellRenderer.create((label, value, index) -> {
+      if (value != null) {
+        label.setText(value.getText());
+        label.setIcon(value.getIcon());
       }
-    });
+    }));
     new ComboboxSpeedSearch(myFileTypeComboBox) {
       @Override
       protected String getElementText(Object element) {
@@ -377,19 +373,9 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
       myFileTypeComboBox.setSelectedIndex(0);
     }
 
-    myDialectComboBox.setRenderer(new ListCellRendererWrapper<Language>() {
-      @Override
-      public void customize(final JList list, final Language value, final int index, final boolean selected, final boolean hasFocus) {
-        setText(value != null ? value.getDisplayName() : "<default>");
-      }
-    });
+    myDialectComboBox.setRenderer(SimpleListCellRenderer.create("(none)", value -> value.getDisplayName()));
     myDialectComboBox.addFocusListener(new AutoExpandFocusListener(myDialectComboBox));
-    myExtensionComboBox.setRenderer(new ListCellRendererWrapper<String>() {
-      @Override
-      public void customize(JList list, String value, int index, boolean selected, boolean hasFocus) {
-        if (value != null) setText("." + value);
-      }
-    });
+    myExtensionComboBox.setRenderer(SimpleListCellRenderer.create("", value -> "." + value));
     myExtensionComboBox.addFocusListener(new AutoExpandFocusListener(myExtensionComboBox));
 
     final ViewerTreeStructure psiTreeStructure = getTreeStructure();
@@ -431,7 +417,6 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
   }
 
   public static void initTree(JTree tree) {
-    UIUtil.setLineStyleAngled(tree);
     tree.setRootVisible(false);
     tree.setShowsRootHandles(true);
     tree.updateUI();
@@ -554,9 +539,9 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
     if (source instanceof LanguageFileType) {
       final Language baseLang = ((LanguageFileType)source).getLanguage();
       items.add(baseLang);
-      Language[] dialects = LanguageUtil.getLanguageDialects(baseLang);
-      Arrays.sort(dialects, LanguageUtil.LANGUAGE_COMPARATOR);
-      items.addAll(Arrays.asList(dialects));
+      List<Language> dialects = new ArrayList<>(baseLang.getDialects());
+      Collections.sort(dialects, LanguageUtil.LANGUAGE_COMPARATOR);
+      items.addAll(dialects);
     }
     myDialectComboBox.setModel(new CollectionComboBoxModel<>(items));
 
@@ -602,9 +587,9 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
   private static List<String> getAllExtensions(LanguageFileType fileType) {
     final List<FileNameMatcher> associations = FileTypeManager.getInstance().getAssociations(fileType);
     final List<String> extensions = new ArrayList<>();
-    extensions.add(fileType.getDefaultExtension().toLowerCase());
+    extensions.add(StringUtil.toLowerCase(fileType.getDefaultExtension()));
     for (FileNameMatcher matcher : associations) {
-      final String presentableString = matcher.getPresentableString().toLowerCase();
+      final String presentableString = StringUtil.toLowerCase(matcher.getPresentableString());
       if (presentableString.startsWith("*.")) {
         final String ext = presentableString.substring(2);
         if (ext.length() > 0 && !extensions.contains(ext) && EXT_PATTERN.matcher(ext).matches()) {
@@ -629,9 +614,8 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
     return null;
   }
 
-  @NotNull
   @Override
-  protected Action[] createActions() {
+  protected Action @NotNull [] createActions() {
     AbstractAction copyPsi = new AbstractAction("Cop&y PSI") {
       @Override
       public void actionPerformed(@NotNull ActionEvent e) {
@@ -680,7 +664,7 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
 
   @NotNull
   private ViewerTreeStructure getTreeStructure() {
-    return ObjectUtils.notNull((ViewerTreeStructure)myPsiTreeBuilder.getTreeStructure());
+    return Objects.requireNonNull((ViewerTreeStructure)myPsiTreeBuilder.getTreeStructure());
   }
 
   private PsiElement parseText(String text) {
@@ -693,7 +677,7 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
         final FileType type = (FileType)source;
         String ext = type.getDefaultExtension();
         if (myExtensionComboBox.isVisible()) {
-          ext = myExtensionComboBox.getSelectedItem().toString().toLowerCase(Locale.ENGLISH);
+          ext = StringUtil.toLowerCase(myExtensionComboBox.getSelectedItem().toString());
         }
         if (type instanceof LanguageFileType) {
           final Language dialect = (Language)myDialectComboBox.getSelectedItem();
@@ -961,8 +945,13 @@ public class PsiViewerDialog extends DialogWrapper implements DataProvider, Disp
 
           start += textRange.getStartOffset();
           end = start + textRange.getLength();
+          //todo[kb] probably move highlight color to the editor color scheme?
+          TextAttributes highlightReferenceTextRange = new TextAttributes(null, null,
+                                                                          JBColor.namedColor("PsiViewer.referenceHighlightColor", 0xA8C023),
+                                                                          EffectType.BOLD_DOTTED_LINE, Font.PLAIN);
           myListenerHighlighter = myEditor.getMarkupModel()
-            .addRangeHighlighter(start, end, HighlighterLayer.FIRST + 1, myAttributes, HighlighterTargetArea.EXACT_RANGE);
+            .addRangeHighlighter(start, end, HighlighterLayer.LAST,
+                                 highlightReferenceTextRange, HighlighterTargetArea.EXACT_RANGE);
         }
       }
     }

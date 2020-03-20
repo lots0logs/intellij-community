@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.preview.impl;
 
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.ide.ui.UISettingsListener;
 import com.intellij.openapi.actionSystem.*;
@@ -20,17 +21,18 @@ import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.wm.*;
-import com.intellij.openapi.wm.impl.ToolWindowImpl;
+import com.intellij.openapi.wm.ex.ToolWindowEx;
 import com.intellij.openapi.wm.impl.ToolWindowManagerImpl;
 import com.intellij.openapi.wm.impl.content.ToolWindowContentUi;
 import com.intellij.ui.Gray;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentManager;
-import com.intellij.ui.content.ContentManagerAdapter;
 import com.intellij.ui.content.ContentManagerEvent;
+import com.intellij.ui.content.ContentManagerListener;
 import com.intellij.util.Alarm;
 import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -38,6 +40,7 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.awt.*;
 import java.util.*;
+
 @State(name = "PreviewManager", storages = @Storage(StoragePathMacros.WORKSPACE_FILE))
 public class PreviewManagerImpl implements PreviewManager, PersistentStateComponent<PreviewManagerState> {
   private static final Key<PreviewInfo> INFO_KEY = Key.create("preview_info");
@@ -46,14 +49,13 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   private final Project myProject;
   private final Alarm myAlarm = new Alarm();
 
-  private ToolWindowImpl myToolWindow;
+  private ToolWindowEx myToolWindow;
 
   private ContentManager myContentManager;
   private Content myEmptyStateContent;
   private final JPanel myEmptyStatePanel;
 
   private final ArrayList<PreviewInfo> myHistory = new ArrayList<>();
-
 
   private final TreeSet<PreviewPanelProvider> myProviders = new TreeSet<>((o1, o2) -> {
     int result = Float.compare(o1.getMenuOrder(), o2.getMenuOrder());
@@ -95,7 +97,6 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
 
   @Override
   public void loadState(@NotNull PreviewManagerState state) {
-    if (state == null) return;
     for (Map.Entry<String, Boolean> entry : state.myArtifactFilesMap.entrySet()) {
       if (!entry.getValue()) {
         for (Iterator<PreviewProviderId> iterator = myActiveProviderIds.iterator(); iterator.hasNext(); ) {
@@ -127,7 +128,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       return;
     }
     if (isAvailable() && toolWindowManager.getToolWindow(ToolWindowId.PREVIEW) == null) {
-      myToolWindow = (ToolWindowImpl)toolWindowManager
+      myToolWindow = (ToolWindowEx)toolWindowManager
         .registerToolWindow(ToolWindowId.PREVIEW, myEmptyStatePanel, ToolWindowAnchor.RIGHT, myProject, false);
       myContentManager = myToolWindow.getContentManager();
       myToolWindow.setIcon(AllIcons.Toolwindows.ToolWindowPreview);
@@ -135,7 +136,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       myToolWindow.setAutoHide(true);
       myEmptyStateContent = myContentManager.getContent(0);
       final MoveToStandardViewAction moveToStandardViewAction = new MoveToStandardViewAction();
-      myContentManager.addContentManagerListener(new ContentManagerAdapter() {
+      myContentManager.addContentManagerListener(new ContentManagerListener() {
         @Override
         public void selectionChanged(@NotNull ContentManagerEvent event) {
           if (myInnerSelectionChange || event.getOperation() != ContentManagerEvent.ContentOperation.add) return;
@@ -148,9 +149,8 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       });
 
       moveToStandardViewAction.registerCustomShortcutSet(new ShortcutSet() {
-        @NotNull
         @Override
-        public Shortcut[] getShortcuts() {
+        public Shortcut @NotNull [] getShortcuts() {
           Keymap keymap = KeymapManager.getInstance().getActiveKeymap();
           return keymap.getShortcuts("ShowContent");
         }
@@ -213,7 +213,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       myContentManager.removeContent(content, false);
       info.release();
       if (myContentManager.getContents().length == 0) {
-        toggleToolWindow(false, null);
+        toggleToolWindow(false);
       }
       checkEmptyState();
     }
@@ -232,7 +232,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   }
 
   private <V, C> C preview(@NotNull final PreviewInfo<V, C> info, boolean requestFocus) {
-    toggleToolWindow(true, null);
+    toggleToolWindow(true);
     Content content = getContent(info);
     Content selectedContent = myContentManager.getSelectedContent();
     if (selectedContent != content) {
@@ -270,7 +270,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   public <V, C> void close(@NotNull PreviewProviderId<V, C> id, V data) {
     for (Content content : myContentManager.getContents()) {
       PreviewInfo info = content.getUserData(INFO_KEY);
-      if (info != null && info.getId() == id && info.getProvider().contentsAreEqual(info.getData(),data)) {
+      if (info != null && info.getId() == id && info.getProvider().contentsAreEqual(info.getData(), data)) {
         close(info);
         break;
       }
@@ -284,17 +284,18 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
     myLockedProviderIds.add(id);
     try {
       provider.showInStandardPlace(data);
-    } finally {
+    }
+    finally {
       myLockedProviderIds.remove(id);
     }
     close(id, data);
   }
 
-  private void toggleToolWindow(boolean activate, Runnable runnable) {
-    final ToolWindow toolWindow = ToolWindowManager.getInstance(myProject).getToolWindow(ToolWindowId.PREVIEW);
+  private void toggleToolWindow(boolean activate) {
+    ToolWindow toolWindow = ToolWindowManager.getInstance(myProject).getToolWindow(ToolWindowId.PREVIEW);
     if (toolWindow != null && activate != toolWindow.isActive()) {
       if (activate) {
-        toolWindow.activate(runnable, true);
+        toolWindow.activate(null, true);
       }
       else {
         if (!myAlarm.isEmpty()) {
@@ -305,10 +306,10 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
   }
 
   private class MoveToStandardViewAction extends AnAction {
-
-    MoveToStandardViewAction() {
-      super("Move to standard view", "Move to standard view", AllIcons.Actions.MoveTo2);
-    }
+  MoveToStandardViewAction() {
+    super(IdeBundle.messagePointer("action.AnAction.text.move.to.standard.view"),
+          IdeBundle.messagePointer("action.AnAction.description.move.to.standard.view"), AllIcons.Actions.MoveTo2);
+  }
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
@@ -317,7 +318,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
       PreviewInfo previewInfo = selectedContent.getUserData(INFO_KEY);
       if (previewInfo != null) {
         moveToStandardPlaceImpl(previewInfo.getId(), previewInfo.getData());
-        toggleToolWindow(false, null);
+        toggleToolWindow(false);
       }
     }
   }
@@ -364,7 +365,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
 
     @Override
     public void paint(Graphics g) {
-      boolean isDarkBackground = UIUtil.isUnderDarcula();
+      boolean isDarkBackground = StartupUiUtil.isUnderDarcula();
       UISettings.setupAntialiasing(g);
       UIUtil.TextPainter painter = new UIUtil.TextPainter()
         .withLineSpacing(1.5f)
@@ -372,7 +373,7 @@ public class PreviewManagerImpl implements PreviewManager, PersistentStateCompon
         .withFont(JBUI.Fonts.label(isDarkBackground ? 24f : 20f))
         .withShadow(true, new JBColor(Gray._200.withAlpha(100), Gray._0.withAlpha(255)));
 
-      painter.appendLine("No files are open");//.underlined(new JBColor(Gray._150, Gray._180));
+      painter.appendLine("No files are open");
       painter.draw(g, (width, height) -> {
         Dimension s = this.getSize();
         return Couple.of((s.width - width) / 2, (s.height - height) / 2);

@@ -1,23 +1,19 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.codeStyle.properties;
 
 import com.intellij.openapi.util.AtomicNotNullLazyValue;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class AbstractCodeStylePropertyMapper {
   private @NotNull final CodeStyleSettings myRootSettings;
-  private final AtomicNotNullLazyValue<Map<String,CodeStylePropertyAccessor>> myAccessorMap;
+  private final AtomicNotNullLazyValue<Map<String,CodeStylePropertyAccessor<?>>> myAccessorMap;
 
   public AbstractCodeStylePropertyMapper(@NotNull CodeStyleSettings settings) {
     myRootSettings = settings;
@@ -28,8 +24,8 @@ public abstract class AbstractCodeStylePropertyMapper {
     return getAccessorMap().keySet().stream().sorted().collect(Collectors.toList());
   }
 
-  private Map<String, CodeStylePropertyAccessor> createMap() {
-    Map<String, CodeStylePropertyAccessor> accessorMap = ContainerUtil.newHashMap();
+  private Map<String, CodeStylePropertyAccessor<?>> createMap() {
+    Map<String, CodeStylePropertyAccessor<?>> accessorMap = new HashMap<>();
     for (CodeStyleObjectDescriptor descriptor : getSupportedFields()) {
       addAccessorsFor(accessorMap, descriptor.getCodeStyleObject(), descriptor.getSupportedFields());
     }
@@ -40,30 +36,38 @@ public abstract class AbstractCodeStylePropertyMapper {
   @NotNull
   protected abstract List<CodeStyleObjectDescriptor> getSupportedFields();
 
-  protected void addAdditionalAccessors(@NotNull Map<String, CodeStylePropertyAccessor> accessorMap) {
+  protected void addAdditionalAccessors(@NotNull Map<String, CodeStylePropertyAccessor<?>> accessorMap) {
   }
 
-  private void addAccessorsFor(@NotNull Map<String, CodeStylePropertyAccessor> accessorMap,
+  private void addAccessorsFor(@NotNull Map<String, CodeStylePropertyAccessor<?>> accessorMap,
                                @NotNull Object codeStyleObject,
                                @Nullable Set<String> supportedFields) {
-    Class codeStyleClass = codeStyleObject.getClass();
+    Class<?> codeStyleClass = getObjectStorageClass(codeStyleObject);
     for (Field field : getCodeStyleFields(codeStyleClass)) {
       String fieldName = field.getName();
       if (supportedFields == null || supportedFields.contains(fieldName)) {
-        final CodeStylePropertyAccessor accessor = getAccessor(codeStyleObject, field);
-        if (accessor != null) {
+        final CodeStylePropertyAccessor<?> accessor = getAccessor(codeStyleObject, field);
+        if (accessor != null && !accessor.isIgnorable()) {
           accessorMap.put(accessor.getPropertyName(), accessor);
         }
       }
     }
   }
 
+  private static Class<?> getObjectStorageClass(@NotNull Object codeStyleObject) {
+    Class<?> objectClass = codeStyleObject.getClass();
+    if (CodeStyleSettings.class.isAssignableFrom(objectClass)) {
+      return CodeStyleSettings.class;
+    }
+    return objectClass;
+  }
+
   @Nullable
-  protected CodeStylePropertyAccessor getAccessor(@NotNull Object codeStyleObject, @NotNull Field field) {
+  protected CodeStylePropertyAccessor<?> getAccessor(@NotNull Object codeStyleObject, @NotNull Field field) {
     return new FieldAccessorFactory(field).createAccessor(codeStyleObject);
   }
 
-  private List<Field> getCodeStyleFields(Class codeStyleClass) {
+  private List<Field> getCodeStyleFields(Class<?> codeStyleClass) {
     List<Field> fields = new ArrayList<>();
     Field[] allFields = useDeclaredFields() ? codeStyleClass.getDeclaredFields() : codeStyleClass.getFields();
     for (Field field : allFields) {
@@ -88,7 +92,7 @@ public abstract class AbstractCodeStylePropertyMapper {
   }
 
   @NotNull
-  private Map<String,CodeStylePropertyAccessor> getAccessorMap() {
+  private Map<String,CodeStylePropertyAccessor<?>> getAccessorMap() {
     return myAccessorMap.getValue();
   }
 
@@ -112,7 +116,7 @@ public abstract class AbstractCodeStylePropertyMapper {
     }
   }
 
-  public CodeStylePropertyAccessor getAccessor(@NotNull String property) {
+  public CodeStylePropertyAccessor<?> getAccessor(@NotNull String property) {
     return myAccessorMap.getValue().get(property);
   }
 

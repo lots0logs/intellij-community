@@ -16,7 +16,6 @@
 package com.intellij.usageView;
 
 import com.intellij.injected.editor.VirtualFileWindow;
-import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.project.Project;
@@ -28,7 +27,7 @@ import org.jetbrains.annotations.Nullable;
 
 public class UsageInfo {
   public static final UsageInfo[] EMPTY_ARRAY = new UsageInfo[0];
-  private static final Logger LOG = Logger.getInstance("#com.intellij.usageView.UsageInfo");
+  private static final Logger LOG = Logger.getInstance(UsageInfo.class);
   private final SmartPsiElementPointer<?> mySmartPointer;
   private final SmartPsiFileRange myPsiFileRange;
 
@@ -89,9 +88,7 @@ public class UsageInfo {
     if (file != null &&
         !isNullOrBinary &&
         (effectiveStart != element.getTextOffset() - elementRange.getStartOffset() || effectiveEnd != elementRange.getLength())) {
-      TextRange rangeToStore = InjectedLanguageManager.getInstance(project).isInjectedFragment(file)
-                               ? elementRange
-                               : TextRange.create(effectiveStart, effectiveEnd).shiftRight(elementRange.getStartOffset());
+      TextRange rangeToStore = TextRange.create(effectiveStart, effectiveEnd).shiftRight(elementRange.getStartOffset());
       myPsiFileRange = smartPointerManager.createSmartPsiFileRangePointer(file, rangeToStore);
     }
     else {
@@ -292,10 +289,18 @@ public class UsageInfo {
   public int compareToByStartOffset(@NotNull UsageInfo info) {
     Pair<VirtualFile, Integer> offset0 = offset();
     Pair<VirtualFile, Integer> offset1 = info.offset();
-    if (offset0 == null || offset0.first == null || offset1 == null || offset1.first == null || !Comparing.equal(offset0.first, offset1.first)) {
-      return 0;
+    if (offset0 == null || offset1 == null) {
+      return (offset0 == null ? 0 : 1) - (offset1 == null ? 0 : 1);
     }
-    return offset0.second - offset1.second;
+    VirtualFile file0 = offset0.first;
+    VirtualFile file1 = offset1.first;
+    if (file0 == null || file1 == null) {
+      return (file0 == null ? 0 : 1) - (file1 == null ? 0 : 1);
+    }
+    if (Comparing.equal(file0, file1)) {
+      return offset0.second - offset1.second;
+    }
+    return file0.getPath().compareTo(file1.getPath());
   }
 
   @NotNull
@@ -311,7 +316,7 @@ public class UsageInfo {
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (!getClass().equals(o.getClass())) return false;
+    if (o == null || !getClass().equals(o.getClass())) return false;
 
     final UsageInfo usageInfo = (UsageInfo)o;
 

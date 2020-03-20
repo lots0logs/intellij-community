@@ -34,7 +34,7 @@ import java.util.List;
  * @author Vladimir Kondratyev
  */
 public final class CutCopyPasteSupport implements CopyProvider, CutProvider, PasteProvider{
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.CutCopyPasteSupport");
+  private static final Logger LOG = Logger.getInstance(CutCopyPasteSupport.class);
   private static final SAXBuilder SAX_BUILDER = new SAXBuilder();
 
   private final GuiEditor myEditor;
@@ -132,7 +132,7 @@ public final class CutCopyPasteSupport implements CopyProvider, CutProvider, Pas
   private static boolean loadComponentsToPaste(final GuiEditor editor, final String serializedComponents,
                                                final TIntArrayList xs,
                                                final TIntArrayList ys,
-                                               final ArrayList<RadComponent> componentsToPaste) {
+                                               final ArrayList<? super RadComponent> componentsToPaste) {
     final PsiPropertiesProvider provider = new PsiPropertiesProvider(editor.getModule());
 
     try {

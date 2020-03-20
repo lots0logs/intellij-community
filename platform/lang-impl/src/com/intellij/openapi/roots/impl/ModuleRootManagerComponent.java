@@ -9,9 +9,9 @@ import com.intellij.openapi.roots.impl.storage.ClassPathStorageUtil;
 import com.intellij.openapi.roots.impl.storage.ClasspathStorage;
 import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.util.registry.Registry;
-import com.intellij.openapi.vfs.pointers.VirtualFilePointerManager;
 import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
 
 import java.util.List;
 
@@ -30,10 +30,8 @@ import java.util.List;
 public class ModuleRootManagerComponent extends ModuleRootManagerImpl implements
                                                                       PersistentStateComponentWithModificationTracker<ModuleRootManagerImpl.ModuleRootManagerState>,
                                                                       StateStorageChooserEx {
-  public ModuleRootManagerComponent(Module module,
-                                    ProjectRootManagerImpl projectRootManager,
-                                    VirtualFilePointerManager filePointerManager) {
-    super(module, projectRootManager, filePointerManager);
+  public ModuleRootManagerComponent(Module module) {
+    super(module);
   }
 
   @NotNull
@@ -75,5 +73,11 @@ public class ModuleRootManagerComponent extends ModuleRootManagerImpl implements
       return true;
     });
     return result[0] + myRootModel.getStateModificationCount();
+  }
+
+  @Override
+  @TestOnly
+  public long getModificationCountForTests() {
+    return getStateModificationCount();
   }
 }

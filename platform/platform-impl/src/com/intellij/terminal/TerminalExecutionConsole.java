@@ -1,49 +1,42 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.terminal;
 
+import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.filters.Filter;
 import com.intellij.execution.filters.HyperlinkInfo;
 import com.intellij.execution.process.*;
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.execution.ui.ConsoleViewContentType;
 import com.intellij.execution.ui.ObservableConsoleView;
+import com.intellij.icons.AllIcons;
+import com.intellij.idea.ActionsBundle;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DataProvider;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Key;
-import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.encoding.EncodingProjectManager;
 import com.intellij.util.LineSeparator;
 import com.intellij.util.ObjectUtils;
-import com.jediterm.terminal.*;
+import com.jediterm.terminal.HyperlinkStyle;
+import com.jediterm.terminal.RequestOrigin;
+import com.jediterm.terminal.TerminalStarter;
+import com.jediterm.terminal.TtyConnector;
 import com.jediterm.terminal.model.JediTerminal;
 import com.jediterm.terminal.model.StyleState;
 import com.jediterm.terminal.model.TerminalTextBuffer;
-import com.jediterm.terminal.ui.TerminalSession;
 import com.jediterm.terminal.ui.settings.SettingsProvider;
 import com.jediterm.terminal.util.CharUtils;
 import com.pty4j.PtyProcess;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -53,9 +46,6 @@ import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * @author traff
- */
 public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleView {
   private static final Logger LOG = Logger.getInstance(TerminalExecutionConsole.class);
 
@@ -67,12 +57,7 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
   private final PendingTasksRunner myOnResizedRunner;
   private final TerminalConsoleContentHelper myContentHelper = new TerminalConsoleContentHelper(this);
 
-  private boolean myEnterKeyDefaultCodeEnabled = false; // TODO turn on by default in 2019.2
-  private final TerminalKeyEncoder myKeyEncoder = new TerminalKeyEncoder();
-
-  {
-    myKeyEncoder.setAutoNewLine(true);
-  }
+  private boolean myEnterKeyDefaultCodeEnabled = true;
 
   public TerminalExecutionConsole(@NotNull Project project, @Nullable ProcessHandler processHandler) {
     myProject = project;
@@ -92,14 +77,15 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
   }
 
   private void printText(@NotNull String text, @Nullable ConsoleViewContentType contentType) throws IOException {
-    if (contentType != null) {
-      myDataStream.append(encodeColor(contentType.getAttributes().getForegroundColor()));
+    Color foregroundColor = contentType != null ? contentType.getAttributes().getForegroundColor() : null;
+    if (foregroundColor != null) {
+      myDataStream.append(encodeColor(foregroundColor));
     }
 
     myDataStream.append(text);
 
-    if (contentType != null) {
-      myDataStream.append((char)CharUtils.ESC + "[39m"); //restore color
+    if (foregroundColor != null) {
+      myDataStream.append((char)CharUtils.ESC + "[39m"); //restore default foreground color
     }
     myContentHelper.onContentTypePrinted(ObjectUtils.notNull(contentType, ConsoleViewContentType.NORMAL_OUTPUT));
   }
@@ -109,22 +95,17 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
     myContentHelper.addChangeListener(listener, parent);
   }
 
-  private static String encodeColor(Color color) {
+  @NotNull
+  private static String encodeColor(@NotNull Color color) {
     return ((char)CharUtils.ESC) + "[" + "38;2;" + color.getRed() + ";" + color.getGreen() + ";" +
            color.getBlue() + "m";
   }
 
-  public void setAutoNewLineMode(boolean enabled) {
-    myKeyEncoder.setAutoNewLine(enabled);
-  }
-
   /**
-   * @deprecated use
+   * @deprecated use {@link #withEnterKeyDefaultCodeEnabled(boolean)}
    */
   @Deprecated
-  @NotNull
-  public TerminalExecutionConsole withEnterKeyLineSeparator(@NotNull LineSeparator lineSeparator) {
-    return this;
+  public void setAutoNewLineMode(@SuppressWarnings("unused") boolean enabled) {
   }
 
   @NotNull
@@ -133,8 +114,13 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
     return this;
   }
 
+  /**
+   * @deprecated use {{@link #addMessageFilter(Filter)}} instead
+   */
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.3")
+  @Deprecated
   public void addMessageFilter(Project project, Filter filter) {
-    myTerminalWidget.addMessageFilter(project, filter);
+    myTerminalWidget.addMessageFilter(filter);
   }
 
   @Override
@@ -193,22 +179,18 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
    * @param processHandler        ProcessHandler instance wrapping underlying PtyProcess
    * @param attachToProcessOutput true if process output should be printed in the console,
    *                              false if output printing is managed externally, e.g. by testing
-   *                              console {@code com.intellij.execution.testframework.ui.BaseTestsOutputConsoleView}
+   *                              console {@link com.intellij.execution.testframework.ui.BaseTestsOutputConsoleView}
    */
   protected final void attachToProcess(@NotNull ProcessHandler processHandler, boolean attachToProcessOutput) {
     if (!myAttachedToProcess.compareAndSet(false, true)) {
       return;
     }
-    TerminalSession session = myTerminalWidget
-      .createTerminalSession(
-        new ProcessHandlerTtyConnector(processHandler, EncodingProjectManager.getInstance(myProject).getDefaultCharset()));
+    myTerminalWidget.createTerminalSession(new ProcessHandlerTtyConnector(
+      processHandler, EncodingProjectManager.getInstance(myProject).getDefaultCharset())
+    );
+    myTerminalWidget.start();
 
     processHandler.addProcessListener(new ProcessAdapter() {
-      @Override
-      public void startNotified(@NotNull ProcessEvent event) {
-        session.start();
-      }
-
       @Override
       public void onTextAvailable(@NotNull ProcessEvent event, @NotNull Key outputType) {
         if (attachToProcessOutput) {
@@ -239,6 +221,7 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
           if (widget != null) {
             widget.getTerminalPanel().setCursorVisible(false);
           }
+          myAttachedToProcess.set(false);
         }, ModalityState.any());
       }
     });
@@ -269,7 +252,7 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
 
   @Override
   public void addMessageFilter(@NotNull Filter filter) {
-    addMessageFilter(myProject, filter);
+    myTerminalWidget.addMessageFilter(filter);
   }
 
   @Override
@@ -287,16 +270,25 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
     return false;
   }
 
-  @NotNull
-  @Override
-  public AnAction[] createConsoleActions() {
+  /**
+   * @deprecated already handled by {@link com.intellij.execution.runners.RunContentBuilder#createDescriptor()}
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.3")
+  public AnAction @NotNull [] detachConsoleActions(boolean prependSeparatorIfNonEmpty) {
     return AnAction.EMPTY_ARRAY;
+  }
+
+  @Override
+  public AnAction @NotNull [] createConsoleActions() {
+    return new AnAction[]{new ScrollToTheEndAction(), new ClearAction()};
   }
 
   @Override
   public void allowHeavyFilters() {
   }
 
+  @NotNull
   @Override
   public JComponent getComponent() {
     return myTerminalWidget.getComponent();
@@ -320,7 +312,7 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
 
   private class ConsoleTerminalWidget extends JBTerminalWidget implements DataProvider {
     private ConsoleTerminalWidget(@NotNull Project project, @NotNull JBTerminalSystemSettingsProviderBase provider) {
-      super(project, 200, 24, provider, TerminalExecutionConsole.this);
+      super(project, 200, 24, provider, TerminalExecutionConsole.this, TerminalExecutionConsole.this);
     }
 
     @Override
@@ -329,8 +321,12 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
                                                   @NotNull TerminalTextBuffer textBuffer) {
       JBTerminalPanel panel = new JBTerminalPanel((JBTerminalSystemSettingsProviderBase)settingsProvider, textBuffer, styleState) {
         @Override
-        public Dimension requestResize(Dimension newSize, RequestOrigin origin, int cursorY, JediTerminal.ResizeHandler resizeHandler) {
-          Dimension dimension = super.requestResize(newSize, origin, cursorY, resizeHandler);
+        public Dimension requestResize(Dimension newSize,
+                                       RequestOrigin origin,
+                                       int cursorX,
+                                       int cursorY,
+                                       JediTerminal.ResizeHandler resizeHandler) {
+          Dimension dimension = super.requestResize(newSize, origin, cursorX, cursorY, resizeHandler);
           myOnResizedRunner.setReady();
           return dimension;
         }
@@ -350,13 +346,10 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
       return new TerminalStarter(terminal, connector, myDataStream) {
         @Override
         public byte[] getCode(int key, int modifiers) {
-          if (key == KeyEvent.VK_ENTER) {
-            if (modifiers == 0 && myEnterKeyDefaultCodeEnabled) {
-              // pty4j expects \r on Windows and \n on Unix as Enter key code
-              // https://github.com/JetBrains/pty4j/commit/3166f860354c24740729999df51e9b8a46fb417c
-              return SystemInfo.isWindows ? LineSeparator.CR.getSeparatorBytes() : LineSeparator.LF.getSeparatorBytes();
-            }
-            return myKeyEncoder.getCode(key, modifiers);
+          if (key == KeyEvent.VK_ENTER && modifiers == 0 && myEnterKeyDefaultCodeEnabled) {
+            // pty4j expects \r as Enter key code
+            // https://github.com/JetBrains/pty4j/blob/0.9.4/test/com/pty4j/PtyTest.java#L54
+            return LineSeparator.CR.getSeparatorBytes();
           }
           return super.getCode(key, modifiers);
         }
@@ -369,7 +362,51 @@ public class TerminalExecutionConsole implements ConsoleView, ObservableConsoleV
       if (LangDataKeys.CONSOLE_VIEW.is(dataId)) {
         return TerminalExecutionConsole.this;
       }
-      return null;
+      return super.getData(dataId);
+    }
+  }
+
+  private class ClearAction extends DumbAwareAction {
+    private ClearAction() {
+      super(ExecutionBundle.messagePointer("clear.all.from.console.action.name"),
+            ExecutionBundle.messagePointer("clear.all.from.console.action.text"), AllIcons.Actions.GC);
+    }
+
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+      e.getPresentation().setEnabled(true);
+    }
+
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      clear();
+    }
+  }
+
+  private class ScrollToTheEndAction extends DumbAwareAction {
+    private ScrollToTheEndAction() {
+      super(ActionsBundle.messagePointer("action.EditorConsoleScrollToTheEnd.text"),
+            ActionsBundle.messagePointer("action.EditorConsoleScrollToTheEnd.text"),
+            AllIcons.RunConfigurations.Scroll_down);
+    }
+
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+      BoundedRangeModel model = getBoundedRangeModel();
+      e.getPresentation().setEnabled(model != null && model.getValue() != 0);
+    }
+
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      BoundedRangeModel model = getBoundedRangeModel();
+      if (model != null) {
+        model.setValue(0);
+      }
+    }
+
+    @Nullable
+    private BoundedRangeModel getBoundedRangeModel() {
+      return myTerminalWidget != null ? myTerminalWidget.getTerminalPanel().getBoundedRangeModel() : null;
     }
   }
 }

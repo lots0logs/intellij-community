@@ -51,12 +51,6 @@ public class WhileCanBeForeachInspection extends BaseInspection {
 
   @Override
   @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("while.can.be.foreach.display.name");
-  }
-
-  @Override
-  @NotNull
   protected String buildErrorString(Object... infos) {
     return InspectionGadgetsBundle.message("while.can.be.foreach.problem.descriptor");
   }
@@ -120,7 +114,7 @@ public class WhileCanBeForeachInspection extends BaseInspection {
         return;
       }
       final PsiReferenceExpression methodExpression = initializer.getMethodExpression();
-      final PsiExpression collection = ParenthesesUtils.stripParentheses(ExpressionUtils.getQualifierOrThis(methodExpression));
+      final PsiExpression collection = ParenthesesUtils.stripParentheses(ExpressionUtils.getEffectiveQualifier(methodExpression));
       if (collection == null) {
         return;
       }

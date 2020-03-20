@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.coverage;
 
 import com.intellij.CommonBundle;
@@ -15,6 +15,7 @@ import com.intellij.execution.configurations.coverage.CoverageEnabledConfigurati
 import com.intellij.execution.configurations.coverage.JavaCoverageEnabledConfiguration;
 import com.intellij.execution.testframework.AbstractTestProxy;
 import com.intellij.ide.BrowserUtil;
+import com.intellij.java.coverage.JavaCoverageBundle;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ReadAction;
@@ -125,7 +126,7 @@ public class JavaCoverageEngine extends CoverageEngine {
 
   private static void extractTests(final File traceFile,
                                    final DataInputStream in,
-                                   final Set<String> tests,
+                                   final Set<? super String> tests,
                                    final String classFQName,
                                    final int lineNumber) throws IOException {
     long traceSize = in.readInt();
@@ -136,7 +137,7 @@ public class JavaCoverageEngine extends CoverageEngine {
         final int line = in.readInt();
         if (Comparing.strEqual(className, classFQName)) {
           if (lineNumber == line) {
-            tests.add(FileUtil.getNameWithoutExtension(traceFile));
+            tests.add(FileUtilRt.getNameWithoutExtension(traceFile.getName()));
             return;
           }
         }
@@ -144,8 +145,7 @@ public class JavaCoverageEngine extends CoverageEngine {
     }
   }
 
-  @Nullable
-  private static File[] getTraceFiles(Project project) {
+  private static File @Nullable [] getTraceFiles(Project project) {
     final CoverageSuitesBundle currentSuite = CoverageDataManager.getInstance(project).getCurrentSuitesBundle();
     if (currentSuite == null) return null;
     final List<File> files = new ArrayList<>();
@@ -162,7 +162,7 @@ public class JavaCoverageEngine extends CoverageEngine {
 
   private static File getTracesDirectory(CoverageSuite coverageSuite) {
     final String filePath = coverageSuite.getCoverageDataFileName();
-    final String dirName = FileUtil.getNameWithoutExtension(new File(filePath).getName());
+    final String dirName = FileUtilRt.getNameWithoutExtension(new File(filePath).getName());
 
     final File parentDir = new File(filePath).getParentFile();
     return new File(parentDir, dirName);
@@ -253,7 +253,7 @@ public class JavaCoverageEngine extends CoverageEngine {
 
   @NotNull
   @Override
-  public CoverageAnnotator getCoverageAnnotator(Project project) {
+  public CoverageAnnotator getCoverageAnnotator(@NotNull Project project) {
     return JavaCoverageAnnotator.getInstance(project);
   }
 
@@ -282,7 +282,7 @@ public class JavaCoverageEngine extends CoverageEngine {
     for (CoverageSuite coverageSuite : suite.getSuites()) {
       final JavaCoverageSuite javaSuite = (JavaCoverageSuite)coverageSuite;
 
-      if (javaSuite.isPackageFiltered(ReadAction.compute(() ->((PsiClassOwner)psiFile).getPackageName()))) {
+      if (psiFile instanceof PsiClassOwner && javaSuite.isPackageFiltered(ReadAction.compute(() -> ((PsiClassOwner)psiFile).getPackageName()))) {
         return true;
       } else {
         final List<PsiClass> classes = javaSuite.getCurrentSuiteClasses(project);
@@ -310,8 +310,8 @@ public class JavaCoverageEngine extends CoverageEngine {
       suite.checkModule(module);
       final Runnable runnable = () -> {
         if (Messages.showOkCancelDialog(
-          "Project class files are out of date. Would you like to recompile? The refusal to do it will result in incomplete coverage information",
-          "Project Is out of Date", Messages.getWarningIcon()) == Messages.OK) {
+          JavaCoverageBundle.message("project.class.files.are.out.of.date"),
+          JavaCoverageBundle.message("project.is.out.of.date"), Messages.getWarningIcon()) == Messages.OK) {
           final CompilerManager compilerManager = CompilerManager.getInstance(project);
           compilerManager.make(compilerManager.createProjectCompileScope(project), (aborted, errors, warnings, compileContext) -> {
             if (aborted || errors != 0) return;
@@ -372,7 +372,7 @@ public class JavaCoverageEngine extends CoverageEngine {
   @NotNull
   public String getQualifiedName(@NotNull final File outputFile, @NotNull final PsiFile sourceFile) {
     final String packageFQName = getPackageName(sourceFile);
-    return StringUtil.getQualifiedName(packageFQName, FileUtil.getNameWithoutExtension(outputFile));
+    return StringUtil.getQualifiedName(packageFQName, FileUtilRt.getNameWithoutExtension(outputFile.getName()));
   }
 
   @NotNull
@@ -436,7 +436,7 @@ public class JavaCoverageEngine extends CoverageEngine {
       final String className = ReadAction.compute(() -> psiClass.getName());
       for (File child : children) {
         if (FileUtilRt.extensionEquals(child.getName(), StdFileTypes.CLASS.getDefaultExtension())) {
-          final String childName = FileUtil.getNameWithoutExtension(child);
+          final String childName = FileUtilRt.getNameWithoutExtension(child.getName());
           if (childName.equals(className) ||  //class or inner
               childName.startsWith(className) && childName.charAt(className.length()) == '$') {
             classFiles.add(child);
@@ -484,14 +484,8 @@ public class JavaCoverageEngine extends CoverageEngine {
       else if (parent instanceof PsiSwitchStatement) {
         condition = ((PsiSwitchStatement)parent).getExpression();
       }
-      else if (parent instanceof PsiDoWhileStatement) {
-        condition = ((PsiDoWhileStatement)parent).getCondition();
-      }
-      else if (parent instanceof PsiForStatement) {
-        condition = ((PsiForStatement)parent).getCondition();
-      }
-      else if (parent instanceof PsiWhileStatement) {
-        condition = ((PsiWhileStatement)parent).getCondition();
+      else if (parent instanceof PsiConditionalLoopStatement) {
+        condition = ((PsiConditionalLoopStatement)parent).getCondition();
       }
       else if (parent instanceof PsiForeachStatement) {
         condition = ((PsiForeachStatement)parent).getIteratedValue();
@@ -594,7 +588,7 @@ public class JavaCoverageEngine extends CoverageEngine {
 
   @Override
   @NotNull
-  public List<PsiElement> findTestsByNames(@NotNull String[] testNames, @NotNull Project project) {
+  public List<PsiElement> findTestsByNames(String @NotNull [] testNames, @NotNull Project project) {
     final List<PsiElement> elements = new ArrayList<>();
     PsiManager psiManager = PsiManager.getInstance(project);
     for (String testName : testNames) {
@@ -614,7 +608,7 @@ public class JavaCoverageEngine extends CoverageEngine {
     TestFramework testFramework = TestFrameworks.detectFramework(psiClass);
     if (testFramework == null) return;
     Arrays.stream(psiClass.getAllMethods())
-      .filter(method -> testFramework.isTestMethod(method) && 
+      .filter(method -> testFramework.isTestMethod(method) &&
                         testName.equals(CoverageListener.sanitize(method.getName(), className.length())))
       .forEach(elements::add);
   }
@@ -670,7 +664,7 @@ public class JavaCoverageEngine extends CoverageEngine {
                                    @NotNull final CoverageSuitesBundle currentSuite) {
 
     final ExportToHTMLSettings settings = ExportToHTMLSettings.getInstance(project);
-    ProgressManager.getInstance().run(new Task.Backgroundable(project, "Generating Coverage Report ...") {
+    ProgressManager.getInstance().run(new Task.Backgroundable(project, JavaCoverageBundle.message("generating.coverage.report")) {
       final Exception[] myExceptions = new Exception[1];
 
       @Override
@@ -718,7 +712,7 @@ public class JavaCoverageEngine extends CoverageEngine {
     return new JavaCoverageViewExtension((JavaCoverageAnnotator)getCoverageAnnotator(project), project, suiteBundle, stateBean);
   }
 
-  public boolean isSourceMapNeeded(RunConfigurationBase configuration) {
+  public static boolean isSourceMapNeeded(RunConfigurationBase configuration) {
     for (final JavaCoverageEngineExtension extension : JavaCoverageEngineExtension.EP_NAME.getExtensionList()) {
       if (extension.isSourceMapNeeded(configuration)) {
         return true;

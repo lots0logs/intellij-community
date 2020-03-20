@@ -19,7 +19,6 @@ import com.intellij.openapi.vcs.checkin.CheckinHandler;
 import com.intellij.openapi.vcs.checkin.VcsCheckinHandlerFactory;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.PairConsumer;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.xml.util.XmlStringUtil;
 import git4idea.GitUtil;
@@ -103,7 +102,7 @@ public class GitCheckinHandlerFactory extends VcsCheckinHandlerFactory {
       final Collection<VirtualFile> files = myPanel.getVirtualFiles(); // deleted files aren't included, but for them we don't care about CRLFs.
       final AtomicReference<GitCrlfProblemsDetector> crlfHelper = new AtomicReference<>();
       ProgressManager.getInstance().run(
-        new Task.Modal(myProject, "Checking for Line Separator Issues", true) {
+        new Task.Modal(myProject, "Checking for Line Separator Issues...", true) {
           @Override
           public void run(@NotNull ProgressIndicator indicator) {
             crlfHelper.set(GitCrlfProblemsDetector.detect(GitCheckinHandlerFactory.MyCheckinHandler.this.myProject,
@@ -144,17 +143,22 @@ public class GitCheckinHandlerFactory extends VcsCheckinHandlerFactory {
     }
 
     private void setCoreAutoCrlfAttribute(@NotNull VirtualFile aRoot) {
-      try {
-        GitConfigUtil.setValue(myProject, aRoot, GitConfigUtil.CORE_AUTOCRLF, GitCrlfUtil.RECOMMENDED_VALUE, "--global");
-      }
-      catch (VcsException e) {
-        // it is not critical: the user just will get the dialog again next time
-        LOG.warn("Couldn't globally set core.autocrlf in " + aRoot, e);
-      }
+      ProgressManager.getInstance().run(new Task.Modal(myProject, "Updating Git Config...", true) {
+        @Override
+        public void run(@NotNull ProgressIndicator pi) {
+          try {
+            GitConfigUtil.setValue(myProject, aRoot, GitConfigUtil.CORE_AUTOCRLF, GitCrlfUtil.RECOMMENDED_VALUE, "--global");
+          }
+          catch (VcsException e) {
+            // it is not critical: the user just will get the dialog again next time
+            LOG.warn("Couldn't globally set core.autocrlf in " + aRoot, e);
+          }
+        }
+      });
     }
 
     private ReturnResult checkGitVersionAndEnv() {
-      GitVersion version = GitExecutableManager.getInstance().getVersionOrCancel(myProject);
+      GitVersion version = GitExecutableManager.getInstance().getVersionUnderModalProgressOrCancel(myProject);
       if (System.getenv("HOME") == null && GitVersionSpecialty.DOESNT_DEFINE_HOME_ENV_VAR.existsIn(version)) {
         Messages.showErrorDialog(myProject,
                                  "You are using Git " +
@@ -200,10 +204,10 @@ public class GitCheckinHandlerFactory extends VcsCheckinHandlerFactory {
 
     @NotNull
     private static Map<VirtualFile, Couple<String>> getDefinedUserNames(@NotNull final Project project,
-                                                                        @NotNull final Collection<VirtualFile> roots,
+                                                                        @NotNull final Collection<? extends VirtualFile> roots,
                                                                         final boolean stopWhenFoundFirst) {
-      final Map<VirtualFile, Couple<String>> defined = ContainerUtil.newHashMap();
-      ProgressManager.getInstance().run(new Task.Modal(project, "Checking Git User Name", true) {
+      final Map<VirtualFile, Couple<String>> defined = new HashMap<>();
+      ProgressManager.getInstance().run(new Task.Modal(project, "Checking Git User Name...", true) {
         @Override
         public void run(@NotNull ProgressIndicator pi) {
           for (VirtualFile root : roots) {
@@ -229,7 +233,7 @@ public class GitCheckinHandlerFactory extends VcsCheckinHandlerFactory {
     }
 
     private boolean setUserNameUnderProgress(@NotNull final Project project,
-                                             @NotNull final Collection<VirtualFile> notDefined,
+                                             @NotNull final Collection<? extends VirtualFile> notDefined,
                                              @NotNull final GitUserNameNotDefinedDialog dialog) {
       final Ref<String> error = Ref.create();
       ProgressManager.getInstance().run(new Task.Modal(project, "Setting Git User Name...", true) {
@@ -347,7 +351,7 @@ public class GitCheckinHandlerFactory extends VcsCheckinHandlerFactory {
     private DetachedRoot getDetachedRoot() {
       GitRepositoryManager repositoryManager = GitUtil.getRepositoryManager(myPanel.getProject());
       for (VirtualFile root : getSelectedRoots()) {
-        GitRepository repository = repositoryManager.getRepositoryForRoot(root);
+        GitRepository repository = repositoryManager.getRepositoryForRootQuick(root);
         if (repository == null) {
           continue;
         }
@@ -367,7 +371,7 @@ public class GitCheckinHandlerFactory extends VcsCheckinHandlerFactory {
         VcsRoot vcsRoot = vcsManager.getVcsRootObjectFor(path);
         if (vcsRoot != null) {
           VirtualFile root = vcsRoot.getPath();
-          if (git.equals(vcsRoot.getVcs()) && root != null) {
+          if (git.equals(vcsRoot.getVcs())) {
             result.add(root);
           }
         }

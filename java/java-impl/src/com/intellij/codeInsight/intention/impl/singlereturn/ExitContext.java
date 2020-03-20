@@ -3,7 +3,9 @@ package com.intellij.codeInsight.intention.impl.singlereturn;
 
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.VariableKind;
+import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiTypesUtil;
+import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.siyeh.ig.psiutils.BoolUtils;
 import com.siyeh.ig.psiutils.EquivalenceChecker;
@@ -25,8 +27,8 @@ class ExitContext {
   private final @NotNull PsiCodeBlock myBlock;
   private final @NotNull String myReturnVariable;
   private final @NotNull PsiElementFactory myFactory;
-  boolean myReturnVariableUsed = false;
-  PsiExpression myReturnVariableDefaultValue;
+  private boolean myReturnVariableUsed = false;
+  private final PsiExpression myReturnVariableDefaultValue;
 
   ExitContext(@NotNull PsiCodeBlock block, @NotNull PsiType returnType, @NotNull FinishMarker marker) {
     myBlock = block;
@@ -34,9 +36,10 @@ class ExitContext {
     myReturnType = returnType;
     myReturnVariable =
       new VariableNameGenerator(block, VariableKind.LOCAL_VARIABLE).byName("result", "res").byType(returnType).generate(true);
-    myReturnVariableDefaultValue = marker.myDefaultValue;
-    if (myReturnVariableDefaultValue != null && myReturnVariableDefaultValue.isPhysical()) {
-      myReturnVariableDefaultValue = (PsiExpression)myReturnVariableDefaultValue.copy();
+    if (marker.myDefaultValue != null && PsiTreeUtil.isAncestor(block, marker.myDefaultValue, true)) {
+      myReturnVariableDefaultValue = (PsiExpression)marker.myDefaultValue.copy();
+    } else {
+      myReturnVariableDefaultValue = marker.myDefaultValue;
     }
     myFinishMarkerType = marker.myType;
   }
@@ -73,14 +76,9 @@ class ExitContext {
     }
   }
 
-  void registerReturnValue(PsiExpression value, List<String> replacements) {
+  void registerReturnValue(PsiExpression value, List<? super String> replacements) {
     myReturnVariableUsed = true;
-    if (FinishMarker.canMoveToStart(value) &&
-        (myReturnVariableDefaultValue == null ||
-         EquivalenceChecker.getCanonicalPsiEquivalence().expressionsAreEquivalent(myReturnVariableDefaultValue, value))) {
-      myReturnVariableDefaultValue = (PsiExpression)value.copy();
-    }
-    else {
+    if (!EquivalenceChecker.getCanonicalPsiEquivalence().expressionsAreEquivalent(myReturnVariableDefaultValue, value)) {
       replacements.add(0, myReturnVariable + "=" + value.getText() + ";");
     }
   }
@@ -99,25 +97,34 @@ class ExitContext {
     }
   }
 
-  void declareVariables() {
+  PsiLocalVariable declareVariables() {
     if (myFinishedVariable != null) {
       PsiJavaToken start = requireNonNull(myBlock.getLBrace());
       PsiExpression initializer = myFactory.createExpressionFromText("false", null);
       PsiDeclarationStatement declaration =
         myFactory.createVariableDeclarationStatement(myFinishedVariable, PsiType.BOOLEAN, initializer);
+      PsiModifierList list = ((PsiLocalVariable)declaration.getDeclaredElements()[0]).getModifierList();
+      if (list != null) {
+        // Cannot be final: always reassigned or useless
+        list.setModifierProperty(PsiModifier.FINAL, false);
+      }
       myBlock.addAfter(declaration, start);
     }
     if (myReturnVariableUsed) {
       PsiJavaToken start = requireNonNull(myBlock.getLBrace());
-      if (myReturnVariableDefaultValue == null && myFinishedVariable != null) {
-        myReturnVariableDefaultValue = myFactory.createExpressionFromText(PsiTypesUtil.getDefaultValueOfType(myReturnType), null);
+      PsiExpression initializer = myReturnVariableDefaultValue;
+      if (initializer == null && myFinishedVariable != null) {
+        initializer = myFactory.createExpressionFromText(PsiTypesUtil.getDefaultValueOfType(myReturnType), null);
       }
-      PsiDeclarationStatement declaration =
-        myFactory.createVariableDeclarationStatement(myReturnVariable, myReturnType, myReturnVariableDefaultValue);
-      myBlock.addAfter(declaration, start);
-      PsiJavaToken end = requireNonNull(myBlock.getRBrace());
-      myBlock.addBefore(myFactory.createStatementFromText("return " + myReturnVariable + ";", myBlock), end);
+      PsiDeclarationStatement declaration = myFactory.createVariableDeclarationStatement(myReturnVariable, myReturnType, initializer);
+      PsiLocalVariable var = (PsiLocalVariable)((PsiDeclarationStatement)myBlock.addAfter(declaration, start)).getDeclaredElements()[0];
+      if (var.hasModifierProperty(PsiModifier.FINAL) && !RefactoringUtil.canBeDeclaredFinal(var)) {
+        // Keep final when possible to respect code style setting "generate local variables as 'final'"
+        requireNonNull(var.getModifierList()).setModifierProperty(PsiModifier.FINAL, false);
+      }
+      return var;
     }
+    return null;
   }
 
   public boolean isFinishCondition(PsiStatement statement) {

@@ -28,9 +28,9 @@ import java.io.File;
 import java.io.IOException;
 
 public class TeamCityLogger {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.testFramework.TeamCityLogger");
+  private static final Logger LOG = Logger.getInstance(TeamCityLogger.class);
 
-  private static final boolean isUnderTC = System.getProperty("bootstrap.testcases") != null;
+  public static final boolean isUnderTC = System.getProperty("bootstrap.testcases") != null;
 
   private TeamCityLogger() {}
 

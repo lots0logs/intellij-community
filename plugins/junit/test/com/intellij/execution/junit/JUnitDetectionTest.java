@@ -7,10 +7,10 @@ import com.intellij.codeInsight.TestFrameworks;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiClassOwner;
 import com.intellij.psi.PsiFile;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import com.intellij.testIntegration.TestFramework;
 
-public class JUnitDetectionTest extends LightCodeInsightFixtureTestCase {
+public class JUnitDetectionTest extends LightJavaCodeInsightFixtureTestCase {
 
   @Override
   protected void setUp() throws Exception {
@@ -71,5 +71,46 @@ public class JUnitDetectionTest extends LightCodeInsightFixtureTestCase {
     PsiClass innerClass = aClass.getInnerClasses()[0];
     assertFalse(framework.isTestClass(innerClass));
     assertFalse(framework.isTestMethod(innerClass.getMethods()[0]));
+  }
+
+  public void testCustomRunner() {
+    myFixture.addClass("import org.junit.runner.Runner;" +
+                       "public class CustomRunner extends Runner {}");
+    PsiFile file = myFixture.configureByText("CustomRunnerTest.java",
+                                             "import org.junit.rules.ExternalResource;\n" +
+                                             "import org.junit.runner.RunWith;\n" +
+                                             "@RunWith(CustomRunner.class)\n" +
+                                             "public class CustomRunnerTest {\n" +
+                                             "@org.junit.Rule\n" +
+                                             "public ExternalResource noTest() {return null;}\n" +
+                                             "public void foo() {}}\n");
+
+    PsiClass aClass = ((PsiClassOwner)file).getClasses()[0];
+    TestFramework framework = TestFrameworks.detectFramework(aClass);
+    assertNotNull(framework);
+    assertTrue(framework.isTestClass(aClass));
+    assertFalse(framework.isTestMethod(aClass.getMethods()[0]));
+    assertTrue(framework.isTestMethod(aClass.getMethods()[1]));
+  }
+
+  public void testMockitoRunner() {
+    myFixture.addClass("package org.mockito.junit; import org.junit.runner.Runner; import org.junit.runner.manipulation.Filterable; " +
+                                            "public class MockitoJUnitRunner extends Runner implements Filterable {}");
+    PsiFile file = myFixture.configureByText("MockitoRunnerTest.java",
+                                                        "import org.junit.rules.ExternalResource;\n" +
+                                                        "import org.mockito.junit.MockitoJUnitRunner;\n" +
+                                                        "import org.junit.runner.RunWith;\n" +
+                                                        "@RunWith(MockitoJUnitRunner.class)\n" +
+                                                        "public class MockitoRunnerTest {\n" +
+                                                        "  @org.junit.Rule\n" +
+                                                        "  public ExternalResource noTest() {return null;}\n" +
+                                                        "  public void foo() {}}\n");
+
+    PsiClass aClass = ((PsiClassOwner)file).getClasses()[0];
+    TestFramework framework = TestFrameworks.detectFramework(aClass);
+    assertNotNull(framework);
+    assertTrue(framework.isTestClass(aClass));
+    assertFalse(framework.isTestMethod(aClass.getMethods()[0]));
+    assertFalse(framework.isTestMethod(aClass.getMethods()[1]));
   }
 }

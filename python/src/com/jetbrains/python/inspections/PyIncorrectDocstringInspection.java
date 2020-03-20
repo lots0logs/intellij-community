@@ -64,8 +64,8 @@ public class PyIncorrectDocstringInspection extends PyBaseDocstringInspection {
           final List<PyNamedParameter> missingParams = getMissingParams(docString, realParams);
           if (!missingParams.isEmpty()) {
             for (PyNamedParameter param : missingParams) {
-              registerProblem(param, 
-                              PyBundle.message("INSP.missing.parameter.in.docstring", param.getName()), 
+              registerProblem(param,
+                              PyBundle.message("INSP.missing.parameter.in.docstring", param.getName()),
                               new DocstringQuickFix(param, null));
             }
           }
@@ -87,7 +87,7 @@ public class PyIncorrectDocstringInspection extends PyBaseDocstringInspection {
   }
 
   @NotNull
-  private static List<PyNamedParameter> getMissingParams(@NotNull StructuredDocString docString, @NotNull PyParameter[] realParams) {
+  private static List<PyNamedParameter> getMissingParams(@NotNull StructuredDocString docString, PyParameter @NotNull [] realParams) {
     final List<PyNamedParameter> missing = new ArrayList<>();
     final List<String> docStringParameters = docString.getParameters();
     if (docStringParameters.isEmpty()) {
@@ -107,7 +107,7 @@ public class PyIncorrectDocstringInspection extends PyBaseDocstringInspection {
   }
 
   @NotNull
-  private static List<Substring> getUnexpectedParams(@NotNull StructuredDocString docString, @NotNull PyParameter[] realParams) {
+  private static List<Substring> getUnexpectedParams(@NotNull StructuredDocString docString, PyParameter @NotNull [] realParams) {
     final Map<String, Substring> unexpected = Maps.newHashMap();
 
     for (Substring s : docString.getParameterSubstrings()) {

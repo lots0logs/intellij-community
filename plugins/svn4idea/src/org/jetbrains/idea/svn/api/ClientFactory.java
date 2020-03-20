@@ -1,11 +1,8 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.api;
 
-import com.intellij.openapi.vcs.FilePath;
 import com.intellij.util.ReflectionUtil;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.MultiMap;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.svn.SvnVcs;
 import org.jetbrains.idea.svn.add.AddClient;
 import org.jetbrains.idea.svn.annotate.AnnotateClient;
@@ -32,6 +29,7 @@ import org.jetbrains.idea.svn.update.RelocateClient;
 import org.jetbrains.idea.svn.update.UpdateClient;
 import org.jetbrains.idea.svn.upgrade.UpgradeClient;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -68,7 +66,7 @@ public abstract class ClientFactory {
   protected CheckinClient myCheckinClient;
   protected RepositoryFeaturesClient myRepositoryFeaturesClient;
 
-  @NotNull private final Map<Class, Class> myClientImplementations = ContainerUtil.newHashMap();
+  @NotNull private final Map<Class, Class> myClientImplementations = new HashMap<>();
 
   protected ClientFactory(@NotNull SvnVcs vcs) {
     myVcs = vcs;
@@ -132,11 +130,6 @@ public abstract class ClientFactory {
   @NotNull
   public StatusClient createStatusClient() {
     return prepare(statusClient);
-  }
-
-  @NotNull
-  public StatusClient createStatusClient(@Nullable MultiMap<FilePath, FilePath> scope, @NotNull ProgressTracker handler) {
-    return createStatusClient();
   }
 
   @NotNull

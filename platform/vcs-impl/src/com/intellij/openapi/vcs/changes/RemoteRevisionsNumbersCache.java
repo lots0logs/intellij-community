@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -27,7 +27,7 @@ import java.util.*;
  * for vcses where it is reasonable to ask revision of each item separately
  */
 public class RemoteRevisionsNumbersCache implements ChangesOnServerTracker {
-  public static final Logger LOG = Logger.getInstance("#com.intellij.openapi.vcs.changes.RemoteRevisionsNumbersCache");
+  public static final Logger LOG = Logger.getInstance(RemoteRevisionsNumbersCache.class);
 
   // every hour (time unit to check for server commits)
   // default, actual in settings
@@ -42,6 +42,7 @@ public class RemoteRevisionsNumbersCache implements ChangesOnServerTracker {
   private final Object myLock;
 
   public static final VcsRevisionNumber NOT_LOADED = new VcsRevisionNumber() {
+    @NotNull
     @Override
     public String asString() {
       return "NOT_LOADED";
@@ -53,6 +54,7 @@ public class RemoteRevisionsNumbersCache implements ChangesOnServerTracker {
     }
   };
   public static final VcsRevisionNumber UNKNOWN = new VcsRevisionNumber() {
+    @NotNull
     @Override
     public String asString() {
       return "UNKNOWN";
@@ -70,7 +72,7 @@ public class RemoteRevisionsNumbersCache implements ChangesOnServerTracker {
     myProject = project;
     myLock = new Object();
     myData = new HashMap<>();
-    myRefreshingQueues = Collections.synchronizedMap(new HashMap<VcsRoot, LazyRefreshingSelfQueue<String>>());
+    myRefreshingQueues = Collections.synchronizedMap(new HashMap<>());
     myLatestRevisionsMap = new HashMap<>();
     myLfs = LocalFileSystem.getInstance();
     myVcsManager = ProjectLevelVcsManager.getInstance(project);
@@ -130,12 +132,13 @@ public class RemoteRevisionsNumbersCache implements ChangesOnServerTracker {
         }
         final VirtualFile vf = pair.getFirst();
         final AbstractVcs newVcs = pair.getSecond();
+        final VirtualFile newRoot = newVcs != null ? myVcsManager.getVcsRootFor(vf) : null;
 
-        if (newVcs == null) {
+        if (newRoot == null) {
           myData.remove(key);
           getQueue(storedVcsRoot).forceRemove(key);
-        } else {
-          final VirtualFile newRoot = myVcsManager.getVcsRootFor(vf);
+        }
+        else {
           final VcsRoot newVcsRoot = new VcsRoot(newVcs, newRoot);
           if (! storedVcsRoot.equals(newVcsRoot)) {
             switchVcs(storedVcsRoot, newVcsRoot, key);

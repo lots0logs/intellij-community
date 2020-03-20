@@ -17,11 +17,14 @@ package com.intellij.application.options.codeStyle;
 
 import com.intellij.application.options.schemes.SchemeNameGenerator;
 import com.intellij.application.options.schemes.SchemesModel;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.codeStyle.CodeStyleScheme;
 import com.intellij.psi.codeStyle.CodeStyleSchemes;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.CodeStyleSettingsManager;
+import com.intellij.psi.codeStyle.modifier.CodeStyleSettingsModifier;
 import com.intellij.psi.impl.source.codeStyle.CodeStyleSchemeImpl;
 import com.intellij.psi.impl.source.codeStyle.CodeStyleSchemesImpl;
 import com.intellij.util.EventDispatcher;
@@ -31,8 +34,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
+  private final static Logger LOG = Logger.getInstance(CodeStyleSchemesModel.class);
+
   private final List<CodeStyleScheme> mySchemes = new ArrayList<>();
   private CodeStyleScheme mySelectedScheme;
   private final CodeStyleScheme myProjectScheme;
@@ -42,6 +49,8 @@ public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
   private final EventDispatcher<CodeStyleSchemesModelListener> myDispatcher = EventDispatcher.create(CodeStyleSchemesModelListener.class);
   private final Project myProject;
   private boolean myUiEventsEnabled = true;
+
+  private final @NotNull OverridingStatus myOverridingStatus = new OverridingStatus();
 
   public CodeStyleSchemesModel(Project project) {
     myProject = project;
@@ -96,7 +105,7 @@ public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
 
   public void reset() {
     mySchemes.clear();
-    ContainerUtil.addAll(mySchemes, CodeStyleSchemesImpl.getSchemeManager().getAllSchemes());
+    mySchemes.addAll(CodeStyleSchemesImpl.getSchemeManager().getAllSchemes());
     mySchemes.add(myProjectScheme);
     updateClonedSettings();
 
@@ -105,6 +114,7 @@ public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
     myDispatcher.getMulticaster().schemeListChanged();
     myDispatcher.getMulticaster().currentSchemeChanged(this);
 
+    updateOverridingStatus();
   }
 
   private void updateClonedSettings() {
@@ -144,6 +154,7 @@ public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
     commitClonedSettings();
     commitProjectSettings();
     CodeStyleSchemesImpl.getSchemeManager().setSchemes(getIdeSchemes(), mySelectedScheme instanceof ProjectScheme ? null : mySelectedScheme, null);
+    updateOverridingStatus();
   }
 
   private void commitProjectSettings() {
@@ -292,13 +303,17 @@ public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
     if (canResetScheme(scheme)) {
       CodeStyleSettings currSettings = getCloneSettings(scheme);
       currSettings.copyFrom(CodeStyleSettings.getDefaults());
-      myUiEventsEnabled = false;
-      try {
-        myDispatcher.getMulticaster().settingsChanged(currSettings);
-      }
-      finally {
-        myUiEventsEnabled = true;
-      }
+      fireModelSettingsChanged(currSettings);
+    }
+  }
+
+  void fireModelSettingsChanged(@NotNull CodeStyleSettings currSettings) {
+    myUiEventsEnabled = false;
+    try {
+      myDispatcher.getMulticaster().settingsChanged(currSettings);
+    }
+    finally {
+      myUiEventsEnabled = true;
     }
   }
 
@@ -309,6 +324,55 @@ public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
       if (currentSettings != null && !originalSettings.equals(currentSettings)) {
         return true;
       }
+    }
+    return false;
+  }
+
+  public void updateOverridingStatus() {
+    ApplicationManager.getApplication().executeOnPooledThread(() -> {
+      try {
+        myOverridingStatus.getLock().lock();
+        List<CodeStyleSettingsModifier> modifiers = getOverridingModifiers();
+        if (modifiers.size() > 0) {
+          myOverridingStatus.update(modifiers);
+        }
+        else {
+          myOverridingStatus.reset();
+        }
+      }
+      finally {
+        myOverridingStatus.getLock().unlock();
+      }
+      myDispatcher.getMulticaster().overridingStatusChanged();
+    });
+  }
+
+  @Nullable
+  public OverridingStatus getOverridingStatus() {
+    if (myOverridingStatus.getLock().tryLock()) {
+      try {
+        return !myOverridingStatus.isEmpty()? myOverridingStatus : null;
+      }
+      finally {
+        myOverridingStatus.getLock().unlock();
+      }
+    }
+    return null;
+  }
+
+  private List<CodeStyleSettingsModifier> getOverridingModifiers() {
+    return
+      ContainerUtil.filter(
+        CodeStyleSettingsModifier.EP_NAME.getExtensionList(),
+        modifier -> safeGetOverridingStatus(modifier, getProject()));
+  }
+
+  private static boolean safeGetOverridingStatus(@NotNull CodeStyleSettingsModifier modifier, @NotNull Project project) {
+    try {
+      return modifier.mayOverrideSettingsOf(project);
+    }
+    catch (Throwable t) {
+      LOG.error(t);
     }
     return false;
   }
@@ -338,6 +402,38 @@ public class CodeStyleSchemesModel implements SchemesModel<CodeStyleScheme> {
 
     public boolean isLocked() {
       return myLocked;
+    }
+  }
+
+  public static class OverridingStatus {
+    private final Lock myLock = new ReentrantLock();
+
+    private final static CodeStyleSettingsModifier[] EMPTY_MODIFIER_ARRAY = new CodeStyleSettingsModifier[0];
+
+    @Nullable
+    private List<CodeStyleSettingsModifier> myModifiers;
+
+    @NotNull
+    public Lock getLock() {
+      return myLock;
+    }
+
+    private void update(@NotNull List<CodeStyleSettingsModifier> modifiers) {
+      myModifiers = modifiers;
+    }
+
+    public CodeStyleSettingsModifier @NotNull [] getModifiers() {
+      return myModifiers != null && !myModifiers.isEmpty()
+             ? myModifiers.toArray(new CodeStyleSettingsModifier[0])
+             : EMPTY_MODIFIER_ARRAY;
+    }
+
+    private boolean isEmpty() {
+      return myModifiers == null || myModifiers.isEmpty();
+    }
+
+    private void reset() {
+      myModifiers = null;
     }
   }
 }

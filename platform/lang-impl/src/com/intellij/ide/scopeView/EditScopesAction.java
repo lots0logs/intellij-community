@@ -1,8 +1,7 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ide.scopeView;
 
-import com.intellij.icons.AllIcons;
 import com.intellij.ide.projectView.ProjectView;
 import com.intellij.ide.projectView.impl.AbstractProjectViewPane;
 import com.intellij.ide.util.scopeChooser.ScopeChooserConfigurable;
@@ -13,13 +12,9 @@ import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
 
 public final class EditScopesAction extends AnAction implements DumbAware {
-  public EditScopesAction() {
-    super(AllIcons.Ide.LocalScope);
-  }
-
   @Override
   public void actionPerformed(@NotNull AnActionEvent event) {
-    Project project = CommonDataKeys.PROJECT.getData(event.getDataContext());
+    Project project = event.getData(CommonDataKeys.PROJECT);
     ProjectView view = project == null ? null : ProjectView.getInstance(project);
     if (view != null) {
       ScopeChooserConfigurable configurable = new ScopeChooserConfigurable(project);
@@ -35,8 +30,7 @@ public final class EditScopesAction extends AnAction implements DumbAware {
 
   @Override
   public void update(@NotNull AnActionEvent event) {
-    super.update(event);
-    Project project = CommonDataKeys.PROJECT.getData(event.getDataContext());
+    Project project = event.getData(CommonDataKeys.PROJECT);
     ProjectView view = project == null ? null : ProjectView.getInstance(project);
     if (ActionPlaces.PROJECT_VIEW_POPUP.equals(event.getPlace())) {
       event.getPresentation().setEnabledAndVisible(view != null && view.getCurrentViewId().equals(ScopeViewPane.ID));

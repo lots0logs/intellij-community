@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.roots
 
 import com.intellij.notification.Notification
@@ -22,22 +8,19 @@ import com.intellij.openapi.vcs.*
 import com.intellij.openapi.vcs.changes.committed.MockAbstractVcs
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.testFramework.replaceService
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.vcsUtil.VcsUtil
-import org.picocontainer.MutablePicoContainer
 import java.io.File
 
 class VcsIntegrationEnablerTest : VcsRootBaseTest() {
-
   private var myTestRoot: VirtualFile? = null
 
   @Throws(Exception::class)
   public override fun setUp() {
     super.setUp()
-    val picoContainer = myProject.picoContainer as MutablePicoContainer
-    val vcsNotifierKey = VcsNotifier::class.java.name
-    picoContainer.unregisterComponent(vcsNotifierKey)
-    picoContainer.registerComponentImplementation(vcsNotifierKey, TestVcsNotifier::class.java)
+
+    myProject.replaceService(VcsNotifier::class.java, TestVcsNotifier(myProject), testRootDisposable)
     myTestRoot = projectRoot.parent
   }
 
@@ -83,13 +66,15 @@ class VcsIntegrationEnablerTest : VcsRootBaseTest() {
                      notification: Notification?,
                      mock_init: String?,
                      vararg vcs_roots: String) {
+    for (vcsRoot in vcsRoots) {
+      assertTrue(File(vcsRoot.path.path, DOT_MOCK).mkdirs())
+    }
 
-    val vcsRootsList = ContainerUtil.newArrayList(*vcs_roots)
+    val vcsRootsList = mutableListOf(*vcs_roots)
     //default
     if (vcsRootsList.isEmpty()) {
       vcsRootsList.addAll(ContainerUtil.map(vcsRoots) { root ->
-        assert(root.path != null)
-        root.path!!.path
+        root.path.path
       })
     }
     TestIntegrationEnabler(vcs).enable(vcsRoots)
@@ -107,14 +92,14 @@ class VcsIntegrationEnablerTest : VcsRootBaseTest() {
 
   private fun assertVcsRoots(expectedVcsRoots: Collection<String>) {
     val actualRoots = ProjectLevelVcsManager.getInstance(myProject).getRootsUnderVcsWithoutFiltering(vcs)
-    VcsTestUtil.assertEqualCollections(expectedVcsRoots, actualRoots.map { it.path })
+    VcsTestUtil.assertEqualCollections(actualRoots.map { it.path }, expectedVcsRoots)
   }
 
   private fun given(vararg roots: String): Collection<VcsRoot> {
     return ContainerUtil.map(roots) { s ->
       val path = VcsTestUtil.toAbsolute(s, myProject)
       LocalFileSystem.getInstance().refreshAndFindFileByPath(path)
-      VcsRoot(vcs, VcsUtil.getVirtualFile(path))
+      VcsRoot(vcs, VcsUtil.getVirtualFile(path)!!)
     }
   }
 

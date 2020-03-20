@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger.impl.evaluate.quick;
 
 import com.intellij.codeInsight.hint.HintUtil;
@@ -56,9 +56,6 @@ import java.awt.event.MouseEvent;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * @author nik
- */
 public class XValueHint extends AbstractValueHint {
   private static final Logger LOG = Logger.getInstance(XValueHint.class);
 
@@ -167,7 +164,7 @@ public class XValueHint extends AbstractValueHint {
     EdtExecutorService.getScheduledExecutorInstance().schedule(() -> {
       if (myCurrentHint == null && showEvaluating.get()) {
         SimpleColoredComponent component = HintUtil.createInformationComponent();
-        component.append(XDebuggerUIConstants.EVALUATING_EXPRESSION_MESSAGE);
+        component.append(XDebuggerUIConstants.getEvaluatingExpressionMessage());
         showHint(component);
       }
     }, 200, TimeUnit.MILLISECONDS);
@@ -192,8 +189,7 @@ public class XValueHint extends AbstractValueHint {
             XValueNodeImpl.buildText(valuePresenter, text, false);
 
             if (!hasChildren) {
-              JComponent component = createHintComponent(text, valuePresenter, myFullValueEvaluator);
-              showHint(component);
+              showHint(createHintComponent(icon, text, valuePresenter, myFullValueEvaluator));
             }
             else if (getType() == ValueHintType.MOUSE_CLICK_HINT) {
               if (!myShown) {
@@ -215,7 +211,7 @@ public class XValueHint extends AbstractValueHint {
                                .registerCustomShortcutSet(shortcut, getEditor().getContentComponent(), myDisposable);
               }
 
-              showHint(createExpandableHintComponent(text, () -> showTree(result)));
+              showHint(createExpandableHintComponent(icon, text, () -> showTree(result)));
             }
             myShown = true;
           }
@@ -255,10 +251,12 @@ public class XValueHint extends AbstractValueHint {
   }
 
   @NotNull
-  protected JComponent createHintComponent(@NotNull SimpleColoredText text,
+  protected JComponent createHintComponent(@Nullable Icon icon,
+                                           @NotNull SimpleColoredText text,
                                            @NotNull XValuePresentation presentation,
                                            @Nullable XFullValueEvaluator evaluator) {
     SimpleColoredComponent component = HintUtil.createInformationComponent();
+    component.setIcon(icon);
     text.appendToComponent(component);
     if (evaluator != null) {
       component.append(

@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.ex.util;
 
 import com.intellij.lexer.FlexAdapter;
 import com.intellij.lexer.Lexer;
 import com.intellij.lexer.RestartableLexer;
+import com.intellij.lexer.TokenIterator;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.ExceptionWithAttachments;
@@ -12,7 +13,6 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.openapi.editor.event.DocumentEvent;
-import com.intellij.openapi.editor.ex.DocumentEx;
 import com.intellij.openapi.editor.ex.PrioritizedDocumentListener;
 import com.intellij.openapi.editor.highlighter.EditorHighlighter;
 import com.intellij.openapi.editor.highlighter.HighlighterClient;
@@ -22,6 +22,7 @@ import com.intellij.openapi.editor.markup.TextAttributes;
 import com.intellij.openapi.fileTypes.PlainSyntaxHighlighter;
 import com.intellij.openapi.fileTypes.SyntaxHighlighter;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.text.StringUtil;
@@ -36,14 +37,15 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDocumentListener {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.editor.ex.util.LexerEditorHighlighter");
+  private static final Logger LOG = Logger.getInstance(LexerEditorHighlighter.class);
   private static final int LEXER_INCREMENTALITY_THRESHOLD = 200;
-  private static final Set<Class> ourNonIncrementalLexers = new HashSet<>();
+  private static final Set<Class<?>> ourNonIncrementalLexers = new HashSet<>();
   private HighlighterClient myEditor;
   private final Lexer myLexer;
   private final Map<IElementType, TextAttributes> myAttributesMap = new HashMap<>();
-  private final SegmentArrayWithData mySegments;
+  private SegmentArrayWithData mySegments;
   private final SyntaxHighlighter myHighlighter;
+  @NotNull
   private EditorColorsScheme myScheme;
   private final int myInitialState;
   protected CharSequence myText;
@@ -52,13 +54,37 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     myScheme = scheme;
     myLexer = highlighter.getHighlightingLexer();
     myLexer.start(ArrayUtil.EMPTY_CHAR_SEQUENCE);
-    myInitialState = myLexer instanceof RestartableLexer ? ((RestartableLexer)myLexer).getRestartableState() : myLexer.getState();
+    myInitialState = myLexer.getState();
     myHighlighter = highlighter;
     mySegments = createSegments();
   }
 
+  @NotNull
   protected SegmentArrayWithData createSegments() {
-    return new SegmentArrayWithData();
+    return new SegmentArrayWithData(createStorage());
+  }
+
+  /**
+   * Defines how to pack/unpack and store highlighting states.
+   * <p>
+   * By default a editor highlighter uses {@link ShortBasedStorage} implementation which
+   * serializes information about element type to be highlighted with elements' indices ({@link IElementType#getIndex()})
+   * and deserializes ids back to {@link IElementType} using element types registry {@link IElementType#find(short)}.
+   * <p>
+   * If you need to store more information during syntax highlighting or
+   * if your element types cannot be restored from {@link IElementType#getIndex()},
+   * you can implement you own storage and override this method.
+   * <p>
+   * As an example, see {@link org.jetbrains.plugins.textmate.language.syntax.lexer.TextMateHighlightingLexer},
+   * that lexes files with unregistered (without index) element types and its
+   * data storage ({@link org.jetbrains.plugins.textmate.language.syntax.lexer.TextMateLexerDataStorage}
+   * serializes/deserializes them to/from strings. The storage is created in {@link org.jetbrains.plugins.textmate.language.syntax.highlighting.TextMateEditorHighlighterProvider.TextMateLexerEditorHighlighter}
+   *
+   * @return data storage for highlighter states
+   */
+  @NotNull
+  protected DataStorage createStorage() {
+    return myLexer instanceof RestartableLexer ? new IntBasedStorage() : new ShortBasedStorage();
   }
 
   public boolean isPlain() {
@@ -70,15 +96,17 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     return myEditor != null ? myEditor.getDocument() : null;
   }
 
-  public final synchronized boolean checkContentIsEqualTo(CharSequence sequence) {
+  public final synchronized boolean checkContentIsEqualTo(@NotNull CharSequence sequence) {
     final Document document = getDocument();
     return document != null && isInSyncWithDocument() && Comparing.equal(document.getImmutableCharSequence(), sequence);
   }
 
+  @NotNull
   public EditorColorsScheme getScheme() {
     return myScheme;
   }
 
+  @NotNull
   protected Lexer getLexer() {
     return myLexer;
   }
@@ -102,8 +130,8 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       if (!isInSyncWithDocument()) {
         final Document document = getDocument();
         assert document != null;
-        if(document instanceof DocumentEx && ((DocumentEx)document).isInBulkUpdate()) {
-          ((DocumentEx)document).setInBulkUpdate(false); // bulk mode failed
+        if (document.isInBulkUpdate()) {
+          document.setInBulkUpdate(false); // bulk mode failed
         }
         doSetText(document.getImmutableCharSequence());
       }
@@ -111,11 +139,6 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       final int latestValidOffset = mySegments.getLastValidOffset();
       return new HighlighterIteratorImpl(startOffset <= latestValidOffset ? startOffset : latestValidOffset);
     }
-  }
-
-  private int packData(IElementType tokenType, int state) {
-    final short idx = tokenType.getIndex();
-    return state == myInitialState ? idx : -idx;
   }
 
   public boolean isValid() {
@@ -128,12 +151,14 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     return document == null || document.getTextLength() == 0 || mySegments.getSegmentCount() > 0;
   }
 
-  private static boolean isInitialState(int data) {
-    return data >= 0;
-  }
-
-  protected static IElementType unpackToken(int data) {
-    return IElementType.find((short)Math.abs(data));
+  private boolean isInitialState(int data) {
+    if (myLexer instanceof RestartableLexer) {
+      int state = mySegments.unpackStateFromData(data);
+      return ((RestartableLexer)myLexer).isRestartableState(state);
+    }
+    else {
+      return data >= 0;
+    }
   }
 
   @Override
@@ -142,13 +167,13 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       final Document document = e.getDocument();
       CharSequence text = document.getImmutableCharSequence();
 
-      if (document instanceof DocumentEx && ((DocumentEx)document).isInBulkUpdate()) {
+      if (document.isInBulkUpdate()) {
         myText = null;
         mySegments.removeAll();
         return;
       }
 
-      if(mySegments.getSegmentCount() == 0) {
+      if (mySegments.getSegmentCount() == 0) {
         setText(text);
         return;
       }
@@ -163,40 +188,54 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       int data;
       do {
         data = mySegments.getSegmentData(startIndex);
-        if (isInitialState(data)|| startIndex == 0) break;
+        if (isInitialState(data) || startIndex == 0) break;
         startIndex--;
       }
       while (true);
 
       int startOffset = mySegments.getSegmentStart(startIndex);
-      int newEndOffset = e.getOffset() + e.getNewLength();
 
-      myLexer.start(text, startOffset, text.length(), startOffset == 0 && myLexer instanceof RestartableLexer ? ((RestartableLexer)myLexer).getStartState() : myInitialState);
+      int initialState;
+      int textLength = text.length();
+      if (startOffset == 0 && myLexer instanceof RestartableLexer) {
+        initialState = ((RestartableLexer)myLexer).getStartState();
+        myLexer.start(text, startOffset, text.length(), initialState);
+      }
+      else {
+        if (myLexer instanceof RestartableLexer) {
+          initialState = mySegments.unpackStateFromData(mySegments.getSegmentData(startIndex));
+          ((RestartableLexer)myLexer).start(text, startOffset, text.length(), initialState, createTokenIterator(startIndex));
+        }
+        else {
+          initialState = myInitialState;
+          myLexer.start(text, startOffset, text.length(), initialState);
+        }
+      }
 
       int lastTokenStart = -1;
       int lastLexerState = -1;
       IElementType lastTokenType = null;
 
-      while (myLexer.getTokenType() != null) {
+      for (IElementType tokenType = myLexer.getTokenType(); tokenType != null; tokenType = myLexer.getTokenType()) {
         if (startIndex >= oldStartIndex) break;
 
         int tokenStart = myLexer.getTokenStart();
         int lexerState = myLexer.getState();
 
-        if (tokenStart == lastTokenStart && lexerState == lastLexerState && myLexer.getTokenType() == lastTokenType) {
+        if (tokenStart == lastTokenStart && lexerState == lastLexerState && tokenType == lastTokenType) {
           throw new IllegalStateException("Lexer is not progressing after calling advance()");
         }
 
         int tokenEnd = myLexer.getTokenEnd();
-        data = packData(myLexer.getTokenType(), lexerState);
+        data = mySegments.packData(tokenType, lexerState, canRestart(lexerState));
         if (mySegments.getSegmentStart(startIndex) != tokenStart ||
             mySegments.getSegmentEnd(startIndex) != tokenEnd ||
             mySegments.getSegmentData(startIndex) != data) {
           break;
         }
         startIndex++;
-        lastTokenType = myLexer.getTokenType();
         myLexer.advance();
+        lastTokenType = tokenType;
         lastTokenStart = tokenStart;
         lastLexerState = lexerState;
       }
@@ -240,27 +279,28 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       }
 
       startOffset = mySegments.getSegmentStart(startIndex);
+      lastTokenType = null;
+      SegmentArrayWithData insertSegments = new SegmentArrayWithData(mySegments.createStorage());
+
       int repaintEnd = -1;
       int insertSegmentCount = 0;
       int oldEndIndex = -1;
-      lastTokenType = null;
-      SegmentArrayWithData insertSegments = new SegmentArrayWithData();
-
-      while(myLexer.getTokenType() != null) {
+      for (IElementType tokenType = myLexer.getTokenType(); tokenType != null; tokenType = myLexer.getTokenType()) {
         int tokenStart = myLexer.getTokenStart();
         int lexerState = myLexer.getState();
 
-        if (tokenStart == lastTokenStart && lexerState == lastLexerState && myLexer.getTokenType() == lastTokenType) {
+        if (tokenStart == lastTokenStart && lexerState == lastLexerState && tokenType == lastTokenType) {
           throw new IllegalStateException("Lexer is not progressing after calling advance()");
         }
 
         lastTokenStart = tokenStart;
         lastLexerState = lexerState;
-        lastTokenType = myLexer.getTokenType();
+        lastTokenType = tokenType;
 
         int tokenEnd = myLexer.getTokenEnd();
-        data = packData(myLexer.getTokenType(), lexerState);
-        if(tokenStart >= newEndOffset && lexerState == myInitialState) {
+        data = mySegments.packData(tokenType, lexerState, canRestart(lexerState));
+        int newEndOffset = e.getOffset() + e.getNewLength();
+        if(tokenStart >= newEndOffset && canRestart(lexerState)) {
           int shiftedTokenStart = tokenStart - e.getNewLength() + e.getOldLength();
           int index = mySegments.findSegmentIndex(shiftedTokenStart);
           if (mySegments.getSegmentStart(index) == shiftedTokenStart && mySegments.getSegmentData(index) == data) {
@@ -288,8 +328,8 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
         }
       }
 
-      if(repaintEnd == -1) {
-        repaintEnd = text.length();
+      if (repaintEnd == -1) {
+        repaintEnd = textLength;
       }
 
       if (oldEndIndex < 0){
@@ -315,6 +355,49 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     }
   }
 
+  @NotNull
+  private TokenIterator createTokenIterator(int start) {
+    return new TokenIterator() {
+
+      @Override
+      public int getStartOffset(int index) {
+        return mySegments.getSegmentStart(index);
+      }
+
+      @Override
+      public int getEndOffset(int index) {
+        return mySegments.getSegmentEnd(index);
+      }
+
+      @Override
+      public IElementType getType(int index) {
+        return mySegments.unpackTokenFromData(mySegments.getSegmentData(index));
+      }
+
+      @Override
+      public int getState(int index) {
+        return mySegments.unpackStateFromData(mySegments.getSegmentData(index));
+      }
+
+      @Override
+      public int getTokenCount() {
+        return mySegments.getSegmentCount();
+      }
+
+      @Override
+      public int initialTokenIndex() {
+        return start;
+      }
+    };
+  }
+
+  private boolean canRestart(int lexerState) {
+    if (myLexer instanceof RestartableLexer) {
+      return ((RestartableLexer)myLexer).isRestartableState(lexerState);
+    }
+    return lexerState == myInitialState;
+  }
+
   protected boolean hasAdditionalData(int segmentIndex) {
     return false;
   }
@@ -324,7 +407,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     return EditorDocumentPriorities.LEXER_EDITOR;
   }
 
-  private static boolean segmentsEqual(SegmentArrayWithData a1, int idx1, SegmentArrayWithData a2, int idx2, final int offsetShift) {
+  private static boolean segmentsEqual(@NotNull SegmentArrayWithData a1, int idx1, @NotNull SegmentArrayWithData a2, int idx2, final int offsetShift) {
     return a1.getSegmentStart(idx1) + offsetShift == a2.getSegmentStart(idx2) &&
            a1.getSegmentEnd(idx1) + offsetShift == a2.getSegmentEnd(idx2) &&
            a1.getSegmentData(idx1) == a2.getSegmentData(idx2);
@@ -334,7 +417,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     return myEditor;
   }
 
-  protected final synchronized void resetText(@NotNull CharSequence text) {
+  final synchronized void resetText(@NotNull CharSequence text) {
     myText = null;
     doSetText(text);
   }
@@ -346,33 +429,38 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     }
   }
 
-  protected class TokenProcessor {
-    public void addToken(final int i, final int startOffset, final int endOffset, final int data, final IElementType tokenType) {
-      mySegments.setElementAt(i, startOffset, endOffset, data);
-    }
+  protected interface TokenProcessor {
+    void addToken(int tokenIndex, int startOffset, int endOffset, int data, @NotNull IElementType tokenType);
 
-    public void finish() {
-    }
+    default void finish() {}
   }
 
-  private void doSetText(final CharSequence text) {
+  private void doSetText(@NotNull CharSequence text) {
     if (Comparing.equal(myText, text)) return;
-    myText = ImmutableCharSequence.asImmutable(text);
+    text = ImmutableCharSequence.asImmutable(text);
 
-    final TokenProcessor processor = createTokenProcessor(0);
-    final int textLength = text.length();
+    SegmentArrayWithData tempSegments = createSegments();
+    TokenProcessor processor = createTokenProcessor(0, tempSegments, text);
+    int textLength = text.length();
+
     myLexer.start(text, 0, textLength, myLexer instanceof RestartableLexer ? ((RestartableLexer)myLexer).getStartState() : myInitialState);
-    mySegments.removeAll();
     int i = 0;
     while (true) {
       final IElementType tokenType = myLexer.getTokenType();
       if (tokenType == null) break;
 
-      int data = packData(tokenType, myLexer.getState());
+      int state = myLexer.getState();
+      int data = tempSegments.packData(tokenType, state, canRestart(state));
       processor.addToken(i, myLexer.getTokenStart(), myLexer.getTokenEnd(), data, tokenType);
       i++;
+      if (i % 1024 == 0) {
+        ProgressManager.checkCanceled();
+      }
       myLexer.advance();
     }
+
+    myText = text;
+    mySegments = tempSegments;
     processor.finish();
 
     if (textLength > 0 && (mySegments.mySegmentCount == 0 || mySegments.myEnds[mySegments.mySegmentCount - 1] != textLength)) {
@@ -384,16 +472,18 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     }
   }
 
-  protected TokenProcessor createTokenProcessor(final int startIndex) {
-    return new TokenProcessor();
+  @NotNull
+  protected TokenProcessor createTokenProcessor(int startIndex, SegmentArrayWithData segments, CharSequence myText) {
+    return (tokenIndex, startOffset, endOffset, data, tokenType) -> segments.setElementAt(tokenIndex, startOffset, endOffset, data);
   }
 
+  @NotNull
   public SyntaxHighlighter getSyntaxHighlighter() {
     return myHighlighter;
   }
 
   @NotNull
-  private TextAttributes getAttributes(IElementType tokenType) {
+  private TextAttributes getAttributes(@NotNull IElementType tokenType) {
     TextAttributes attrs = myAttributesMap.get(tokenType);
     if (attrs == null) {
       // let's fetch syntax highlighter attributes for token and merge them with "TEXT" attribute of current color scheme
@@ -416,10 +506,11 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
 
   // TODO Unify with LexerEditorHighlighter.documentChanged
   @NotNull
-  private List<IElementType> getTokenType(CharSequence text, int offset) {
+  private List<IElementType> getTokenType(@NotNull CharSequence text, int offset) {
     int startOffset = 0;
 
     int data = 0;
+    boolean isDataSet = false;
     int oldStartIndex = 0;
     int startIndex = 0;
 
@@ -430,6 +521,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
 
       do {
         data = mySegments.getSegmentData(startIndex);
+        isDataSet = true;
         if (isInitialState(data)|| startIndex == 0) break;
         startIndex--;
       }
@@ -438,7 +530,28 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       startOffset = mySegments.getSegmentStart(startIndex);
     }
 
-    myLexer.start(text, startOffset, text.length(), offset == 0 && myLexer instanceof RestartableLexer ? ((RestartableLexer)myLexer).getStartState() : myInitialState);
+    int state;
+    if (myLexer instanceof RestartableLexer) {
+      if (isDataSet) {
+        state = mySegments.unpackStateFromData(data);
+      } else {
+        state = ((RestartableLexer)myLexer).getStartState();
+      }
+    }
+    else {
+      state = myInitialState;
+    }
+    if (offset == 0 && myLexer instanceof RestartableLexer) {
+      myLexer.start(text, startOffset, text.length(), ((RestartableLexer)myLexer).getStartState());
+    }
+    else {
+      if (myLexer instanceof RestartableLexer) {
+        ((RestartableLexer)myLexer).start(text, startOffset, text.length(), state, createTokenIterator(startIndex));
+      }
+      else {
+        myLexer.start(text, startOffset, text.length(), state);
+      }
+    }
 
     while (myLexer.getTokenType() != null) {
       if (startIndex >= oldStartIndex) break;
@@ -447,7 +560,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       int lexerState = myLexer.getState();
 
       int tokenEnd = myLexer.getTokenEnd();
-      data = packData(myLexer.getTokenType(), lexerState);
+      data = mySegments.packData(myLexer.getTokenType(), lexerState, canRestart(lexerState));
       if (mySegments.getSegmentStart(startIndex) != tokenStart ||
           mySegments.getSegmentEnd(startIndex) != tokenEnd ||
           mySegments.getSegmentData(startIndex) != data) {
@@ -462,12 +575,12 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
 
     while (myLexer.getTokenType() != null) {
       int lexerState = myLexer.getState();
-      data = packData(myLexer.getTokenType(), lexerState);
+      data = mySegments.packData(myLexer.getTokenType(), lexerState, canRestart(lexerState));
       if (tokenType1 == null && myLexer.getTokenEnd() >= offset) {
-        tokenType1 = unpackToken(data);
+        tokenType1 = mySegments.unpackTokenFromData(data);
       }
       if (myLexer.getTokenEnd() >= offset + 1) {
-        tokenType2 = unpackToken(data);
+        tokenType2 = mySegments.unpackTokenFromData(data);
         break;
       }
       myLexer.advance();
@@ -477,7 +590,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
   }
 
   @NotNull
-  TextAttributes convertAttributes(@NotNull TextAttributesKey[] keys) {
+  TextAttributes convertAttributes(TextAttributesKey @NotNull [] keys) {
     TextAttributes resultAttributes = new TextAttributes();
     boolean firstPass = true;
     for (TextAttributesKey key : keys) {
@@ -504,7 +617,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
   }
 
   public class HighlighterIteratorImpl implements HighlighterIterator {
-    private int mySegmentIndex = 0;
+    private int mySegmentIndex;
 
     HighlighterIteratorImpl(int startOffset) {
       try {
@@ -536,7 +649,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
 
     @Override
     public IElementType getTokenType(){
-      return unpackToken(mySegments.getSegmentData(mySegmentIndex));
+      return mySegments.unpackTokenFromData(mySegments.getSegmentData(mySegmentIndex));
     }
 
     @Override
@@ -560,6 +673,7 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
     }
   }
 
+  @NotNull
   public SegmentArrayWithData getSegments() {
     return mySegments;
   }
@@ -576,9 +690,8 @@ public class LexerEditorHighlighter implements EditorHighlighter, PrioritizedDoc
       myAttachments = new Attachment[] {new Attachment("content.txt", highlighter.myLexer.getBufferSequence().toString())};
     }
 
-    @NotNull
     @Override
-    public Attachment[] getAttachments() {
+    public Attachment @NotNull [] getAttachments() {
       return myAttachments;
     }
   }

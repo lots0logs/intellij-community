@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.configurable;
 
 import com.intellij.application.options.colors.fileStatus.FileStatusColorsConfigurable;
@@ -7,6 +7,7 @@ import com.intellij.openapi.options.ConfigurableEP;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
 import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vcs.VcsConfigurableProvider;
@@ -18,12 +19,15 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import static com.intellij.openapi.options.ex.ConfigurableWrapper.wrapConfigurable;
 import static com.intellij.util.ObjectUtils.notNull;
-import static com.intellij.util.containers.ContainerUtil.*;
+import static com.intellij.util.containers.ContainerUtil.addIfNotNull;
+import static com.intellij.util.containers.ContainerUtil.map2Set;
 
 public class VcsManagerConfigurable extends SearchableConfigurable.Parent.Abstract implements Configurable.NoScroll {
   @NotNull private final Project myProject;
@@ -95,11 +99,12 @@ public class VcsManagerConfigurable extends SearchableConfigurable.Parent.Abstra
   protected Configurable[] buildConfigurables() {
     myGeneralPanel = new VcsGeneralConfigurationConfigurable(myProject, this);
 
-    List<Configurable> result = newArrayList();
+    List<Configurable> result = new ArrayList<>();
 
     result.add(myGeneralPanel);
     result.add(new VcsBackgroundOperationsConfigurable(myProject));
-    if (!myProject.isDefault()) {
+    boolean ignoreSettingsAvailable = Registry.is("vcs.ignorefile.generation", true);
+    if (!myProject.isDefault() && ignoreSettingsAvailable) {
       result.add(new IgnoredSettingsPanel(myProject));
     }
     result.add(new IssueNavigationConfigurationPanel(myProject));
@@ -155,7 +160,7 @@ public class VcsManagerConfigurable extends SearchableConfigurable.Parent.Abstra
       return new ObjectProducer() {
         @Override
         protected Object createElement() {
-          return notNull(ProjectLevelVcsManager.getInstance(getProject()).findVcsByName(myDescriptor.getName())).getConfigurable();
+          return Objects.requireNonNull(ProjectLevelVcsManager.getInstance(getProject()).findVcsByName(myDescriptor.getName())).getConfigurable();
         }
 
         @Override

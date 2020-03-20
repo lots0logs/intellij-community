@@ -46,18 +46,18 @@ public class ExtractMethodSnapshot {
     myReturnType = typePointerManager.createSmartTypePointer(from.myReturnType);
 
     SmartPointerManager smartPointerManager = SmartPointerManager.getInstance(myProject);
-    myOutputVariables = StreamEx.of(from.myOutputVariables).map(smartPointerManager::createSmartPsiElementPointer).toList();
+    myOutputVariables = ContainerUtil.map(from.myOutputVariables, smartPointerManager::createSmartPsiElementPointer);
     myOutputVariable = ContainerUtil.getFirstItem(myOutputVariables);
     myArtificialOutputVariable = from.myArtificialOutputVariable != null
                                  ? smartPointerManager.createSmartPsiElementPointer(from.myArtificialOutputVariable) : null;
 
-    myVariableDatum = StreamEx.of(from.myVariableDatum).map(data -> new VariableDataSnapshot(data, myProject)).toList();
+    myVariableDatum = ContainerUtil.map(from.myVariableDatum, data -> new VariableDataSnapshot(data, myProject));
     myFoldable = from.myInputVariables.isFoldable();
 
     myTargetClass = from.myTargetClass != null ? smartPointerManager.createSmartPsiElementPointer(from.myTargetClass) : null;
   }
 
-  public ExtractMethodSnapshot(@NotNull ExtractMethodSnapshot from, @NotNull PsiElement[] pattern, @NotNull PsiElement[] copy) {
+  public ExtractMethodSnapshot(@NotNull ExtractMethodSnapshot from, PsiElement @NotNull [] pattern, PsiElement @NotNull [] copy) {
     myProject = from.myProject;
     myMethodName = from.myMethodName;
     myStatic = from.myStatic;

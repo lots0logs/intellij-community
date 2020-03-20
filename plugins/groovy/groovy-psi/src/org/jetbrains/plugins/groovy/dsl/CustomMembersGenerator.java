@@ -39,7 +39,7 @@ import java.util.function.Consumer;
  * @author peter
  */
 public class CustomMembersGenerator extends GroovyObjectSupport implements GdslMembersHolderConsumer {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.dsl.CustomMembersGenerator");
+  private static final Logger LOG = Logger.getInstance(CustomMembersGenerator.class);
   private static final GdslMembersProvider[] PROVIDERS = GdslMembersProvider.EP_NAME.getExtensions();
   public static final String THROWS = "throws";
   private FList<Map> myDeclarations = FList.emptyList();
@@ -170,7 +170,7 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
   public void method(Map<Object, Object> args) {
     if (args == null) return;
 
-    args = ContainerUtil.newLinkedHashMap(args);
+    args = new LinkedHashMap<>(args);
     parseMethod(args);
     args.put("declarationType", DeclarationType.METHOD);
     myDeclarations = myDeclarations.prepend(args);
@@ -251,7 +251,7 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
   public void closureInMethod(Map<Object, Object> args) {
     if (args == null) return;
 
-    args = ContainerUtil.newLinkedHashMap(args);
+    args = new LinkedHashMap<>(args);
     parseMethod(args);
     final Object method = args.get("method");
     if (method instanceof Map) {
@@ -264,7 +264,7 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
   public void variable(Map<Object, Object> args) {
     if (args == null) return;
 
-    args = ContainerUtil.newLinkedHashMap(args);
+    args = new LinkedHashMap<>(args);
     parseVariable(args);
     myDeclarations = myDeclarations.prepend(args);
   }
@@ -336,7 +336,7 @@ public class CustomMembersGenerator extends GroovyObjectSupport implements GdslM
     }
 
   }
-  
+
   public static class GdslNamedParameter extends FakePsiElement {
     private final String myName;
     public final String docString;

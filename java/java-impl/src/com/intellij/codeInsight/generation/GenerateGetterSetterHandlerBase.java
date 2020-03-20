@@ -16,7 +16,7 @@
 package com.intellij.codeInsight.generation;
 
 import com.intellij.codeInsight.hint.HintManager;
-import com.intellij.lang.StdLanguages;
+import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.options.ShowSettingsUtil;
@@ -27,7 +27,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiEnumConstant;
 import com.intellij.psi.PsiField;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
@@ -49,11 +49,11 @@ import java.util.Collections;
 import java.util.List;
 
 public abstract class GenerateGetterSetterHandlerBase extends GenerateMembersHandlerBase {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.generation.GenerateGetterSetterHandlerBase");
+  private static final Logger LOG = Logger.getInstance(GenerateGetterSetterHandlerBase.class);
 
   static {
     GenerateAccessorProviderRegistrar.registerProvider(s -> {
-      if (s.getLanguage() != StdLanguages.JAVA) return Collections.emptyList();
+      if (s.getLanguage() != JavaLanguage.INSTANCE) return Collections.emptyList();
       final List<EncapsulatableClassMember> result = new ArrayList<>();
       for (PsiField field : s.getFields()) {
         if (!(field instanceof PsiEnumConstant)) {
@@ -96,14 +96,9 @@ public abstract class GenerateGetterSetterHandlerBase extends GenerateMembersHan
     final JPanel panel = new JPanel(new BorderLayout());
     final JLabel templateChooserLabel = new JLabel(templatesTitle);
     panel.add(templateChooserLabel, BorderLayout.WEST);
-    final ComboBox comboBox = new ComboBox();
+    final ComboBox<TemplateResource> comboBox = new ComboBox<>();
     templateChooserLabel.setLabelFor(comboBox);
-    comboBox.setRenderer(new ListCellRendererWrapper<TemplateResource>() {
-      @Override
-      public void customize(JList list, TemplateResource value, int index, boolean selected, boolean hasFocus) {
-        setText(value.getName());
-      }
-    });
+    comboBox.setRenderer(SimpleListCellRenderer.create("", TemplateResource::getName));
     final ComponentWithBrowseButton<ComboBox> comboBoxWithBrowseButton =
       new ComponentWithBrowseButton<>(comboBox, new ActionListener() {
         @Override
@@ -156,8 +151,7 @@ public abstract class GenerateGetterSetterHandlerBase extends GenerateMembersHan
   }
 
   @Override
-  @Nullable
-  protected ClassMember[] getAllOriginalMembers(final PsiClass aClass) {
+  protected ClassMember @Nullable [] getAllOriginalMembers(final PsiClass aClass) {
     final List<EncapsulatableClassMember> list = GenerateAccessorProviderRegistrar.getEncapsulatableClassMembers(aClass);
     if (list.isEmpty()) {
       return null;

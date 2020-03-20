@@ -48,7 +48,7 @@ import static com.intellij.util.ObjectUtils.notNull;
  * @author irengrig
  */
 public class TodoCheckinHandlerWorker {
-  private final static Logger LOG = Logger.getInstance("#com.intellij.openapi.vcs.checkin.TodoCheckinHandler");
+  private final static Logger LOG = Logger.getInstance(TodoCheckinHandler.class);
 
   private final Project myProject;
   private final Collection<? extends Change> myChanges;
@@ -69,9 +69,9 @@ public class TodoCheckinHandlerWorker {
       ProgressManager.checkCanceled();
       if (change.getAfterRevision() == null) continue;
       FilePath afterFilePath = change.getAfterRevision().getFile();
+      VirtualFile afterFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(afterFilePath.getPath());
 
       MyEditedFileProcessor fileProcessor = ReadAction.compute(() -> {
-        final VirtualFile afterFile = getFileWithRefresh(afterFilePath);
         if (afterFile == null || afterFile.isDirectory() || afterFile.getFileType().isBinary()) {
           return null; // skip detection
         }
@@ -84,7 +84,7 @@ public class TodoCheckinHandlerWorker {
 
         PsiTodoSearchHelper searchHelper = PsiTodoSearchHelper.SERVICE.getInstance(myProject);
         List<TodoItem> newTodoItems = ContainerUtil.newArrayList(searchHelper.findTodoItems(afterPsiFile));
-        applyFilterAndRemoveDuplicates(newTodoItems, myTodoFilter);
+        applyFilterAndRemoveDuplicatesAndSort(newTodoItems, myTodoFilter);
 
         if (change.getBeforeRevision() == null) {
           // take just all todos
@@ -120,16 +120,8 @@ public class TodoCheckinHandlerWorker {
     }
   }
 
-  @Nullable
-  private static VirtualFile getFileWithRefresh(@NotNull FilePath filePath) {
-    VirtualFile file = filePath.getVirtualFile();
-    if (file == null) {
-      file = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(filePath.getIOFile());
-    }
-    return file;
-  }
-
-  private static void applyFilterAndRemoveDuplicates(final List<TodoItem> todoItems, final TodoFilter filter) {
+  private static void applyFilterAndRemoveDuplicatesAndSort(final List<TodoItem> todoItems, final TodoFilter filter) {
+    todoItems.sort(TodoItem.BY_START_OFFSET);
     TodoItem previous = null;
     for (Iterator<TodoItem> iterator = todoItems.iterator(); iterator.hasNext(); ) {
       final TodoItem next = iterator.next();
@@ -199,7 +191,7 @@ public class TodoCheckinHandlerWorker {
       for (IndexPatternOccurrence occurrence : patternOccurrences) {
         oldTodoItems.add(todoItemsCreator.createTodo(occurrence));
       }
-      applyFilterAndRemoveDuplicates(oldTodoItems, myTodoFilter);
+      applyFilterAndRemoveDuplicatesAndSort(oldTodoItems, myTodoFilter);
 
 
       LineFragment lastLineFragment = null;

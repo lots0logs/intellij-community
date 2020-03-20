@@ -43,12 +43,6 @@ import java.util.Map;
  * Inspection to detect using the same value as dictionary key twice.
  */
 public class PyDictDuplicateKeysInspection extends PyInspection {
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.duplicate.keys");
-  }
 
   @NotNull
   @Override
@@ -133,7 +127,7 @@ public class PyDictDuplicateKeysInspection extends PyInspection {
       return node instanceof PyLiteralExpression || node instanceof PyReferenceExpression ? node.getText() : null;
     }
 
-    private void registerProblems(@NotNull MultiMap<String, PsiElement> keyValueAndKeys, @NotNull LocalQuickFix... quickFixes) {
+    private void registerProblems(@NotNull MultiMap<String, PsiElement> keyValueAndKeys, LocalQuickFix @NotNull ... quickFixes) {
       for (Map.Entry<String, Collection<PsiElement>> entry : keyValueAndKeys.entrySet()) {
         final String keyValue = entry.getKey();
         final Collection<PsiElement> keys = entry.getValue();

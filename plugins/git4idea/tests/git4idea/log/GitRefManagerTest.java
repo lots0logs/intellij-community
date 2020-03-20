@@ -1,3 +1,4 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.log;
 
 import com.intellij.openapi.components.ServiceManager;
@@ -13,6 +14,7 @@ import git4idea.test.GitSingleRepoTest;
 import git4idea.test.GitTestUtil;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -22,8 +24,8 @@ import static com.intellij.openapi.vcs.Executor.cd;
 public abstract class GitRefManagerTest extends GitSingleRepoTest {
 
   @NotNull
-  protected Collection<VcsRef> given(@NotNull String... refs) {
-    Collection<VcsRef> result = ContainerUtil.newArrayList();
+  protected Collection<VcsRef> given(String @NotNull ... refs) {
+    Collection<VcsRef> result = new ArrayList<>();
     cd(projectRoot);
     Hash hash = HashImpl.build(git("rev-parse HEAD"));
     for (String refName : refs) {
@@ -49,7 +51,7 @@ public abstract class GitRefManagerTest extends GitSingleRepoTest {
   }
 
   @NotNull
-  protected List<VcsRef> expect(@NotNull String... refNames) {
+  protected List<VcsRef> expect(String @NotNull ... refNames) {
     final Set<VcsRef> refs = GitTestUtil.readAllRefs(this, projectRoot, ServiceManager.getService(myProject, VcsLogObjectsFactory.class));
     return ContainerUtil.map2List(refNames, refName -> {
       VcsRef item = ContainerUtil.find(refs, ref -> ref.getName().equals(GitBranchUtil.stripRefsPrefix(refName)));
@@ -74,7 +76,7 @@ public abstract class GitRefManagerTest extends GitSingleRepoTest {
     return new VcsRefImpl(hash, name, type, projectRoot);
   }
 
-  private void setUpTracking(@NotNull Collection<VcsRef> refs) {
+  private void setUpTracking(@NotNull Collection<? extends VcsRef> refs) {
     cd(projectRoot);
     for (final VcsRef ref : refs) {
       if (ref.getType() == GitRefManager.LOCAL_BRANCH) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service.project.manage;
 
 import com.intellij.execution.RunManager;
@@ -12,12 +12,14 @@ import com.intellij.openapi.externalSystem.service.execution.ExternalSystemRunCo
 import com.intellij.openapi.externalSystem.service.project.manage.ExternalProjectsManagerImpl.ExternalProjectsStateProvider;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Pair;
 import com.intellij.util.containers.ConcurrentIntObjectMap;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -28,7 +30,7 @@ import static com.intellij.openapi.externalSystem.service.project.manage.Externa
  * @author Vladislav.Soroka
  */
 class ExternalSystemRunManagerListener implements RunManagerListener {
-  private Disposable eventDisposable;
+  private volatile Disposable eventDisposable;
 
   private final ExternalProjectsManagerImpl myManager;
   private final ConcurrentIntObjectMap<Pair<String, RunnerAndConfigurationSettings>> myMap;
@@ -86,7 +88,7 @@ class ExternalSystemRunManagerListener implements RunManagerListener {
 
         for (Phase phase : Phase.values()) {
           final List<String> modifiableActivationTasks = activation.getTasks(phase);
-          for (String task : ContainerUtil.newArrayList(modifiableActivationTasks)) {
+          for (String task : new ArrayList<>(modifiableActivationTasks)) {
             if (pair.first.equals(task)) {
               modifiableActivationTasks.remove(task);
               final String runConfigurationActivationTaskName = getRunConfigurationActivationTaskName(settings);
@@ -101,8 +103,10 @@ class ExternalSystemRunManagerListener implements RunManagerListener {
   }
 
   public void attach() {
+    Project project = myManager.getProject();
     eventDisposable = Disposer.newDisposable();
-    myManager.getProject().getMessageBus().connect(eventDisposable).subscribe(RunManagerListener.TOPIC, this);
+    Disposer.register(project, eventDisposable);
+    project.getMessageBus().connect(eventDisposable).subscribe(RunManagerListener.TOPIC, this);
   }
 
   @Override

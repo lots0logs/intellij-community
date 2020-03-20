@@ -1,8 +1,9 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.ex;
 
-import com.intellij.codeInspection.InspectionApplication;
 import com.intellij.codeInspection.InspectionsReportConverter;
-import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.codeInspection.InspectionsResultUtil;
+import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.io.URLUtil;
 import org.jdom.Document;
@@ -87,8 +88,8 @@ public class PlainTextFormatter implements InspectionsReportConverter {
           warn("Folder isn't expected here: " + inspectionData.getName());
           continue;
         }
-        final String fileNameWithoutExt = FileUtil.getNameWithoutExtension(inspectionData);
-        if (InspectionApplication.DESCRIPTIONS.equals(fileNameWithoutExt)) {
+        final String fileNameWithoutExt = FileUtilRt.getNameWithoutExtension(inspectionData.getName());
+        if (InspectionsResultUtil.DESCRIPTIONS.equals(fileNameWithoutExt)) {
           continue;
         }
 

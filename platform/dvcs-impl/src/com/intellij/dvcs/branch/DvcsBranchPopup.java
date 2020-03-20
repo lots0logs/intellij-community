@@ -95,8 +95,9 @@ public abstract class DvcsBranchPopup<Repo extends Repository> {
 
   private void notifyAboutSyncedBranches() {
     Notification notification = STANDARD_NOTIFICATION.createNotification("Branch Operations Are Executed on All Roots", "", NotificationType.INFORMATION, null);
-    notification.addAction(NotificationAction.createSimple("Disable...", () -> {
-      ShowSettingsUtil.getInstance().showSettingsDialog(myProject, myVcs.getConfigurable().getDisplayName());
+    notification
+      .addAction(NotificationAction.createSimple(DvcsBundle.messagePointer("action.NotificationAction.DvcsBranchPopup.text.disable"), () -> {
+      ShowSettingsUtil.getInstance().showSettingsDialog(myProject, myVcs.getDisplayName());
       if (myVcsSettings.getSyncSetting() == DvcsSyncSettings.Value.DONT_SYNC) {
         notification.expire();
       }
@@ -132,7 +133,7 @@ public abstract class DvcsBranchPopup<Repo extends Repository> {
 
   @NotNull
   protected List<Repo> filterRepositoriesNotOnThisBranch(@NotNull final String branch,
-                                                         @NotNull List<Repo> allRepositories) {
+                                                         @NotNull List<? extends Repo> allRepositories) {
     return ContainerUtil.filter(allRepositories, repository -> !branch.equals(repository.getCurrentBranchName()));
   }
 

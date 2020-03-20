@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.dom;
 
 import com.intellij.ide.presentation.Presentation;
@@ -26,6 +12,8 @@ import java.util.List;
 @Presentation(icon = "AllIcons.Nodes.Plugin", typeName = "Plugin")
 @Stubbed
 public interface IdeaPlugin extends DomElement {
+  String TAG_NAME = "idea-plugin";
+
   @Nullable
   String getPluginId();
 
@@ -50,6 +38,9 @@ public interface IdeaPlugin extends DomElement {
   @NotNull
   GenericAttributeValue<String> getUrl();
 
+  /**
+   * @deprecated Unused.
+   */
   @SuppressWarnings("DeprecatedIsStillUsed")
   @NotNull
   @Deprecated
@@ -57,6 +48,9 @@ public interface IdeaPlugin extends DomElement {
 
   @NotNull
   GenericAttributeValue<Boolean> getAllowBundledUpdate();
+
+  @NotNull
+  GenericAttributeValue<Boolean> getImplementationDetail();
 
   @NotNull
   @Stubbed
@@ -82,6 +76,7 @@ public interface IdeaPlugin extends DomElement {
 
 
   @NotNull
+  @Stubbed
   IdeaVersion getIdeaVersion();
 
 
@@ -139,7 +134,6 @@ public interface IdeaPlugin extends DomElement {
 
   ModuleComponents addModuleComponents();
 
-
   @NotNull
   @SubTagList("actions")
   @Stubbed
@@ -147,9 +141,31 @@ public interface IdeaPlugin extends DomElement {
 
   Actions addActions();
 
+  /**
+   * Available since 192.
+   */
+  @NotNull
+  @SubTagList("applicationListeners")
+  List<Listeners> getApplicationListeners();
 
+  /**
+   * Available since 192.
+   */
+  @NotNull
+  @SubTagList("projectListeners")
+  List<Listeners> getProjectListeners();
+
+  /**
+   * @deprecated not used anymore
+   */
+  @SuppressWarnings("SpellCheckingInspection")
+  @Deprecated
   @NotNull
   List<Helpset> getHelpsets();
 
+  /**
+   * @deprecated not used anymore
+   */
+  @Deprecated
   Helpset addHelpset();
 }

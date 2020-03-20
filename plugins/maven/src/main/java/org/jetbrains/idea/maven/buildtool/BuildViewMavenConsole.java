@@ -2,12 +2,13 @@
 package org.jetbrains.idea.maven.buildtool;
 
 import com.intellij.build.*;
-import com.intellij.execution.ExecutionManager;
+import com.intellij.execution.RunnerAndConfigurationSettings;
 import com.intellij.execution.executors.DefaultRunExecutor;
+import com.intellij.execution.process.AnsiEscapeDecoder;
 import com.intellij.execution.process.ProcessHandler;
-import com.intellij.execution.ui.ConsoleView;
-import com.intellij.execution.ui.ExecutionConsole;
-import com.intellij.execution.ui.RunContentDescriptor;
+import com.intellij.execution.runners.ExecutionEnvironment;
+import com.intellij.execution.runners.ExecutionEnvironmentBuilder;
+import com.intellij.execution.ui.*;
 import com.intellij.openapi.actionSystem.ActionGroup;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
@@ -17,8 +18,8 @@ import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.openapi.util.Key;
 import com.intellij.openapi.wm.ToolWindowId;
-import icons.MavenIcons;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,6 +35,7 @@ import javax.swing.*;
 import java.awt.*;
 
 import static com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskType.EXECUTE_TASK;
+import static icons.OpenapiIcons.RepositoryLibraryLogo;
 
 /**
  * Implementation of maven console which uses {@link BuildView} and can be displayed at:
@@ -43,7 +45,12 @@ import static com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskT
  * </ul>
  */
 @ApiStatus.Experimental
-public class BuildViewMavenConsole extends MavenConsole {
+@Deprecated
+/*
+ * used only in MavenExternalExecutor
+ * To be removed in IDEA-216278
+ */
+public final class BuildViewMavenConsole extends MavenConsole {
   private final MavenBuildEventProcessor myEventParser;
   @NotNull
   private final Project myProject;
@@ -52,6 +59,7 @@ public class BuildViewMavenConsole extends MavenConsole {
   @NotNull
   private final String myTitle;
   private final long myExecutionId;
+  private final AnsiEscapeDecoder myDecoder = new AnsiEscapeDecoder();
 
   public BuildViewMavenConsole(@NotNull Project project,
                                @NotNull String title,
@@ -63,10 +71,10 @@ public class BuildViewMavenConsole extends MavenConsole {
     myTitle = title;
     myExecutionId = executionId;
     ExternalSystemTaskId taskId = ExternalSystemTaskId.create(MavenUtil.SYSTEM_ID, EXECUTE_TASK, project);
-    DefaultBuildDescriptor descriptor = new DefaultBuildDescriptor(taskId, "Run Maven task", workingDir, System.currentTimeMillis());
+    DefaultBuildDescriptor descriptor = new DefaultBuildDescriptor(taskId, title, workingDir, System.currentTimeMillis());
 
     BuildProgressListener buildProgressListener;
-    if (ToolWindowId.BUILD.equals(toolWindowId)) {
+    if (BuildContentManager.TOOL_WINDOW_ID.equals(toolWindowId)) {
       myBuildView = null;
       buildProgressListener = ServiceManager.getService(project, BuildViewManager.class);
     }
@@ -78,24 +86,35 @@ public class BuildViewMavenConsole extends MavenConsole {
     else {
       throw new AssertionError("Unsupported toolwindow id: " + toolWindowId);
     }
-    myEventParser = new MavenBuildEventProcessor(project, workingDir, buildProgressListener, descriptor, taskId);
+    myEventParser = new MavenBuildEventProcessor(project, workingDir, buildProgressListener, descriptor, taskId, null);
   }
 
   @Override
   public void attachToProcess(ProcessHandler processHandler) {
-    processHandler.addProcessListener(new BuildToolConsoleProcessAdapter(myEventParser));
+    super.attachToProcess(processHandler);
+    processHandler.addProcessListener(new BuildToolConsoleProcessAdapter(myEventParser, false));
     if (myBuildView != null) {
       myBuildView.attachToProcess(processHandler);
       ApplicationManager.getApplication().invokeLater(() -> {
         DefaultActionGroup actions = new DefaultActionGroup();
         actions.addAll((myBuildView).getSwitchActions());
-        actions.add(new ShowExecutionErrorsOnlyAction(myBuildView));
+        actions.add(BuildTreeFilters.createFilteringActionsGroup(myBuildView));
         JComponent consolePanel = createConsolePanel(myBuildView, actions);
         RunContentDescriptor descriptor =
-          new RunContentDescriptor(myBuildView, processHandler, consolePanel, myTitle, MavenIcons.MavenLogo);
+          new RunContentDescriptor(myBuildView, processHandler, consolePanel, myTitle, RepositoryLibraryLogo);
         descriptor.setExecutionId(myExecutionId);
+        RunnerAndConfigurationSettings configuration = processHandler.getUserData(RunContentManagerImpl.TEMPORARY_CONFIGURATION_KEY);
+        RunContentManager runContentManager = RunContentManager.getInstance(myProject);
+        if (configuration != null) {
+          ExecutionEnvironment environment =
+            ExecutionEnvironmentBuilder.create(DefaultRunExecutor.getRunExecutorInstance(), configuration.getConfiguration()).build();
+          String toolWindowId = runContentManager.getContentDescriptorToolWindowId(environment);
+          if (toolWindowId != null) {
+            descriptor.setContentToolWindowId(toolWindowId);
+          }
+        }
         Disposer.register(descriptor, myBuildView);
-        ExecutionManager.getInstance(myProject).getContentManager().showRunContent(DefaultRunExecutor.getRunExecutorInstance(), descriptor);
+        runContentManager.showRunContent(DefaultRunExecutor.getRunExecutorInstance(), descriptor);
       });
     }
   }
@@ -131,6 +150,10 @@ public class BuildViewMavenConsole extends MavenConsole {
     myEventParser.onTextAvailable(text, type == OutputType.ERROR);
   }
 
+  public void sendToEventParser(String text, Key outputType) {
+    myDecoder.escapeText(text, outputType, myEventParser);
+  }
+
   private static JComponent createConsolePanel(ConsoleView view, ActionGroup actions) {
     JPanel panel = new JPanel();
     panel.setLayout(new BorderLayout());
@@ -157,22 +180,6 @@ public class BuildViewMavenConsole extends MavenConsole {
                                           @NotNull ExecutionConsole console,
                                           @NotNull BuildDescriptor descriptor) {
 
-    return new BuildView(project, console, descriptor, "build.toolwindow.run.selection.state",
-                         new ViewManager() {
-                           @Override
-                           public boolean isConsoleEnabledByDefault() {
-                             return true;
-                           }
-
-                           @Override
-                           public boolean isBuildContentView() {
-                             return true;
-                           }
-                         }){
-      @Override
-      public void dispose() {
-        super.dispose();
-      }
-    };
+    return null;
   }
 }

@@ -4,19 +4,19 @@ package com.siyeh.ig.psiutils;
 import com.intellij.codeInsight.CodeInsightUtil;
 import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.psi.*;
-import com.intellij.testFramework.LightCodeInsightTestCase;
+import com.intellij.testFramework.LightJavaCodeInsightTestCase;
 import com.intellij.testFramework.LightProjectDescriptor;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import com.intellij.util.ThreeState;
 import org.intellij.lang.annotations.Language;
 import org.jetbrains.annotations.NotNull;
 
-public class ReorderingUtilsTest extends LightCodeInsightTestCase {
+public class ReorderingUtilsTest extends LightJavaCodeInsightTestCase {
   private static final String PREFIX = "import java.util.Optional;\n" +
                                        "import java.util.List;\n" +
                                        "/** @noinspection all*/\n" +
                                        "class X {Object test(Object obj, String str, int x, int y, String[] arr, " +
-                                       "Optional<String> opt, List<String> list) { return ";
+                                       "Optional<String> opt, List<String> list, Integer boxed) { return ";
   private static final String SUFFIX = ";} static Object nullNull(Object obj) {return obj == null ? null : obj.hashCode();}}";
   private static final String SELECTION_START = "/*<*/";
   private static final String SELECTION_END = "/*>*/";
@@ -35,6 +35,8 @@ public class ReorderingUtilsTest extends LightCodeInsightTestCase {
     checkCanBeReordered("obj != null && /*<*/obj.hashCode() > 10/*>*/", ThreeState.NO);
     checkCanBeReordered("obj == null || /*<*/obj.hashCode() > 10/*>*/", ThreeState.NO);
     checkCanBeReordered("arr != null && /*<*/obj.hashCode() > 10/*>*/", ThreeState.UNSURE);
+    checkCanBeReordered("boxed != null && /*<*/boxed > 10/*>*/", ThreeState.NO);
+    checkCanBeReordered("x != null && /*<*/x > 10/*>*/", ThreeState.YES); // compilation error at null-check actually
   }
 
   public void testCast() {
@@ -91,11 +93,11 @@ public class ReorderingUtilsTest extends LightCodeInsightTestCase {
   @NotNull
   @Override
   protected LightProjectDescriptor getProjectDescriptor() {
-    return LightCodeInsightFixtureTestCase.JAVA_9_ANNOTATED;
+    return LightJavaCodeInsightFixtureTestCase.JAVA_9_ANNOTATED;
   }
 
-  private static void checkCanBeReordered(@Language(value = "JAVA", prefix = PREFIX, suffix = SUFFIX) String expressionText,
-                                          ThreeState expectedResult) {
+  private void checkCanBeReordered(@Language(value = "JAVA", prefix = PREFIX, suffix = SUFFIX) String expressionText,
+                                   ThreeState expectedResult) {
     String file = PREFIX + expressionText + SUFFIX;
     PsiJavaFile javaFile = (PsiJavaFile)PsiFileFactory.getInstance(getProject()).createFileFromText("X.java", JavaFileType.INSTANCE, file);
     PsiCodeBlock body = javaFile.getClasses()[0].getMethods()[0].getBody();

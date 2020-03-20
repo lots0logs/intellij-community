@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.ide
 
 import com.intellij.ide.impl.ProjectUtil.focusProjectWindow
@@ -72,7 +72,7 @@ internal class OpenFileHttpService : RestService() {
 
     val apiRequest: OpenFileRequest
     if (request.method() === HttpMethod.POST) {
-      apiRequest = gson.value.fromJson(createJsonReader(request), OpenFileRequest::class.java)
+      apiRequest = gson.fromJson(createJsonReader(request), OpenFileRequest::class.java)
     }
     else {
       apiRequest = OpenFileRequest()
@@ -82,7 +82,7 @@ internal class OpenFileHttpService : RestService() {
       apiRequest.focused = getBooleanParameter("focused", urlDecoder, true)
     }
 
-    val prefixLength = 1 + PREFIX.length + 1 + serviceName.length + 1
+    val prefixLength = 1 + PREFIX.length + 1 + getServiceName().length + 1
     val path = urlDecoder.path()
     if (path.length > prefixLength) {
       val matcher = LINE_AND_COLUMN.matcher(path).region(prefixLength, path.length)
@@ -99,12 +99,14 @@ internal class OpenFileHttpService : RestService() {
     }
 
     if (apiRequest.file == null) {
-      sendStatus(HttpResponseStatus.BAD_REQUEST, keepAlive, channel)
-      return null
+      return parameterMissedErrorMessage("file")
     }
 
     val promise = openFile(apiRequest, context, request) ?: return null
-    promise.onSuccess { sendStatus(HttpResponseStatus.OK, keepAlive, channel) }
+    promise
+      .onSuccess {
+        sendOk(request, context)
+      }
       .onError {
         if (it === NOT_FOUND) {
           // don't expose file status
@@ -120,7 +122,7 @@ internal class OpenFileHttpService : RestService() {
     return null
   }
 
-  internal fun openFile(request: OpenFileRequest, context: ChannelHandlerContext, httpRequest: HttpRequest?): Promise<Void?>? {
+  private fun openFile(request: OpenFileRequest, context: ChannelHandlerContext, httpRequest: HttpRequest?): Promise<Void?>? {
     val systemIndependentPath = FileUtil.toSystemIndependentName(FileUtil.expandUserHome(request.file!!))
     val file = Paths.get(FileUtil.toSystemDependentName(systemIndependentPath))
     if (file.isAbsolute) {
@@ -219,13 +221,10 @@ private fun openRelativePath(path: String, request: OpenFileRequest): Boolean {
   if (virtualFile == null) {
     for (openedProject in projects) {
       for (vcsRoot in ProjectLevelVcsManager.getInstance(openedProject).allVcsRoots) {
-        val root = vcsRoot.path
-        if (root != null) {
-          virtualFile = root.findFileByRelativePath(path)
-          if (virtualFile != null) {
-            project = openedProject
-            break
-          }
+        virtualFile = vcsRoot.path.findFileByRelativePath(path)
+        if (virtualFile != null) {
+          project = openedProject
+          break
         }
       }
     }
@@ -239,9 +238,11 @@ private fun openRelativePath(path: String, request: OpenFileRequest): Boolean {
 
 private fun openAbsolutePath(file: Path, request: OpenFileRequest): Promise<Void?> {
   val promise = AsyncPromise<Void?>()
-  ApplicationManager.getApplication().invokeLater {
+  val task = Runnable {
     promise.catchError {
-      val virtualFile = runWriteAction {  LocalFileSystem.getInstance().refreshAndFindFileByPath(file.systemIndependentPath) }
+      val virtualFile = runWriteAction {
+        LocalFileSystem.getInstance().refreshAndFindFileByPath(file.systemIndependentPath)
+      }
       if (virtualFile == null) {
         promise.setError(NOT_FOUND)
       }
@@ -250,6 +251,14 @@ private fun openAbsolutePath(file: Path, request: OpenFileRequest): Promise<Void
         promise.setResult(null)
       }
     }
+  }
+
+  val app = ApplicationManager.getApplication()
+  if (app.isUnitTestMode) {
+    app.invokeAndWait(task)
+  }
+  else {
+    app.invokeLater(task)
   }
   return promise
 }

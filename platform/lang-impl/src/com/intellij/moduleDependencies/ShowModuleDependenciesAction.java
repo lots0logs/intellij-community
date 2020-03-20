@@ -1,10 +1,8 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.moduleDependencies;
 
 import com.intellij.analysis.AnalysisScope;
-import com.intellij.analysis.AnalysisScopeBundle;
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -36,9 +34,9 @@ public class ShowModuleDependenciesAction extends AnAction {
     Project project = e.getProject();
     if (project == null) return;
 
-    Module[] modules = LangDataKeys.MODULE_CONTEXT_ARRAY.getData(e.getDataContext());
+    Module[] modules = e.getData(LangDataKeys.MODULE_CONTEXT_ARRAY);
     if (modules == null) {
-      PsiElement element = CommonDataKeys.PSI_FILE.getData(e.getDataContext());
+      PsiElement element = e.getData(CommonDataKeys.PSI_FILE);
       Module module = element != null ? ModuleUtilCore.findModuleForPsiElement(element) : null;
       if (module != null && ModuleManager.getInstance(project).getModules().length > 1) {
         MyModuleOrProjectScope dlg = new MyModuleOrProjectScope(module.getName());
@@ -66,10 +64,10 @@ public class ShowModuleDependenciesAction extends AnAction {
 
     protected MyModuleOrProjectScope(String moduleName) {
       super(false);
-      setTitle(AnalysisScopeBundle.message("module.dependencies.scope.dialog.title"));
+      setTitle(CodeInsightBundle.message("module.dependencies.scope.dialog.title"));
       ButtonGroup group = new ButtonGroup();
-      myProjectScope = new JRadioButton(AnalysisScopeBundle.message("module.dependencies.scope.dialog.project.button"));
-      myModuleScope = new JRadioButton(AnalysisScopeBundle.message("module.dependencies.scope.dialog.module.button", moduleName));
+      myProjectScope = new JRadioButton(CodeInsightBundle.message("module.dependencies.scope.dialog.project.button"));
+      myModuleScope = new JRadioButton(CodeInsightBundle.message("module.dependencies.scope.dialog.module.button", moduleName));
       group.add(myProjectScope);
       group.add(myModuleScope);
       myProjectScope.setSelected(true);

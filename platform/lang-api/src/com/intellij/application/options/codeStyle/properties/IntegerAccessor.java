@@ -7,7 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Field;
 
 public class IntegerAccessor extends CodeStyleFieldAccessor<Integer,Integer> {
-  IntegerAccessor(@NotNull Object object, @NotNull Field field) {
+  public IntegerAccessor(@NotNull Object object, @NotNull Field field) {
     super(object, field);
   }
 
@@ -20,6 +20,12 @@ public class IntegerAccessor extends CodeStyleFieldAccessor<Integer,Integer> {
     catch (NumberFormatException nfe) {
       return null;
     }
+  }
+
+  @Nullable
+  @Override
+  protected String valueToString(@NotNull Integer value) {
+    return String.valueOf(value);
   }
 
   @Override

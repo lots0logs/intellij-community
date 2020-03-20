@@ -1,12 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.lang.regexp;
 
 import com.intellij.mock.MockSmartPointerManager;
 import com.intellij.openapi.application.ex.PathManagerEx;
-import com.intellij.psi.PsiComment;
-import com.intellij.psi.SmartPointerManager;
-import com.intellij.psi.SmartPsiElementPointer;
-import com.intellij.psi.SyntaxTraverser;
+import com.intellij.psi.*;
 import com.intellij.psi.impl.source.resolve.FileContextUtil;
 import com.intellij.testFramework.ParsingTestCase;
 
@@ -355,9 +352,10 @@ public class RegExpParsingTest extends ParsingTestCase {
     RegExpCapabilitiesProvider provider = (host, def) -> EnumSet.of(POSIX_BRACKET_EXPRESSIONS);
     try {
       RegExpCapabilitiesProvider.EP.addExplicitExtension(RegExpLanguage.INSTANCE, provider);
-      PsiComment context = SyntaxTraverser.psiTraverser(createPsiFile("c", "(?#xxx)")).filter(PsiComment.class).first();
+      PsiFile file = createPsiFile("c", "(?#xxx)");
+      PsiComment context = SyntaxTraverser.psiTraverser(file).filter(PsiComment.class).first();
       myFile = createPsiFile("a", "[[:blank:]]");
-      SmartPsiElementPointer<PsiComment> pointer = SmartPointerManager.createPointer(context);
+      SmartPsiElementPointer<PsiComment> pointer = SmartPointerManager.getInstance(getProject()).createSmartPsiElementPointer(context, file);
       myFile.putUserData(FileContextUtil.INJECTED_IN_ELEMENT, pointer);
       ensureParsed(myFile);
       checkResult(myFilePrefix + getTestName(), myFile);

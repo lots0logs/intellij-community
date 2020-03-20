@@ -15,6 +15,7 @@
  */
 package org.intellij.plugins.intelliLang.inject.config.ui;
 
+import com.intellij.CommonBundle;
 import com.intellij.ide.util.TreeClassChooser;
 import com.intellij.ide.util.TreeClassChooserFactory;
 import com.intellij.openapi.actionSystem.*;
@@ -81,7 +82,7 @@ public class MethodParameterPanel extends AbstractInjectionPanel<MethodParameter
         @Override
         public void documentChanged(@NotNull final DocumentEvent e) {
           updateParamTree();
-          updateTree();
+          updateInjectionPanelTree();
         }
       });
       return document;
@@ -121,12 +122,16 @@ public class MethodParameterPanel extends AbstractInjectionPanel<MethodParameter
       final Object userObject = ((DefaultMutableTreeNode)o.getLastPathComponent()).getUserObject();
       return userObject instanceof PsiNamedElement? ((PsiNamedElement)userObject).getName() : null;
     });
-    new AnAction("Toggle") {
+    new AnAction(CommonBundle.message("action.text.toggle")) {
       @Override
       public void actionPerformed(@NotNull final AnActionEvent e) {
         performToggleAction();
       }
     }.registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0)), myParamsTable);
+  }
+
+  private void updateInjectionPanelTree() {
+    updateTree();
   }
 
   private void performToggleAction() {
@@ -372,7 +377,7 @@ public class MethodParameterPanel extends AbstractInjectionPanel<MethodParameter
       if (psiClass != null) {
         setPsiClass(psiClass.getQualifiedName());
         updateParamTree();
-        updateTree();
+        updateInjectionPanelTree();
       }
     }
   }

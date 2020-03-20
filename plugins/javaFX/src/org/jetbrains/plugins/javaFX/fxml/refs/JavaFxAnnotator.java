@@ -1,26 +1,13 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.javaFX.fxml.refs;
 
 import com.intellij.codeInsight.intention.AddAnnotationFix;
 import com.intellij.codeInsight.intentions.XmlChooseColorIntentionAction;
 import com.intellij.lang.ASTNode;
-import com.intellij.lang.annotation.Annotation;
+import com.intellij.lang.annotation.AnnotationBuilder;
 import com.intellij.lang.annotation.AnnotationHolder;
 import com.intellij.lang.annotation.Annotator;
+import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -32,11 +19,12 @@ import com.intellij.psi.*;
 import com.intellij.psi.presentation.java.SymbolPresentationUtil;
 import com.intellij.psi.xml.*;
 import com.intellij.ui.ColorUtil;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ui.ColorIcon;
 import com.intellij.util.ui.JBUI;
 import com.intellij.xml.util.ColorMap;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.plugins.javaFX.JavaFXBundle;
 import org.jetbrains.plugins.javaFX.fxml.FxmlConstants;
 import org.jetbrains.plugins.javaFX.fxml.JavaFxCommonNames;
 import org.jetbrains.plugins.javaFX.fxml.JavaFxFileTypeFactory;
@@ -67,11 +55,18 @@ public class JavaFxAnnotator implements Annotator {
           if (resolve instanceof PsiMember) {
             if (!JavaFxPsiUtil.isVisibleInFxml((PsiMember)resolve)) {
               final String symbolPresentation = "'" + SymbolPresentationUtil.getSymbolPresentableText(resolve) + "'";
-              final Annotation annotation = holder.createErrorAnnotation(element,
-                                                                         symbolPresentation + (resolve instanceof PsiClass ? " should be public" : " should be public or annotated with @FXML"));
+              AnnotationBuilder builder = holder.newAnnotation(HighlightSeverity.ERROR, symbolPresentation +
+                                                                                        (resolve instanceof PsiClass
+                                                                                         ? JavaFXBundle.message("javafx.annotator.should.be.public")
+                                                                                         : JavaFXBundle.message("javafx.annotator.should.be.public.or.fxml.annotated")));
               if (!(resolve instanceof PsiClass)) {
-                annotation.registerUniversalFix(new AddAnnotationFix(JavaFxCommonNames.JAVAFX_FXML_ANNOTATION, (PsiMember)resolve, ArrayUtil.EMPTY_STRING_ARRAY), null, null);
+                AddAnnotationFix fix = new AddAnnotationFix(JavaFxCommonNames.JAVAFX_FXML_ANNOTATION, (PsiMember)resolve,
+                                                            ArrayUtilRt.EMPTY_STRING_ARRAY);
+                builder = builder.withFix(fix)
+                  .newFix(fix).batch()
+                  .registerFix();
               }
+              builder.create();
             }
           }
         }
@@ -82,7 +77,7 @@ public class JavaFxAnnotator implements Annotator {
       if (!FxmlConstants.FX_BUILT_IN_ATTRIBUTES.contains(attributeName) &&
           !attribute.isNamespaceDeclaration() &&
           JavaFxPsiUtil.isReadOnly(attributeName, attribute.getParent())) {
-        holder.createErrorAnnotation(element.getNavigationElement(), "Property '" + attributeName + "' is read-only");
+        holder.newAnnotation(HighlightSeverity.ERROR, JavaFXBundle.message("javafx.annotator.property.is.read.only", attributeName)).range(element.getNavigationElement()).create();
       }
       if (FxmlConstants.SOURCE.equals(attributeName)) {
         final XmlAttributeValue valueElement = attribute.getValueElement();
@@ -92,10 +87,10 @@ public class JavaFxAnnotator implements Annotator {
             final XmlTag referencedTag = JavaFxBuiltInTagDescriptor.getReferencedTag(xmlTag);
             if (referencedTag != null) {
               if (referencedTag.getTextOffset() > xmlTag.getTextOffset()) {
-                holder.createErrorAnnotation(valueElement.getValueTextRange(), valueElement.getValue() + " not found");
+                holder.newAnnotation(HighlightSeverity.ERROR, JavaFXBundle.message("javafx.annotator.value.not.found", valueElement.getValue())).range(valueElement.getValueTextRange()).create();
               } else if (xmlTag.getParentTag() == referencedTag.getParentTag()) {
-                final Annotation annotation = holder.createErrorAnnotation(valueElement.getValueTextRange(), "Duplicate child added");
-                annotation.registerFix(new JavaFxWrapWithDefineIntention(referencedTag, valueElement.getValue()));
+                holder.newAnnotation(HighlightSeverity.ERROR, JavaFXBundle.message("javafx.annotator.duplicate.child.added")).range(valueElement.getValueTextRange())
+                .withFix(new JavaFxWrapWithDefineIntention(referencedTag, valueElement.getValue())).create();
               }
             }
           }
@@ -109,9 +104,9 @@ public class JavaFxAnnotator implements Annotator {
           final List<String> langs = JavaFxPsiUtil.parseInjectedLanguages((XmlFile)element.getContainingFile());
           if (langs.isEmpty()) {
             final ASTNode openTag = element.getNode().findChildByType(XmlTokenType.XML_NAME);
-            final Annotation annotation =
-              holder.createErrorAnnotation(openTag != null ? openTag.getPsi() : element, "Page language not specified.");
-            annotation.registerFix(new JavaFxInjectPageLanguageIntention());
+
+              holder.newAnnotation(HighlightSeverity.ERROR, JavaFXBundle.message("javafx.annotator.page.language.not.specified")).range(openTag != null ? openTag.getPsi() : element)
+            .withFix(new JavaFxInjectPageLanguageIntention()).create();
           }
         }
       }
@@ -131,8 +126,7 @@ public class JavaFxAnnotator implements Annotator {
       }
       if (color != null) {
         final ColorIcon icon = JBUI.scale(new ColorIcon(8, color));
-        final Annotation annotation = holder.createInfoAnnotation(element, null);
-        annotation.setGutterIconRenderer(new ColorIconRenderer(icon, element));
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION).gutterIconRenderer(new ColorIconRenderer(icon, element)).create();
       }
     }
     catch (Exception ignored) {
@@ -176,7 +170,7 @@ public class JavaFxAnnotator implements Annotator {
       return new AnAction() {
         @Override
         public void actionPerformed(@NotNull AnActionEvent e) {
-          final Editor editor = CommonDataKeys.EDITOR.getData(e.getDataContext());
+          final Editor editor = e.getData(CommonDataKeys.EDITOR);
           if (editor != null) {
             XmlChooseColorIntentionAction.chooseColor(editor.getComponent(), myElement);
           }

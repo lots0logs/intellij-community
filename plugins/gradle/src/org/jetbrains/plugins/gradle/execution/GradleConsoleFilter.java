@@ -31,26 +31,31 @@ import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 import java.io.File;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author Vladislav.Soroka
  */
 public class GradleConsoleFilter implements Filter {
+  public static final Pattern LINE_AND_COLUMN_PATTERN = Pattern.compile("line (\\d+), column (\\d+)\\.");
+
+  @Nullable
   private final Project myProject;
   private static final TextAttributes HYPERLINK_ATTRIBUTES =
     EditorColorsManager.getInstance().getGlobalScheme().getAttributes(CodeInsightColors.HYPERLINK_ATTRIBUTES);
   private String myFilteredFileName;
   private int myFilteredLineNumber;
 
-  public GradleConsoleFilter(Project project) {
+  public GradleConsoleFilter(@Nullable Project project) {
     myProject = project;
   }
 
   @Nullable
   @Override
   public Result applyFilter(@NotNull final String line, final int entireLength) {
-    String[] filePrefixes = new String[]{"Build file '", "build file '"};
-    String[] linePrefixes = new String[]{"' line: ", "': "};
+    String[] filePrefixes = new String[]{"Build file '", "build file '", "Settings file '", "settings file '"};
+    String[] linePrefixes = new String[]{"' line: ", "': ", "' line: ", "': "};
     String filePrefix = null;
     String linePrefix = null;
     for (int i = 0; i < filePrefixes.length; i++) {
@@ -87,6 +92,11 @@ public class GradleConsoleFilter implements Filter {
         break;
       }
     }
+
+    if (lineNumberStr.length() < 1) {
+      return null;
+    }
+
     lineNumberStr = lineNumberStr.substring(0, lineNumberEndIndex + 1);
     int lineNumber;
     try {
@@ -104,9 +114,20 @@ public class GradleConsoleFilter implements Filter {
 
     int textStartOffset = entireLength - line.length() + filePrefix.length() + filePrefixIndex;
     int highlightEndOffset = textStartOffset + fileName.length();
-    OpenFileHyperlinkInfo info = new OpenFileHyperlinkInfo(myProject, file, Math.max(lineNumber - 1, 0));
+    OpenFileHyperlinkInfo info = null;
+    if (myProject != null) {
+      int columnNumber = 0;
+      String lineAndColumn = StringUtil.substringAfterLast(line, " @ ");
+      if (lineAndColumn != null) {
+        Matcher matcher = LINE_AND_COLUMN_PATTERN.matcher(lineAndColumn);
+        if (matcher.find()) {
+          columnNumber = Integer.parseInt(matcher.group(2));
+        }
+      }
+      info = new OpenFileHyperlinkInfo(myProject, file, Math.max(lineNumber - 1, 0), columnNumber);
+    }
     TextAttributes attributes = HYPERLINK_ATTRIBUTES.clone();
-    if (!ProjectRootManager.getInstance(myProject).getFileIndex().isInContent(file)) {
+    if (myProject != null && !ProjectRootManager.getInstance(myProject).getFileIndex().isInContent(file)) {
       Color color = UIUtil.getInactiveTextColor();
       attributes.setForegroundColor(color);
       attributes.setEffectColor(color);

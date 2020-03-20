@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.scratch;
 
 import com.intellij.execution.JavaExecutionUtil;
@@ -8,7 +8,7 @@ import com.intellij.execution.actions.ConfigurationFromContext;
 import com.intellij.execution.application.AbstractApplicationConfigurationProducer;
 import com.intellij.execution.application.ApplicationConfigurationType;
 import com.intellij.execution.configurations.ConfigurationFactory;
-import com.intellij.ide.scratch.ScratchFileType;
+import com.intellij.ide.scratch.ScratchUtil;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Ref;
@@ -29,11 +29,13 @@ public class JavaScratchConfigurationProducer extends AbstractApplicationConfigu
   }
 
   @Override
-  protected boolean setupConfigurationFromContext(JavaScratchConfiguration configuration, ConfigurationContext context, Ref<PsiElement> sourceElement) {
+  protected boolean setupConfigurationFromContext(@NotNull JavaScratchConfiguration configuration,
+                                                  @NotNull ConfigurationContext context,
+                                                  @NotNull Ref<PsiElement> sourceElement) {
     final Location location = context.getLocation();
     if (location != null) {
       final VirtualFile vFile = location.getVirtualFile();
-      if (vFile != null && vFile.getFileType() == ScratchFileType.INSTANCE) {
+      if (vFile != null && ScratchUtil.isScratch(vFile)) {
         final PsiFile psiFile = location.getPsiElement().getContainingFile();
         if (psiFile != null && psiFile.getLanguage() == JavaLanguage.INSTANCE) {
           configuration.setScratchFileUrl(vFile.getUrl());
@@ -50,7 +52,7 @@ public class JavaScratchConfigurationProducer extends AbstractApplicationConfigu
   }
 
   @Override
-  public boolean isConfigurationFromContext(JavaScratchConfiguration configuration, ConfigurationContext context) {
+  public boolean isConfigurationFromContext(@NotNull JavaScratchConfiguration configuration, @NotNull ConfigurationContext context) {
     final PsiElement location = context.getPsiLocation();
     final PsiClass aClass = ApplicationConfigurationType.getMainClass(location);
     if (aClass != null && Comparing.equal(JavaExecutionUtil.getRuntimeQualifiedName(aClass), configuration.getMainClassName())) {

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.json.codeinsight;
 
 import com.intellij.json.JsonBundle;
@@ -23,6 +9,7 @@ import com.intellij.json.psi.JsonReferenceExpression;
 import com.intellij.json.psi.JsonStringLiteral;
 import com.intellij.lang.annotation.AnnotationHolder;
 import com.intellij.lang.annotation.Annotator;
+import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.TextRange;
@@ -42,7 +29,7 @@ public class JsonLiteralAnnotator implements Annotator {
 
   @Override
   public void annotate(@NotNull PsiElement element, @NotNull AnnotationHolder holder) {
-    JsonLiteralChecker[] extensions = JsonLiteralChecker.EP_NAME.getExtensions();
+    List<JsonLiteralChecker> extensions = JsonLiteralChecker.EP_NAME.getExtensionList();
     if (element instanceof JsonReferenceExpression) {
       highlightPropertyKey(element, holder);
     }
@@ -55,7 +42,7 @@ public class JsonLiteralAnnotator implements Annotator {
 
       // Check that string literal is closed properly
       if (length <= 1 || text.charAt(0) != text.charAt(length - 1) || JsonPsiUtil.isEscapedChar(text, length - 1)) {
-        holder.createErrorAnnotation(element, JsonBundle.message("syntax.error.missing.closing.quote"));
+        holder.newAnnotation(HighlightSeverity.ERROR, JsonBundle.message("syntax.error.missing.closing.quote")).create();
       }
 
       // Check escapes
@@ -65,7 +52,7 @@ public class JsonLiteralAnnotator implements Annotator {
           if (!checker.isApplicable(element)) continue;
           Pair<TextRange, String> error = checker.getErrorForStringFragment(fragment, stringLiteral);
           if (error != null) {
-            holder.createErrorAnnotation(error.getFirst().shiftRight(elementOffset), error.second);
+            holder.newAnnotation(HighlightSeverity.ERROR, error.second).range(error.getFirst().shiftRight(elementOffset)).create();
           }
         }
       }
@@ -79,7 +66,7 @@ public class JsonLiteralAnnotator implements Annotator {
         }
         String error = checker.getErrorForNumericLiteral(text);
         if (error != null) {
-          holder.createErrorAnnotation(element, error);
+          holder.newAnnotation(HighlightSeverity.ERROR, error).create();
         }
       }
     }
@@ -87,7 +74,12 @@ public class JsonLiteralAnnotator implements Annotator {
 
   private static void highlightPropertyKey(@NotNull PsiElement element, @NotNull AnnotationHolder holder) {
     if (JsonPsiUtil.isPropertyKey(element)) {
-      holder.createInfoAnnotation(element, Holder.DEBUG ? "property key" : null).setTextAttributes(JsonSyntaxHighlighterFactory.JSON_PROPERTY_KEY);
+      if (Holder.DEBUG) {
+        holder.newAnnotation(HighlightSeverity.INFORMATION, JsonBundle.message("annotation.property.key")).textAttributes(JsonSyntaxHighlighterFactory.JSON_PROPERTY_KEY).create();
+      }
+      else {
+        holder.newSilentAnnotation(HighlightSeverity.INFORMATION).textAttributes(JsonSyntaxHighlighterFactory.JSON_PROPERTY_KEY).create();
+      }
     }
   }
 }

@@ -16,16 +16,16 @@
 package com.intellij.util.xml.stubs;
 
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.stubs.ObjectStubBase;
+import com.intellij.psi.stubs.Stub;
 import com.intellij.util.SmartList;
-import com.intellij.util.io.StringRef;
 import com.intellij.util.xml.EvaluatedXmlNameImpl;
 import com.intellij.util.xml.XmlName;
 import com.intellij.util.xml.impl.CollectionElementInvocationHandler;
 import com.intellij.util.xml.impl.DomChildDescriptionImpl;
 import com.intellij.util.xml.impl.DomInvocationHandler;
 import com.intellij.util.xml.impl.DomManagerImpl;
-import com.intellij.xml.util.XmlUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,47 +36,48 @@ import java.util.List;
  * @author Dmitry Avdeev
  */
 public abstract class DomStub extends ObjectStubBase<DomStub> {
-
-  protected final StringRef myLocalName;
-  private final StringRef myNamespace;
+  @NotNull private final String myName;
+  @NotNull private final String myLocalName;
+  @Nullable private final String myNamespace;
   private DomInvocationHandler myHandler;
 
-  public DomStub(DomStub parent, @NotNull StringRef localName, StringRef namespace) {
+  DomStub(DomStub parent, @NotNull String name, @Nullable String namespace) {
     super(parent);
     myNamespace = namespace;
     if (parent != null) {
       ((ElementStub)parent).addChild(this);
     }
-    myLocalName = localName;
+    myName = name;
+    myLocalName = StringUtil.getShortName(myName, ':');
   }
 
   @NotNull
-  @Override
-  public abstract List<DomStub> getChildrenStubs();
-
   public String getName() {
-    return myLocalName.getString();
+    return myName;
   }
 
   @Nullable
   public String getNamespaceKey() {
-    return myNamespace == null ? null : myNamespace.getString();
+    return myNamespace;
   }
 
-  public List<DomStub> getChildrenByName(final CharSequence name, @Nullable final String nsKey) {
-    final List<DomStub> stubs = getChildrenStubs();
+  public boolean matches(XmlName name) {
+    return name.getLocalName().equals(myLocalName) &&
+           StringUtil.notNullize(name.getNamespaceKey()).equals(getNamespaceKey());
+  }
+
+  public List<DomStub> getChildrenByName(XmlName xmlName) {
+    final List<? extends Stub> stubs = getChildrenStubs();
     if (stubs.isEmpty()) {
       return Collections.emptyList();
     }
 
-    final String s = nsKey == null ? "" : nsKey;
     final List<DomStub> result = new SmartList<>();
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0, size = stubs.size(); i < size; i++) {
-      final DomStub stub = stubs.get(i);
-      if (XmlUtil.getLocalName(stub.getName()).equals(name) &&
-          Comparing.equal(s, stub.getNamespaceKey())) {
-        result.add(stub);
+      final Stub stub = stubs.get(i);
+      if (stub instanceof DomStub && ((DomStub)stub).matches(xmlName)) {
+        result.add((DomStub)stub);
       }
     }
     return result;
@@ -84,16 +85,16 @@ public abstract class DomStub extends ObjectStubBase<DomStub> {
 
   @Nullable
   public AttributeStub getAttributeStub(final XmlName name) {
-    final List<DomStub> stubs = getChildrenStubs();
+    final List<? extends Stub> stubs = getChildrenStubs();
     if (stubs.isEmpty()) {
       return null;
     }
 
     //noinspection ForLoopReplaceableByForEach
     for (int i = 0, size = stubs.size(); i < size; i++) {
-      final DomStub stub = stubs.get(i);
+      final Stub stub = stubs.get(i);
       if (stub instanceof AttributeStub &&
-          stub.getName().equals(name.getLocalName())) {
+          ((AttributeStub)stub).getName().equals(name.getLocalName())) {
         return (AttributeStub)stub;
       }
     }
@@ -102,10 +103,10 @@ public abstract class DomStub extends ObjectStubBase<DomStub> {
 
   @Nullable
   public ElementStub getElementStub(String name, int index) {
-    List<DomStub> stubs = getChildrenStubs();
+    List<? extends Stub> stubs = getChildrenStubs();
     int i = 0;
-    for (DomStub stub : stubs) {
-      if (stub instanceof ElementStub && name.equals(stub.getName()) && i++ == index) {
+    for (Stub stub : stubs) {
+      if (stub instanceof ElementStub && name.equals(((ElementStub)stub).getName()) && i++ == index) {
         return (ElementStub)stub;
       }
     }
@@ -150,8 +151,8 @@ public abstract class DomStub extends ObjectStubBase<DomStub> {
 
   @Override
   public int hashCode() {
-    int result = myLocalName.hashCode();
-    result = 31 * result + myNamespace.hashCode();
+    int result = myName.hashCode();
+    result = 31 * result + (myNamespace == null ? 0 : myNamespace.hashCode());
     result = 31 * result + getIndex();
     result = 31 * result + (isCustom() ? 1 : 0);
     return result;

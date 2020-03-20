@@ -51,7 +51,6 @@ import java.util.List;
  */
 public class GroovyInlineLocalHandler extends InlineActionHandler {
   private static final Logger LOG = Logger.getInstance(GroovyInlineLocalHandler.class);
-  public static final String INLINE_VARIABLE = RefactoringBundle.message("inline.variable.title");
 
   @Override
   public boolean isEnabledForLanguage(Language l) {
@@ -150,7 +149,7 @@ public class GroovyInlineLocalHandler extends InlineActionHandler {
 
     if (initializer == null || writeInstr == null) {
       String message = GroovyRefactoringBundle.message("cannot.find.a.single.definition.to.inline.local.var");
-      CommonRefactoringUtil.showErrorHint(variable.getProject(), editor, message, INLINE_VARIABLE, HelpID.INLINE_VARIABLE);
+      CommonRefactoringUtil.showErrorHint(variable.getProject(), editor, message, getInlineVariable(), HelpID.INLINE_VARIABLE);
       return null;
     }
 
@@ -161,11 +160,21 @@ public class GroovyInlineLocalHandler extends InlineActionHandler {
 
     final String question = GroovyRefactoringBundle.message("inline.local.variable.prompt.0.1", localName);
     RefactoringMessageDialog dialog =
-      new RefactoringMessageDialog(INLINE_VARIABLE, question, HelpID.INLINE_VARIABLE, "OptionPane.questionIcon", true, project);
+      new RefactoringMessageDialog(getInlineVariable(), question, HelpID.INLINE_VARIABLE, "OptionPane.questionIcon", true, project);
     if (dialog.showAndGet()) {
       return new InlineLocalVarSettings(initializer, writeInstructionNumber, flow);
     }
 
     return null;
+  }
+
+  @Nullable
+  @Override
+  public String getActionName(PsiElement element) {
+    return getInlineVariable();
+  }
+
+  public static String getInlineVariable() {
+    return RefactoringBundle.message("inline.variable.title");
   }
 }

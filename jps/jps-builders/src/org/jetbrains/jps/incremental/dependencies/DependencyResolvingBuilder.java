@@ -43,7 +43,7 @@ import java.util.concurrent.ConcurrentMap;
  * @author Eugene Zhuravlev
  */
 public class DependencyResolvingBuilder extends ModuleLevelBuilder{
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.incremental.dependencies.DependencyResolvingBuilder");
+  private static final Logger LOG = Logger.getInstance(DependencyResolvingBuilder.class);
   private static final String NAME = "Maven Dependency Resolver";
   private static final String MAVEN_REPOSITORY_PATH_VAR = "MAVEN_REPOSITORY";
   private static final String DEFAULT_MAVEN_REPOSITORY_PATH = ".m2/repository";
@@ -55,6 +55,7 @@ public class DependencyResolvingBuilder extends ModuleLevelBuilder{
     super(BuilderCategory.INITIAL);
   }
 
+  @NotNull
   @Override
   public List<String> getCompilableFileExtensions() {
     return Collections.emptyList();
@@ -117,7 +118,7 @@ public class DependencyResolvingBuilder extends ModuleLevelBuilder{
     return ExitCode.ABORT;
   }
 
-  static void resolveMissingDependencies(CompileContext context, Collection<JpsModule> modules,
+  static void resolveMissingDependencies(CompileContext context, Collection<? extends JpsModule> modules,
                                          BuildTargetChunk currentTargets) throws Exception {
     Collection<JpsTypedLibrary<JpsSimpleElement<JpsMavenRepositoryLibraryDescriptor>>> libs = getRepositoryLibraries(modules);
     if (!libs.isEmpty()) {
@@ -158,7 +159,7 @@ public class DependencyResolvingBuilder extends ModuleLevelBuilder{
     }
   }
 
-  private static void syncPaths(final Collection<File> required, @NotNull Collection<File> resolved) throws Exception {
+  private static void syncPaths(final Collection<? extends File> required, @NotNull Collection<? extends File> resolved) throws Exception {
     final THashSet<File> libFiles = new THashSet<>(FileUtil.FILE_HASHING_STRATEGY);
     libFiles.addAll(required);
     libFiles.removeAll(resolved);
@@ -227,7 +228,7 @@ public class DependencyResolvingBuilder extends ModuleLevelBuilder{
   }
 
   @NotNull
-  private static Collection<JpsTypedLibrary<JpsSimpleElement<JpsMavenRepositoryLibraryDescriptor>>> getRepositoryLibraries(Collection<JpsModule> modules) {
+  private static Collection<JpsTypedLibrary<JpsSimpleElement<JpsMavenRepositoryLibraryDescriptor>>> getRepositoryLibraries(Collection<? extends JpsModule> modules) {
     final Collection<JpsTypedLibrary<JpsSimpleElement<JpsMavenRepositoryLibraryDescriptor>>> result = new SmartHashSet<>();
     for (JpsModule module : modules) {
       for (JpsDependencyElement dep : module.getDependenciesList().getDependencies()) {

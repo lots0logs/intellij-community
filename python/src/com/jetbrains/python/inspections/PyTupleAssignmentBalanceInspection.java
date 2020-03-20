@@ -36,12 +36,6 @@ import java.util.Arrays;
  * @author Alexey.Ivanov
  */
 public class PyTupleAssignmentBalanceInspection extends PyInspection {
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.incorrect.assignment");
-  }
 
   @NotNull
   @Override
@@ -116,7 +110,7 @@ public class PyTupleAssignmentBalanceInspection extends PyInspection {
       return -1;
     }
 
-    private static int countStarExpressions(@NotNull PyExpression[] expressions) {
+    private static int countStarExpressions(PyExpression @NotNull [] expressions) {
       if (expressions.length != 0 && !LanguageLevel.forElement(expressions[0]).isPython2()) {
         return (int) Arrays
           .stream(expressions)

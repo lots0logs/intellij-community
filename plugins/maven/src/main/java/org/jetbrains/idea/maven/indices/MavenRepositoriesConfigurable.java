@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.indices;
 
 import com.intellij.icons.AllIcons;
@@ -7,13 +7,16 @@ import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
+import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.text.DateFormatUtil;
 import com.intellij.util.ui.AnimatedIcon;
 import com.intellij.util.ui.AsyncProcessIcon;
-import com.intellij.util.ui.UIUtil;
+import com.intellij.util.ui.JBUI;
+import com.intellij.util.ui.TimerUtil;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.idea.maven.project.MavenConfigurableBundle;
 
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
@@ -34,6 +37,7 @@ public class MavenRepositoriesConfigurable implements SearchableConfigurable, Co
   private JPanel myMainPanel;
   private JBTable myIndicesTable;
   private JButton myUpdateButton;
+  private JPanel myBorderPanel;
 
   private AnimatedIcon myUpdatingIcon;
   private Timer myRepaintTimer;
@@ -42,6 +46,10 @@ public class MavenRepositoriesConfigurable implements SearchableConfigurable, Co
   public MavenRepositoriesConfigurable(Project project) {
     myManager = MavenProjectIndicesManager.getInstance(project);
     configControls();
+
+    myBorderPanel.setBorder(
+      IdeBorderFactory.createTitledBorder(MavenConfigurableBundle.message("maven.settings.repositories.title"), false, JBUI.insetsTop(8))
+        .setShowLine(false));
   }
 
   @Override
@@ -81,7 +89,7 @@ public class MavenRepositoriesConfigurable implements SearchableConfigurable, Co
     myIndicesTable.setDefaultRenderer(MavenIndicesManager.IndexUpdatingState.class,
                                       new MyIconCellRenderer());
 
-    myIndicesTable.getEmptyText().setText("No remote repositories");
+    myIndicesTable.getEmptyText().setText(MavenConfigurableBundle.message("maven.settings.repositories.no"));
 
     updateButtonsState();
   }
@@ -92,7 +100,7 @@ public class MavenRepositoriesConfigurable implements SearchableConfigurable, Co
   }
 
   public void updateIndexHint(int row) {
-    MavenIndex index = getIndexAt(row);
+    MavenSearchIndex index = getIndexAt(row);
     String message = index.getFailureMessage();
     if (message == null) {
       myIndicesTable.setToolTipText(null);
@@ -161,7 +169,7 @@ public class MavenRepositoriesConfigurable implements SearchableConfigurable, Co
         myIndicesTable.repaint();
       }
     };
-    myRepaintTimer = UIUtil.createNamedTimer("Maven repaint",AsyncProcessIcon.CYCLE_LENGTH / AsyncProcessIcon.COUNT, myTimerListener);
+    myRepaintTimer = TimerUtil.createNamedTimer("Maven repaint", AsyncProcessIcon.CYCLE_LENGTH / AsyncProcessIcon.COUNT, myTimerListener);
     myRepaintTimer.start();
   }
 
@@ -211,12 +219,13 @@ public class MavenRepositoriesConfigurable implements SearchableConfigurable, Co
 
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
-      MavenIndex i = getIndex(rowIndex);
+      MavenSearchIndex i = getIndex(rowIndex);
       switch (columnIndex) {
         case 0:
           return i.getRepositoryPathOrUrl();
         case 1:
-          if (i.getKind() == MavenIndex.Kind.LOCAL) return "Local";
+          if (i.getKind() == MavenSearchIndex.Kind.LOCAL) return "Local";
+          if (i.getKind() == MavenSearchIndex.Kind.ONLINE) return "Online";
           return "Remote";
         case 2:
           if (i.getFailureMessage() != null) {
@@ -245,7 +254,7 @@ public class MavenRepositoriesConfigurable implements SearchableConfigurable, Co
 
       Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
-      MavenIndex index = getIndexAt(row);
+      MavenSearchIndex index = getIndexAt(row);
       if (index.getFailureMessage() != null) {
         if (isSelected) {
           setForeground(JBColor.PINK);

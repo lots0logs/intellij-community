@@ -6,6 +6,7 @@ import com.intellij.designer.model.PropertiesContainer;
 import com.intellij.designer.model.Property;
 import com.intellij.designer.model.PropertyContext;
 import com.intellij.designer.propertyTable.renderers.LabelPropertyRenderer;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ui.search.SearchUtil;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.application.ApplicationManager;
@@ -47,7 +48,7 @@ import java.util.*;
  * @author Alexander Lobas
  */
 public abstract class PropertyTable extends JBTable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.designer.propertyTable.PropertyTable");
+  private static final Logger LOG = Logger.getInstance(PropertyTable.class);
   private static final Comparator<String> GROUP_COMPARATOR = (o1, o2) -> StringUtil.compare(o1, o2, true);
   private static final Comparator<Property> PROPERTY_COMPARATOR = (o1, o2) -> StringUtil.compare(o1.getName(), o2.getName(), true);
 
@@ -159,8 +160,8 @@ public abstract class PropertyTable extends JBTable {
     InputMap focusedInputMap = getInputMap(JComponent.WHEN_FOCUSED);
     InputMap ancestorInputMap = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
 
-    actionMap.put("selectPreviousRow", new MySelectNextPreviousRowAction(false));
-    actionMap.put("selectNextRow", new MySelectNextPreviousRowAction(true));
+    actionMap.put(TableActions.Up.ID, new MySelectNextPreviousRowAction(false));
+    actionMap.put(TableActions.Down.ID, new MySelectNextPreviousRowAction(true));
 
     actionMap.put("startEditing", new MyStartEditingAction());
     focusedInputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), "startEditing");
@@ -461,7 +462,7 @@ public abstract class PropertyTable extends JBTable {
     }
   }
 
-  private void fillProperties(PropertiesContainer<?> component, List<Property> properties) {
+  private void fillProperties(PropertiesContainer<?> component, List<? super Property> properties) {
     for (Property each : getProperties(component)) {
       if (addIfNeeded(component, each, properties)) {
         addExpandedChildren(component, each, properties);
@@ -469,7 +470,7 @@ public abstract class PropertyTable extends JBTable {
     }
   }
 
-  private void addExpandedChildren(PropertiesContainer<?> component, Property property, List<Property> properties) {
+  private void addExpandedChildren(PropertiesContainer<?> component, Property property, List<? super Property> properties) {
     if (isExpanded(property)) {
       for (Property child : getChildren(property)) {
         if (addIfNeeded(component, child, properties)) {
@@ -479,7 +480,7 @@ public abstract class PropertyTable extends JBTable {
     }
   }
 
-  private boolean addIfNeeded(PropertiesContainer<?> component, Property property, List<Property> properties) {
+  private boolean addIfNeeded(PropertiesContainer<?> component, Property property, List<? super Property> properties) {
     if (property.isExpert() && !myShowExpertProperties) {
       try {
         if (property.isDefaultRecursively(component)) {
@@ -841,7 +842,7 @@ public abstract class PropertyTable extends JBTable {
     }
 
     Messages.showMessageDialog(MessageFormat.format("Error setting value: {0}", message),
-                               "Invalid Input",
+                               IdeBundle.message("dialog.title.invalid.input"),
                                Messages.getErrorIcon());
   }
 
@@ -1158,7 +1159,7 @@ public abstract class PropertyTable extends JBTable {
   public static void updateRenderer(JComponent component, boolean selected) {
     if (selected) {
       component.setForeground(UIUtil.getTableSelectionForeground());
-      component.setBackground(UIUtil.getTableSelectionBackground());
+      component.setBackground(UIUtil.getTableSelectionBackground(true));
     }
     else {
       component.setForeground(UIUtil.getTableForeground());
@@ -1296,10 +1297,6 @@ public abstract class PropertyTable extends JBTable {
 
           component.setBackground(selected ? UIUtil.getTreeSelectionBackground(tableHasFocus) : background);
           component.setFont(table.getFont());
-
-          if (component instanceof JCheckBox) {
-            if (UIUtil.isUnderAquaLookAndFeel()) UIUtil.applyStyle(UIUtil.ComponentStyle.SMALL, component);
-          }
 
           return component;
         }

@@ -178,6 +178,9 @@ public class PyDataViewerPanel extends JPanel {
         ArrayChunk arrayChunk = debugValue.getFrameAccessor().getArrayItems(debugValue, 0, 0, -1, -1, getFormat());
         ApplicationManager.getApplication().invokeLater(() -> updateUI(arrayChunk, debugValue, strategy));
       }
+      catch (IllegalArgumentException e) {
+        setError(e.getLocalizedMessage());
+      }
       catch (PyDebuggerException e) {
         LOG.error(e);
       }
@@ -189,13 +192,16 @@ public class PyDataViewerPanel extends JPanel {
     apply(getSliceTextField().getText());
   }
 
-  private void updateUI(@NotNull ArrayChunk chunk, @NotNull PyDebugValue debugValue, @NotNull DataViewStrategy strategy) {
+  private void updateUI(@NotNull ArrayChunk chunk, @NotNull PyDebugValue originalDebugValue, @NotNull DataViewStrategy strategy) {
+    PyDebugValue debugValue = chunk.getValue();
     AsyncArrayTableModel model = strategy.createTableModel(chunk.getRows(), chunk.getColumns(), this, debugValue);
     model.addToCache(chunk);
 
     UIUtil.invokeLaterIfNeeded(() -> {
       myTable.setModel(model);
-      String text = debugValue.getName().equals(debugValue.getTempName()) ? chunk.getSlicePresentation() : debugValue.getName();
+      // Debugger generates a temporary name for every slice evaluation, so we should select a correct name for it
+      String text =
+        debugValue.getName().equals(originalDebugValue.getTempName()) ? originalDebugValue.getName() : chunk.getSlicePresentation();
       mySliceTextField.setText(text);
       if (mySliceTextField.getEditor() != null) {
         mySliceTextField.getCaretModel().moveToOffset(text.length());

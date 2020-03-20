@@ -1,15 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.javafx;
 
 import com.intellij.ide.IdeEventQueue;
 import com.intellij.ide.ui.LafManager;
 import com.intellij.ide.ui.LafManagerListener;
 import com.intellij.ide.ui.laf.darcula.DarculaLookAndFeelInfo;
+import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.ui.JBColor;
-import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.UIUtil;
+import com.intellij.ui.scale.JBUIScale;
+import com.intellij.util.ui.StartupUiUtil;
 import com.sun.javafx.application.PlatformImpl;
 import com.sun.javafx.webkit.Accessor;
 import com.sun.webkit.WebPage;
@@ -17,6 +18,7 @@ import javafx.application.Platform;
 import javafx.concurrent.Worker;
 import javafx.embed.swing.JFXPanel;
 import javafx.scene.Scene;
+import javafx.scene.text.FontSmoothingType;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import org.jetbrains.annotations.NotNull;
@@ -29,6 +31,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class JavaFxHtmlPanel implements Disposable {
+  // flag is reset after check
+  public static final String JAVAFX_INITIALIZATION_INCOMPLETE_PROPERTY = "js.debugger.javafx.inititalization";
   @NotNull
   private final JPanel myPanelWrapper;
   @NotNull
@@ -39,14 +43,18 @@ public class JavaFxHtmlPanel implements Disposable {
   private Color background;
 
   public JavaFxHtmlPanel() {
+    PropertiesComponent.getInstance().setValue(JAVAFX_INITIALIZATION_INCOMPLETE_PROPERTY, true, false);
+    ApplicationManager.getApplication().saveSettings();
     background = JBColor.background();
     myPanelWrapper = new JPanel(new BorderLayout());
     myPanelWrapper.setBackground(background);
 
     ApplicationManager.getApplication().invokeLater(() -> runFX(() -> PlatformImpl.startup(() -> {
+      PropertiesComponent.getInstance().setValue(JAVAFX_INITIALIZATION_INCOMPLETE_PROPERTY, false, false);
       myWebView = new WebView();
       myWebView.setContextMenuEnabled(false);
-      myWebView.setZoom(JBUI.scale(1.f));
+      myWebView.setZoom(JBUIScale.scale(1.f));
+      myWebView.fontSmoothingTypeProperty().setValue(FontSmoothingType.GRAY);
 
       final WebEngine engine = myWebView.getEngine();
       registerListeners(engine);
@@ -77,8 +85,8 @@ public class JavaFxHtmlPanel implements Disposable {
       }));
     })));
 
-    LafManager.getInstance().addLafManagerListener(new JavaFXLafManagerListener());
-    runInPlatformWhenAvailable(() -> updateLaf(UIUtil.isUnderDarcula()));
+    ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(LafManagerListener.TOPIC, new JavaFXLafManagerListener());
+    runInPlatformWhenAvailable(() -> updateLaf(StartupUiUtil.isUnderDarcula()));
   }
 
   @NotNull
@@ -139,10 +147,27 @@ public class JavaFxHtmlPanel implements Disposable {
     });
   }
 
+  /**
+   * @return user style, used to display HTML
+   * @see WebEngine#setUserStyleSheetLocation(String)
+   * @see #getJavaFxStyle(boolean)
+   */
   @Nullable
   protected URL getStyle(boolean isDarcula) {
     return null;
   }
+
+  /**
+   * @return java fx style, used for menus etc.
+   * See <a href="https://docs.oracle.com/javafx/2/api/javafx/scene/doc-files/cssref.html">manual</a>
+   * @see Scene#getStylesheets()
+   * @see #getStyle(boolean)
+   */
+  @Nullable
+  protected URL getJavaFxStyle(boolean isDarcula) {
+    return null;
+  }
+
 
   private class JavaFXLafManagerListener implements LafManagerListener {
     @Override
@@ -152,24 +177,30 @@ public class JavaFxHtmlPanel implements Disposable {
   }
 
   private void updateLaf(boolean isDarcula) {
-    URL styleUrl = getStyle(isDarcula);
-    if (styleUrl == null) {
+    @Nullable
+    URL userAgentStyle = getStyle(isDarcula);
+    @Nullable
+    URL javaFxStyle = getJavaFxStyle(isDarcula);
+    if (userAgentStyle == null && javaFxStyle == null) {
       return;
     }
     ApplicationManager.getApplication().invokeLater(
       () -> runInPlatformWhenAvailable(
         () -> {
           final WebView webView = getWebViewGuaranteed();
-          webView.getEngine().setUserStyleSheetLocation(styleUrl.toExternalForm());
+          if (userAgentStyle != null) {
+            webView.getEngine().setUserStyleSheetLocation(userAgentStyle.toExternalForm());
+          }
+          if (javaFxStyle != null) {
+            webView.getScene().getStylesheets().add(javaFxStyle.toExternalForm());
+          }
         }
       ));
   }
 
   @Override
   public void dispose() {
-    runInPlatformWhenAvailable(
-      () -> getWebViewGuaranteed().getEngine().load(null)
-    );
+    runInPlatformWhenAvailable(() -> getWebViewGuaranteed().getEngine().load(null));
   }
 
 

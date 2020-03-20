@@ -145,7 +145,7 @@ public class JavaSmartCompletionContributor extends CompletionContributor {
 
     extend(CompletionType.SMART, INSIDE_EXPRESSION, new ExpectedTypeBasedCompletionProvider() {
       @Override
-      protected void addCompletions(final CompletionParameters params, final CompletionResultSet result, final Collection<ExpectedTypeInfo> _infos) {
+      protected void addCompletions(final CompletionParameters params, final CompletionResultSet result, final Collection<? extends ExpectedTypeInfo> _infos) {
         if (SmartCastProvider.shouldSuggestCast(params)) return;
 
         Consumer<LookupElement> noTypeCheck = decorateWithoutTypeCheck(result, _infos);
@@ -208,7 +208,7 @@ public class JavaSmartCompletionContributor extends CompletionContributor {
   private static void addExpectedTypeMembers(CompletionParameters params,
                                              THashSet<? extends ExpectedTypeInfo> mergedInfos,
                                              boolean quick,
-                                             Consumer<LookupElement> consumer) {
+                                             Consumer<? super LookupElement> consumer) {
     PsiElement position = params.getPosition();
     if (!JavaKeywordCompletion.AFTER_DOT.accepts(position)) {
       for (ExpectedTypeInfo info : mergedInfos) {
@@ -233,13 +233,11 @@ public class JavaSmartCompletionContributor extends CompletionContributor {
     return new SmartCompletionDecorator(lookupElement, infos);
   }
 
-  @NotNull
-  public static ExpectedTypeInfo[] getExpectedTypes(final CompletionParameters parameters) {
+  public static ExpectedTypeInfo @NotNull [] getExpectedTypes(final CompletionParameters parameters) {
     return getExpectedTypes(parameters.getPosition(), parameters.getCompletionType() == CompletionType.SMART);
   }
 
-  @NotNull
-  public static ExpectedTypeInfo[] getExpectedTypes(PsiElement position, boolean voidable) {
+  public static ExpectedTypeInfo @NotNull [] getExpectedTypes(PsiElement position, boolean voidable) {
     if (psiElement().withParent(psiElement(PsiReferenceExpression.class).withParent(PsiThrowStatement.class)).accepts(position)) {
       final PsiElementFactory factory = JavaPsiFacade.getElementFactory(position.getProject());
       final PsiClassType classType = factory

@@ -21,13 +21,12 @@ import com.intellij.openapi.module.Module;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.remoteServer.ServerType;
 import com.intellij.remoteServer.util.CloudAccountSelectionEditor;
-import com.intellij.remoteServer.util.CloudBundle;
+import com.intellij.remoteServer.CloudBundle;
 import com.intellij.remoteServer.util.CloudDeploymentNameConfiguration;
 import com.intellij.remoteServer.util.CloudGitDeploymentDetector;
 
 import javax.swing.*;
 import java.util.Collections;
-import java.util.List;
 
 /**
  * @author michael.golubev
@@ -47,7 +46,7 @@ public class CloudGitChooseAccountStepBase extends ModuleWizardStep {
     myDeploymentDetector = deploymentDetector;
     myContext = context;
     ServerType<?> cloudType = deploymentDetector.getCloudType();
-    myTitleLabel.setText(CloudBundle.getText("choose.account.title", cloudType.getPresentableName()));
+    myTitleLabel.setText(CloudBundle.message("choose.account.title", cloudType.getPresentableName()));
     myEditor = new CloudAccountSelectionEditor(Collections.singletonList(cloudType));
     myAccountSelectionPanelPlaceHolder.add(myEditor.getMainPanel());
   }

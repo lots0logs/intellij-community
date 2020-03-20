@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.engine;
 
 import com.intellij.debugger.impl.PrioritizedTask;
@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  * @author lex
  */
 public class SuspendManagerImpl implements SuspendManager {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.debugger.engine.SuspendManager");
+  private static final Logger LOG = Logger.getInstance(SuspendManager.class);
 
   private final Deque<SuspendContextImpl> myEventContexts = new ConcurrentLinkedDeque<>();
   /**
@@ -174,10 +174,11 @@ public class SuspendManagerImpl implements SuspendManager {
 
   @Override
   public void popFrame(SuspendContextImpl suspendContext) {
+    boolean paused = hasPausedContext(suspendContext);
     popContext(suspendContext);
     SuspendContextImpl newSuspendContext = pushSuspendContext(suspendContext.getSuspendPolicy(), 0);
     newSuspendContext.setThread(suspendContext.getThread().getThreadReference());
-    notifyPaused(newSuspendContext);
+    notifyPaused(newSuspendContext, paused);
   }
 
   @Override
@@ -290,13 +291,15 @@ public class SuspendManagerImpl implements SuspendManager {
           ThreadReferenceProxyImpl thread = suspendContext.getThread();
           myDebugProcess.deleteStepRequests(thread != null ? thread.getThreadReference() : null);
         }
-        notifyPaused(suspendContext);
+        notifyPaused(suspendContext, true);
       }
     }
   }
 
-  public void notifyPaused(@NotNull SuspendContextImpl suspendContext) {
-    pushPausedContext(suspendContext);
+  private void notifyPaused(@NotNull SuspendContextImpl suspendContext, boolean pushPaused) {
+    if (pushPaused) {
+      pushPausedContext(suspendContext);
+    }
     myDebugProcess.myDebugProcessDispatcher.getMulticaster().paused(suspendContext);
   }
 

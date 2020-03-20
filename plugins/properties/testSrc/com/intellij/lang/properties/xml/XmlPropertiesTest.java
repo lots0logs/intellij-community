@@ -23,18 +23,18 @@ import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.openapi.application.PluginPathManager;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.psi.PsiFile;
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 
 import java.util.List;
 
 /**
  * @author Dmitry Avdeev
  */
-public class XmlPropertiesTest extends LightPlatformCodeInsightFixtureTestCase {
+public class XmlPropertiesTest extends BasePlatformTestCase {
 
   public void testXmlProperties() {
     myFixture.configureByFile("foo.xml");
-    List<PropertiesFile> files = PropertiesReferenceManager.getInstance(getProject()).findPropertiesFiles(myModule, "foo");
+    List<PropertiesFile> files = PropertiesReferenceManager.getInstance(getProject()).findPropertiesFiles(getModule(), "foo");
     assertEquals(1, files.size());
     PropertiesFile file = files.get(0);
     assertEquals(1, file.findPropertiesByKey("foo").size());

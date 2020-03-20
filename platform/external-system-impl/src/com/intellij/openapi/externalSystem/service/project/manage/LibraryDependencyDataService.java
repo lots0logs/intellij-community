@@ -15,20 +15,16 @@ import com.intellij.openapi.externalSystem.util.ExternalSystemConstants;
 import com.intellij.openapi.externalSystem.util.Order;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.roots.*;
-import com.intellij.openapi.roots.impl.ModuleLibraryOrderEntryImpl;
+import com.intellij.openapi.roots.impl.OrderEntryUtil;
 import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.libraries.LibraryTable;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Order(ExternalSystemConstants.BUILTIN_SERVICE_ORDER)
 public class LibraryDependencyDataService extends AbstractDependencyDataService<LibraryDependencyData, LibraryOrderEntry> {
@@ -55,10 +51,12 @@ public class LibraryDependencyDataService extends AbstractDependencyDataService<
     // the given collection.
     // The trick is that we should perform module settings modification inside try/finally block against target root model.
     // That means that we need to prepare all necessary data, obtain a model and modify it as necessary.
-    final Map<Set<String>/* library paths */, LibraryDependencyData> moduleLibrariesToImport = ContainerUtilRt.newHashMap();
-    final Map<String/* library name + scope */, LibraryDependencyData> projectLibrariesToImport = ContainerUtilRt.newHashMap();
-    final Set<LibraryDependencyData> toImport = ContainerUtilRt.newLinkedHashSet();
-    final Map<OrderEntry, OrderAware> orderEntryDataMap = ContainerUtil.newLinkedHashMap();
+    final Map<Set<String>/* library paths */, LibraryDependencyData> moduleLibrariesToImport =
+      new HashMap<>();
+    final Map<String/* library name + scope */, LibraryDependencyData> projectLibrariesToImport =
+      new HashMap<>();
+    final Set<LibraryDependencyData> toImport = new LinkedHashSet<>();
+    final Map<OrderEntry, OrderAware> orderEntryDataMap = new LinkedHashMap<>();
 
     boolean hasUnresolved = false;
     for (DataNode<LibraryDependencyData> dependencyNode : nodesToImport) {
@@ -67,7 +65,7 @@ public class LibraryDependencyDataService extends AbstractDependencyDataService<
       hasUnresolved |= libraryData.isUnresolved();
       switch (dependencyData.getLevel()) {
         case MODULE:
-            Set<String> paths = ContainerUtilRt.newHashSet();
+          Set<String> paths = new HashSet<>();
             for (String path : libraryData.getPaths(LibraryPathType.BINARY)) {
               paths.add(ExternalSystemApiUtil.toCanonicalPath(path) + dependencyData.getScope().name());
             }
@@ -159,11 +157,11 @@ public class LibraryDependencyDataService extends AbstractDependencyDataService<
                                                     @NotNull ModifiableRootModel moduleRootModel,
                                                     boolean hasUnresolvedLibraries) {
     for (OrderEntry entry : moduleRootModel.getOrderEntries()) {
-      if (entry instanceof ModuleLibraryOrderEntryImpl) {
-        ModuleLibraryOrderEntryImpl moduleLibraryOrderEntry = (ModuleLibraryOrderEntryImpl)entry;
+      if (OrderEntryUtil.isModuleLibraryOrderEntry(entry)) {
+        LibraryOrderEntry moduleLibraryOrderEntry = (LibraryOrderEntry)entry;
         Library library = moduleLibraryOrderEntry.getLibrary();
         final VirtualFile[] libraryFiles = library.getFiles(OrderRootType.CLASSES);
-        final Set<String> moduleLibraryKey = ContainerUtilRt.newHashSet(libraryFiles.length);
+        final Set<String> moduleLibraryKey = new HashSet<>(libraryFiles.length);
         for (VirtualFile file : libraryFiles) {
           moduleLibraryKey.add(ExternalSystemApiUtil.getLocalFileSystemPath(file) + moduleLibraryOrderEntry.getScope().name());
         }
@@ -211,7 +209,8 @@ public class LibraryDependencyDataService extends AbstractDependencyDataService<
     final LibraryData libraryDependencyDataTarget = libraryDependencyData.getTarget();
     Map<OrderRootType, Collection<File>> files = ProjectDataService.EP_NAME.findExtensionOrFail(LibraryDataService.class)
       .prepareLibraryFiles(libraryDependencyDataTarget);
-    LibraryDataService.registerPaths(libraryDependencyDataTarget.isUnresolved(), files, libraryModel, libraryName);
+    Set<String> excludedPaths = libraryDependencyDataTarget.getPaths(LibraryPathType.EXCLUDED);
+    LibraryDataService.registerPaths(libraryDependencyDataTarget.isUnresolved(), files, excludedPaths, libraryModel, libraryName);
     LibraryOrderEntry orderEntry = findLibraryOrderEntry(moduleRootModel, library, libraryDependencyData.getScope());
 
     assert orderEntry != null;
@@ -230,13 +229,10 @@ public class LibraryDependencyDataService extends AbstractDependencyDataService<
         if (library == libraryOrderEntry.getLibrary()) {
           return libraryOrderEntry;
         }
-        if (library.equals(libraryOrderEntry.getLibrary())) {
-          if (libraryOrderEntry.getScope() == scope) {
-            return libraryOrderEntry;
-          }
-          else {
-            candidate = libraryOrderEntry;
-          }
+        // LibraryImpl.equals will return true for unrelated module library if it's just created and empty
+        if (library.equals(libraryOrderEntry.getLibrary()) &&
+            (candidate == null || libraryOrderEntry.getScope() == scope)) {
+          candidate = libraryOrderEntry;
         }
       }
     }

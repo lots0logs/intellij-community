@@ -22,10 +22,7 @@ import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.dataFlow.NullabilityUtil;
 import com.intellij.openapi.project.Project;
-import com.intellij.psi.PsiExpression;
-import com.intellij.psi.PsiMethodCallExpression;
-import com.intellij.psi.PsiPolyadicExpression;
-import com.intellij.psi.PsiType;
+import com.intellij.psi.*;
 import com.intellij.util.ObjectUtils;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
@@ -37,9 +34,10 @@ import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import com.siyeh.ig.psiutils.ParenthesesUtils;
 import com.siyeh.ig.psiutils.TypeUtils;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 import static com.intellij.psi.CommonClassNames.*;
 import static com.siyeh.ig.callMatcher.CallMatcher.staticCall;
@@ -63,13 +61,6 @@ public class UnnecessaryCallToStringValueOfInspection extends BaseInspection imp
     staticCall(JAVA_LANG_DOUBLE, "toString").parameterTypes("double"),
     staticCall(JAVA_UTIL_OBJECTS, "toString").parameterTypes(JAVA_LANG_OBJECT)
   );
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("unnecessary.conversion.to.string.display.name");
-  }
 
   @Override
   @NotNull
@@ -149,6 +140,13 @@ public class UnnecessaryCallToStringValueOfInspection extends BaseInspection imp
     final PsiExpression argument = ParenthesesUtils.stripParentheses(call.getArgumentList().getExpressions()[0]);
     if (argument == null) return null;
     PsiType argumentType = argument.getType();
+    if (argumentType instanceof PsiPrimitiveType) {
+      PsiMethod method = call.resolveMethod();
+      assert method != null; // otherwise the matcher above won't match
+      if (!Objects.requireNonNull(method.getParameterList().getParameter(0)).getType().equals(argumentType)) {
+        return null;
+      }
+    }
     final boolean throwable = TypeUtils.expressionHasTypeOrSubtype(argument, "java.lang.Throwable");
     if (ExpressionUtils.isConversionToStringNecessary(call, throwable)) {
       if (!TypeUtils.isJavaLangString(argumentType) ||

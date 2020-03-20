@@ -15,11 +15,15 @@
  */
 package com.intellij.compiler.actions;
 
+import com.intellij.lang.IdeLanguageCustomization;
 import com.intellij.notification.NotificationGroup;
 import com.intellij.notification.NotificationType;
+import com.intellij.openapi.actionSystem.ActionPlaces;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonShortcuts;
 import com.intellij.openapi.actionSystem.Presentation;
+import com.intellij.openapi.compiler.JavaCompilerBundle;
+import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
@@ -54,20 +58,24 @@ import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.*;
 
-/**
- * @author nik
- */
 public class BuildArtifactAction extends DumbAwareAction {
-  private static final NotificationGroup NOTIFICATION_GROUP = NotificationGroup.balloonGroup("Clean artifact");
-
-  public BuildArtifactAction() {
-    super("Build Artifacts...", "Select and build artifacts configured in the project", null);
+  private static class Holder {
+    private static final NotificationGroup NOTIFICATION_GROUP = NotificationGroup.balloonGroup("Clean artifact");
   }
+
   @Override
   public void update(@NotNull AnActionEvent e) {
     final Project project = getEventProject(e);
     final Presentation presentation = e.getPresentation();
-    presentation.setEnabled(project != null && !ArtifactUtil.getArtifactWithOutputPaths(project).isEmpty());
+    boolean enabled = project != null && !ArtifactUtil.getArtifactWithOutputPaths(project).isEmpty();
+    if (IdeLanguageCustomization.getInstance().getPrimaryIdeLanguages().contains(StdFileTypes.JAVA.getLanguage())
+        && ActionPlaces.MAIN_MENU.equals(e.getPlace())) {
+      //building artifacts is a valuable functionality for Java IDEs, let's not hide 'Build Artifacts' item from the main menu
+      presentation.setEnabled(enabled);
+    }
+    else {
+      presentation.setEnabledAndVisible(enabled);
+    }
   }
 
   @Override
@@ -193,13 +201,13 @@ public class BuildArtifactAction extends DumbAwareAction {
           message = "The output directories of the following artifacts contains source roots:\n" +
                     info + "Do you want to continue and clear these directories?";
         }
-        final int answer = Messages.showYesNoDialog(myProject, message, "Clean Artifacts", null);
+        final int answer = Messages.showYesNoDialog(myProject, message, JavaCompilerBundle.message("clean.artifacts"), null);
         if (answer != Messages.YES) {
           return;
         }
       }
 
-      new Task.Backgroundable(myProject, "Cleaning Artifacts", true) {
+      new Task.Backgroundable(myProject, JavaCompilerBundle.message("cleaning.artifacts"), true) {
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
           List<File> deleted = new ArrayList<>();
@@ -207,7 +215,8 @@ public class BuildArtifactAction extends DumbAwareAction {
             indicator.checkCanceled();
             File file = pair.getFirst();
             if (!FileUtil.delete(file)) {
-              NOTIFICATION_GROUP.createNotification("Cannot clean '" + pair.getSecond().getName() + "' artifact", "cannot delete '" + file.getAbsolutePath() + "'", NotificationType.ERROR, null).notify(myProject);
+              Holder.NOTIFICATION_GROUP.createNotification(JavaCompilerBundle.message("cannot.clean.0.artifact", pair.getSecond().getName()),
+                                                           JavaCompilerBundle.message("cannot.delete.0", file.getAbsolutePath()), NotificationType.ERROR, null).notify(myProject);
             }
             else {
               deleted.add(file);
@@ -321,7 +330,7 @@ public class BuildArtifactAction extends DumbAwareAction {
     }
 
     @Override
-    public boolean hasSubstep(List<ArtifactPopupItem> selectedValues) {
+    public boolean hasSubstep(List<? extends ArtifactPopupItem> selectedValues) {
       return true;
     }
 

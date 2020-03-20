@@ -1,19 +1,23 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.application;
 
+import com.intellij.ide.CliResult;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.text.StringUtil;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.Future;
 
 /**
  * @author Konstantin Bulenkov
  */
 @SuppressWarnings({"UseOfSystemOutOrSystemErr", "CallToPrintStackTrace"})
-public abstract class ApplicationStarterBase extends ApplicationStarterEx {
+public abstract class ApplicationStarterBase implements ApplicationStarter {
   private final String myCommandName;
   private final int[] myArgsCount;
 
@@ -33,18 +37,24 @@ public abstract class ApplicationStarterBase extends ApplicationStarterEx {
   }
 
   @Override
-  public void processExternalCommandLine(@NotNull String[] args, @Nullable String currentDirectory) {
+  public boolean canProcessExternalCommandLine() {
+    return true;
+  }
+
+  @NotNull
+  @Override
+  public Future<CliResult> processExternalCommandLineAsync(@NotNull List<String> args, @Nullable String currentDirectory) {
     if (!checkArguments(args)) {
       Messages.showMessageDialog(getUsageMessage(), StringUtil.toTitleCase(getCommandName()), Messages.getInformationIcon());
-      return;
+      return CliResult.error(1, getUsageMessage());
     }
     try {
-      processCommand(args, currentDirectory);
+      return processCommand(args, currentDirectory);
     }
     catch (Exception e) {
-      Messages.showMessageDialog(String.format("Error showing %s: %s", getCommandName(), e.getMessage()),
-                                 StringUtil.toTitleCase(getCommandName()),
-                                 Messages.getErrorIcon());
+      String message = String.format("Error executing %s: %s", getCommandName(), e.getMessage());
+      Messages.showMessageDialog(message, StringUtil.toTitleCase(getCommandName()), Messages.getErrorIcon());
+      return CliResult.error(1, message);
     }
     finally {
       saveAll();
@@ -56,16 +66,18 @@ public abstract class ApplicationStarterBase extends ApplicationStarterEx {
     ApplicationManager.getApplication().saveSettings();
   }
 
-  private boolean checkArguments(String[] args) {
-    return Arrays.binarySearch(myArgsCount, args.length - 1) != -1 && getCommandName().equals(args[0]);
+  private boolean checkArguments(@NotNull List<String> args) {
+    return Arrays.binarySearch(myArgsCount, args.size() - 1) != -1 && getCommandName().equals(args.get(0));
   }
 
+  @Nls(capitalization = Nls.Capitalization.Sentence)
   public abstract String getUsageMessage();
 
-  protected abstract void processCommand(@NotNull String[] args, @Nullable String currentDirectory) throws Exception;
+  @NotNull
+  protected abstract Future<CliResult> processCommand(@NotNull List<String> args, @Nullable String currentDirectory) throws Exception;
 
   @Override
-  public void premain(String[] args) {
+  public void premain(@NotNull List<String> args) {
     if (!checkArguments(args)) {
       System.err.println(getUsageMessage());
       System.exit(1);
@@ -73,9 +85,15 @@ public abstract class ApplicationStarterBase extends ApplicationStarterEx {
   }
 
   @Override
-  public void main(String[] args) {
+  public void main(String @NotNull [] args) {
+    int exitCode = 0;
     try {
-      processCommand(args, null);
+      Future<CliResult> commandFuture = processCommand(Arrays.asList(args), null);
+      CliResult result = commandFuture.get();
+      if (result.message != null) {
+        System.out.println(result.message);
+      }
+      exitCode = result.exitCode;
     }
     catch (Exception e) {
       e.printStackTrace();
@@ -89,11 +107,6 @@ public abstract class ApplicationStarterBase extends ApplicationStarterEx {
       saveAll();
     }
 
-    System.exit(0);
-  }
-
-  @Override
-  public boolean canProcessExternalCommandLine() {
-    return true;
+    System.exit(exitCode);
   }
 }

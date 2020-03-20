@@ -1,28 +1,12 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.settings;
 
 import com.intellij.openapi.externalSystem.model.settings.ExternalSystemExecutionSettings;
-import com.intellij.util.containers.ContainerUtilRt;
 import com.intellij.util.execution.ParametersListUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.plugins.gradle.service.project.GradleProjectResolverExtension;
 
-import java.util.List;
+import java.util.Objects;
 
 /**
  * @author Denis Zhdanov
@@ -35,7 +19,6 @@ public class GradleExecutionSettings extends ExternalSystemExecutionSettings {
 
   @NotNull private final GradleExecutionWorkspace myExecutionWorkspace = new GradleExecutionWorkspace();
 
-  @NotNull private final List<ClassHolder<? extends GradleProjectResolverExtension>> myResolverExtensions = ContainerUtilRt.newArrayList();
   @Nullable private final String myGradleHome;
 
   @Nullable private final String myServiceDirectory;
@@ -133,15 +116,6 @@ public class GradleExecutionSettings extends ExternalSystemExecutionSettings {
     this.delegatedBuild = delegatedBuild;
   }
 
-  @NotNull
-  public List<ClassHolder<? extends GradleProjectResolverExtension>> getResolverExtensions() {
-    return myResolverExtensions;
-  }
-
-  public void addResolverExtensionClass(@NotNull ClassHolder<? extends GradleProjectResolverExtension> holder) {
-    myResolverExtensions.add(holder);
-  }
-
   /**
    * @return VM options to use for the gradle daemon process (if any)
    * @deprecated use {@link #getJvmArguments()}
@@ -184,16 +158,11 @@ public class GradleExecutionSettings extends ExternalSystemExecutionSettings {
   @Override
   public boolean equals(Object o) {
     if (!super.equals(o)) return false;
-
     GradleExecutionSettings that = (GradleExecutionSettings)o;
-
     if (myDistributionType != that.myDistributionType) return false;
-    if (myGradleHome != null ? !myGradleHome.equals(that.myGradleHome) : that.myGradleHome != null) return false;
-    if (myJavaHome != null ? !myJavaHome.equals(that.myJavaHome) : that.myJavaHome != null) return false;
-    if (myServiceDirectory != null ? !myServiceDirectory.equals(that.myServiceDirectory) : that.myServiceDirectory != null) {
-      return false;
-    }
-
+    if (!Objects.equals(myGradleHome, that.myGradleHome)) return false;
+    if (!Objects.equals(myJavaHome, that.myJavaHome)) return false;
+    if (!Objects.equals(myServiceDirectory, that.myServiceDirectory)) return false;
     return true;
   }
 

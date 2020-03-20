@@ -19,6 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightControlFlowUtil;
 import com.intellij.codeInsight.template.impl.TemplateManagerImpl;
 import com.intellij.codeInsight.template.impl.TemplateState;
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Editor;
@@ -35,11 +36,10 @@ import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import com.intellij.refactoring.rename.inplace.InplaceRefactoring;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.awt.RelativePoint;
 import org.jetbrains.annotations.Nullable;
 
-import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -88,17 +88,14 @@ public class ReassignVariableUtil {
 
         JBPopup popup = JBPopupFactory.getInstance()
           .createPopupChooserBuilder(vars)
-          .setTitle("Choose variable to reassign")
+          .setTitle(JavaRefactoringBundle.message("introduce.local.variable.to.reassign.title"))
           .setRequestFocus(true)
-          .setRenderer(new ListCellRendererWrapper<PsiVariable>() {
-            @Override
-            public void customize(JList list, PsiVariable value, int index, boolean selected, boolean hasFocus) {
-              if (value != null) {
-                setText(value.getName());
-                setIcon(value.getIcon(0));
-              }
+          .setRenderer(SimpleListCellRenderer.<PsiVariable>create((label, value, index) -> {
+            if (value != null) {
+              label.setText(value.getName());
+              label.setIcon(value.getIcon(0));
             }
-          })
+          }))
           .setItemChosenCallback((selectedValue) -> replaceWithAssignment(declaration, selectedValue, editor))
           .createPopup();
         if (ApplicationManager.getApplication().isHeadlessEnvironment()) {

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.push;
 
 import com.intellij.dvcs.push.PushTargetPanel;
@@ -22,6 +22,7 @@ import com.intellij.ui.*;
 import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.popup.list.ListPopupImpl;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
@@ -31,6 +32,7 @@ import git4idea.GitLocalBranch;
 import git4idea.GitRemoteBranch;
 import git4idea.commands.Git;
 import git4idea.commands.GitCommandResult;
+import git4idea.i18n.GitBundle;
 import git4idea.remote.GitDefineRemoteDialog;
 import git4idea.repo.GitRemote;
 import git4idea.repo.GitRepository;
@@ -42,6 +44,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 import java.awt.event.*;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -62,10 +65,11 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
   private static final Color NEW_BRANCH_LABEL_SELECTION_BG =
     new JBColor(ColorUtil.toAlpha(NEW_BRANCH_LABEL_SELECTION_FG, 20), ColorUtil.toAlpha(NEW_BRANCH_LABEL_SELECTION_FG, 30));
   private static final RelativeFont NEW_BRANCH_LABEL_FONT = RelativeFont.TINY.small();
-  private static final TextIcon NEW_BRANCH_LABEL = new TextIcon("New", NEW_BRANCH_LABEL_FG, NEW_BRANCH_LABEL_BG, 0);
+  private static final TextIcon NEW_BRANCH_LABEL = new TextIcon(GitBundle.message("push.dialog.target.panel.new"), NEW_BRANCH_LABEL_FG, NEW_BRANCH_LABEL_BG, 0);
 
   @NotNull private final GitPushSupport myPushSupport;
   @NotNull private final GitRepository myRepository;
+  @NotNull private final GitPushSource mySource;
   @NotNull private final Git myGit;
 
   @NotNull private final VcsEditableTextComponent myTargetRenderer;
@@ -80,8 +84,16 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
   private boolean myEventFromRemoteChooser;
 
   public GitPushTargetPanel(@NotNull GitPushSupport support, @NotNull GitRepository repository, @Nullable GitPushTarget defaultTarget) {
+    this(support, repository, support.getSource(repository), defaultTarget);
+  }
+
+  public GitPushTargetPanel(@NotNull GitPushSupport support,
+                            @NotNull GitRepository repository,
+                            @NotNull GitPushSource source,
+                            @Nullable GitPushTarget defaultTarget) {
     myPushSupport = support;
     myRepository = repository;
+    mySource = source;
     myGit = Git.getInstance();
     myProject = myRepository.getProject();
 
@@ -139,13 +151,13 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
     boolean noRemotes = myRepository.getRemotes().isEmpty();
     if (target == null) {
       if (myRepository.getCurrentBranch() == null) {
-        myError = "Detached HEAD";
+        myError = GitBundle.message("push.dialog.target.panel.detached.head");
       }
       else if (myRepository.isFresh()) {
-        myError = "Empty repository";
+        myError = GitBundle.message("push.dialog.target.panel.empty.repository");
       }
       else if (!noRemotes) {
-        myError = "Can't push";
+        myError = GitBundle.message("push.dialog.target.panel.can.t.push");
       }
     }
     else {
@@ -155,7 +167,7 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
 
     myTargetRenderer.updateLinkText(initialBranch);
     myTargetEditor.setText(initialBranch);
-    myRemoteRenderer.updateLinkText(noRemotes ? "Define remote" : initialRemote);
+    myRemoteRenderer.updateLinkText(noRemotes ? GitBundle.message("push.dialog.target.panel.define.remote") : initialRemote);
 
     myTargetEditor.setVisible(!noRemotes);
   }
@@ -168,7 +180,7 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
   }
 
   private void addRemoteUnderModal(@NotNull final String remoteName, @NotNull final String remoteUrl) {
-    ProgressManager.getInstance().run(new Task.Modal(myRepository.getProject(), "Adding Remote...", true) {
+    ProgressManager.getInstance().run(new Task.Modal(myRepository.getProject(), GitBundle.message("push.dialog.target.panel.adding.remote"), true) {
       private GitCommandResult myResult;
 
       @Override
@@ -181,15 +193,15 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
       @Override
       public void onSuccess() {
         if (myResult.success()) {
-          updateComponents(myPushSupport.getDefaultTarget(myRepository));
+          updateComponents(myPushSupport.getDefaultTarget(myRepository, mySource));
           if (myFireOnChangeAction != null) {
             myFireOnChangeAction.run();
           }
         }
         else {
-          String message = "Couldn't add remote: " + myResult.getErrorOutputAsHtmlString();
+          String message = GitBundle.message("push.dialog.target.panel.couldnt.add.remote", myResult.getErrorOutputAsHtmlString());
           LOG.warn(message);
-          Messages.showErrorDialog(myProject, XmlStringUtil.wrapInHtml(message), "Add Remote");
+          Messages.showErrorDialog(myProject, XmlStringUtil.wrapInHtml(message), GitBundle.message("push.dialog.target.panel.add.remote"));
         }
       }
     });
@@ -200,7 +212,7 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
     if (remotes.size() <= 1) {
       return;
     }
-    ListPopup popup = new ListPopupImpl(new BaseListPopupStep<PopupItem>(null, remotes) {
+    ListPopup popup = new ListPopupImpl(myProject, new BaseListPopupStep<PopupItem>(null, remotes) {
       @Override
       public PopupStep onChosen(@NotNull PopupItem selectedValue, boolean finalChoice) {
         return doFinalStep(() -> {
@@ -261,7 +273,7 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
 
   @NotNull
   private List<PopupItem> getPopupItems() {
-    List<PopupItem> items = newArrayList(ContainerUtil.map(myRepository.getRemotes(), PopupItem::forRemote));
+    List<PopupItem> items = new ArrayList<>(ContainerUtil.map(myRepository.getRemotes(), PopupItem::forRemote));
     items.add(PopupItem.DEFINE_REMOTE);
     return items;
   }
@@ -294,7 +306,7 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
         if (newRemoteBranch) {
           renderer.setIconOnTheRight(true);
           NEW_BRANCH_LABEL.setInsets(JBUI.insets(2));
-          NEW_BRANCH_LABEL.setRound(JBUI.scale(4));
+          NEW_BRANCH_LABEL.setRound(JBUIScale.scale(4));
           NEW_BRANCH_LABEL.setFont(NEW_BRANCH_LABEL_FONT.derive(renderer.getFont()));
           NEW_BRANCH_LABEL.setForeground(isSelected ? NEW_BRANCH_LABEL_SELECTION_FG : NEW_BRANCH_LABEL_FG);
           NEW_BRANCH_LABEL.setBackground(isSelected ? NEW_BRANCH_LABEL_SELECTION_BG : NEW_BRANCH_LABEL_BG);
@@ -442,7 +454,7 @@ public class GitPushTargetPanel extends PushTargetPanel<GitPushTarget> {
 
     @NotNull
     String getPresentable() {
-      return remote == null ? "Define Remote" : remote.getName();
+      return remote == null ? GitBundle.message("push.dialog.target.panel.define.remote") : remote.getName();
     }
 
     boolean isDefineRemote() {

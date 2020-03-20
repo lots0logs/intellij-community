@@ -11,23 +11,15 @@ import com.jetbrains.jsonSchema.extension.JsonLikePsiWalker;
 import com.jetbrains.jsonSchema.impl.JsonComplianceCheckerOptions;
 import com.jetbrains.jsonSchema.impl.JsonSchemaComplianceChecker;
 import com.jetbrains.jsonSchema.impl.JsonSchemaObject;
-import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.yaml.YAMLBundle;
 import org.jetbrains.yaml.psi.YamlPsiElementVisitor;
 
 import javax.swing.*;
+import java.util.Collection;
 
 public class YamlJsonSchemaHighlightingInspection extends YamlJsonSchemaInspectionBase {
   public boolean myCaseInsensitiveEnum = false;
-
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return YAMLBundle.message("inspections.schema.validation.name");
-  }
 
   @Nullable
   @Override
@@ -41,13 +33,13 @@ public class YamlJsonSchemaHighlightingInspection extends YamlJsonSchemaInspecti
   @NotNull
   protected PsiElementVisitor doBuildVisitor(@NotNull ProblemsHolder holder,
                                              @NotNull LocalInspectionToolSession session,
-                                             PsiElement root,
+                                             Collection<PsiElement> roots,
                                              JsonSchemaObject object) {
     JsonComplianceCheckerOptions options = new JsonComplianceCheckerOptions(myCaseInsensitiveEnum);
     return new YamlPsiElementVisitor() {
       @Override
-      public void visitElement(PsiElement element) {
-        if (element != root) return;
+      public void visitElement(@NotNull PsiElement element) {
+        if (!roots.contains(element)) return;
         final JsonLikePsiWalker walker = JsonLikePsiWalker.getWalker(element, object);
         if (walker == null) return;
         new JsonSchemaComplianceChecker(object, holder, walker, session, options, "Schema validation: ").annotate(element);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2009 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,20 @@
  */
 package com.intellij.openapi.progress;
 
+import com.intellij.openapi.util.NlsProgress;
+import com.intellij.openapi.util.NlsUI;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
 public interface TaskInfo {
   @NotNull
+  @Nls @NlsProgress.ProgressTitle
   String getTitle();
 
+  @Nls @NlsUI.Button
   String getCancelText();
 
+  @Nls @NlsUI.ButtonTooltip
   String getCancelTooltipText();
 
   boolean isCancellable();

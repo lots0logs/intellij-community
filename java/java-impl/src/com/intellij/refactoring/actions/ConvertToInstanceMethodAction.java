@@ -25,14 +25,14 @@ import org.jetbrains.annotations.NotNull;
 /**
  * @author dsl
  */
-public class ConvertToInstanceMethodAction extends BaseRefactoringAction {
+public class ConvertToInstanceMethodAction extends BaseJavaRefactoringAction {
   @Override
   protected boolean isAvailableInEditorOnly() {
     return false;
   }
 
   @Override
-  protected boolean isEnabledOnElements(@NotNull PsiElement[] elements) {
+  protected boolean isEnabledOnElements(PsiElement @NotNull [] elements) {
     return elements.length == 1 && elements[0] instanceof PsiMethod;
   }
 

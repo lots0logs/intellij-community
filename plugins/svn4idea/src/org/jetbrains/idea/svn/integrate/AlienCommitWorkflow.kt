@@ -1,41 +1,31 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.integrate
 
 import com.intellij.openapi.vcs.AbstractVcs
 import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.CommitExecutor
-import com.intellij.openapi.vcs.changes.LocalChangeList
-import com.intellij.openapi.vcs.changes.ui.CommitChangeListDialog
 import com.intellij.openapi.vcs.changes.ui.CommitChangeListDialog.DIALOG_TITLE
-import com.intellij.openapi.vcs.changes.ui.CommitDialogChangesBrowser
-import com.intellij.openapi.vcs.changes.ui.DefaultCommitResultHandler
-import com.intellij.openapi.vcs.changes.ui.DialogCommitWorkflow
-import com.intellij.openapi.vcs.checkin.CheckinHandler
-import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.vcs.commit.ChangeListCommitState
+import com.intellij.vcs.commit.CommitHandlersNotifier
+import com.intellij.vcs.commit.ShowNotificationCommitResultHandler
+import com.intellij.vcs.commit.SingleChangeListCommitWorkflow
 
-class AlienCommitWorkflow(val vcs: AbstractVcs<*>, changeListName: String, changes: List<Change>, commitMessage: String?) :
-  DialogCommitWorkflow(vcs.project, changes, vcsToCommit = vcs, initialCommitMessage = commitMessage) {
+class AlienCommitWorkflow(val vcs: AbstractVcs, changeListName: String, changes: List<Change>, commitMessage: String?) :
+  SingleChangeListCommitWorkflow(vcs.project, setOf(vcs), changes, initialCommitMessage = commitMessage) {
   val changeList = AlienLocalChangeList(changes, changeListName)
 
-  override fun prepareCommit(unversionedFiles: List<VirtualFile>, browser: CommitDialogChangesBrowser) = true
-
-  override fun doRunBeforeCommitChecks(changeList: LocalChangeList, checks: Runnable) = checks.run()
+  override fun doRunBeforeCommitChecks(checks: Runnable) = checks.run()
 
   override fun canExecute(executor: CommitExecutor, changes: Collection<Change>) = true
 
-  override fun doCommit(changeList: LocalChangeList, changes: List<Change>, commitMessage: String, handlers: List<CheckinHandler>) {
-    val committer = AlienCommitter(vcs, changes, commitMessage, handlers, additionalData)
+  override fun doCommit(commitState: ChangeListCommitState) {
+    with(AlienCommitter(vcs, commitState.changes, commitState.commitMessage, commitContext)) {
+      addResultHandler(CommitHandlersNotifier(commitHandlers))
+      addResultHandler(getCommitEventDispatcher())
+      addResultHandler(ShowNotificationCommitResultHandler(this))
+      addResultHandler(getEndExecutionHandler())
 
-    committer.addResultHandler(DefaultCommitResultHandler(committer))
-    committer.runCommit(DIALOG_TITLE, false)
-  }
-
-  override fun createBrowser() = AlienChangeListBrowser(project, changeList)
-
-  override fun initDialog(dialog: CommitChangeListDialog) {
-    val browser = dialog.browser
-
-    browser.viewer.setIncludedChanges(initiallyIncluded)
-    browser.viewer.rebuildTree()
+      runCommit(DIALOG_TITLE, false)
+    }
   }
 }

@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.cmdline;
 
+import com.google.gson.Gson;
 import com.google.protobuf.Message;
 import com.intellij.compiler.notNullVerification.NotNullVerifyingInstrumenter;
 import com.intellij.openapi.application.PathManager;
@@ -11,6 +12,7 @@ import com.intellij.uiDesigner.core.GridConstraints;
 import com.intellij.util.SystemProperties;
 import com.intellij.util.containers.ContainerUtil;
 import com.jgoodies.forms.layout.CellConstraints;
+import com.thoughtworks.qdox.JavaProjectBuilder;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.protobuf.ProtobufDecoder;
@@ -36,10 +38,9 @@ import java.util.*;
  * @author Eugene Zhuravlev
  */
 public class ClasspathBootstrap {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.jps.cmdline.ClasspathBootstrap");
+  private static final Logger LOG = Logger.getInstance(ClasspathBootstrap.class);
 
-  private ClasspathBootstrap() {
-  }
+  private ClasspathBootstrap() { }
 
   private static final Class<?>[] COMMON_REQUIRED_CLASSES = {
     Message.class, // protobuf
@@ -51,7 +52,7 @@ public class ClasspathBootstrap {
   };
 
   public static List<String> getBuildProcessApplicationClasspath() {
-    final Set<String> cp = ContainerUtil.newHashSet();
+    final Set<String> cp = new HashSet<>();
 
     cp.add(getResourcePath(BuildMain.class));
     cp.add(getResourcePath(ExternalJavacProcess.class));  // intellij.platform.jps.build.javac.rt part
@@ -72,6 +73,8 @@ public class ClasspathBootstrap {
     cp.add(getResourcePath(CellConstraints.class));  // jGoodies-forms
     cp.addAll(getInstrumentationUtilRoots());
     cp.add(getResourcePath(IXMLBuilder.class));  // nano-xml
+    cp.add(getResourcePath(JavaProjectBuilder.class));  // QDox lightweight java parser
+    cp.add(getResourcePath(Gson.class));  // gson
 
     cp.addAll(ContainerUtil.map(ArtifactRepositoryManager.getClassesFromDependencies(), ClasspathBootstrap::getResourcePath));
 
@@ -82,10 +85,9 @@ public class ClasspathBootstrap {
       final Class<?> cmdLineWrapper = Class.forName("com.intellij.rt.execution.CommandLineWrapper");
       cp.add(getResourcePath(cmdLineWrapper));  // idea_rt.jar
     }
-    catch (Throwable ignored) {
-    }
+    catch (Throwable ignored) { }
 
-    return ContainerUtil.newArrayList(cp);
+    return new ArrayList<>(cp);
   }
 
   public static void appendJavaCompilerClasspath(Collection<? super String> cp, boolean includeEcj) {
@@ -127,7 +129,7 @@ public class ClasspathBootstrap {
       else {
         // last resort
         final JavaCompiler systemCompiler = ToolProvider.getSystemJavaCompiler();
-        Class compilerClass;
+        Class<?> compilerClass;
         if (systemCompiler != null) {
           compilerClass = systemCompiler.getClass();
         }
@@ -160,11 +162,11 @@ public class ClasspathBootstrap {
     return new ArrayList<>(cp);
   }
 
-  public static String getResourcePath(Class aClass) {
+  public static String getResourcePath(Class<?> aClass) {
     return PathManager.getResourceRoot(aClass, "/" + aClass.getName().replace('.', '/') + ".class");
   }
 
-  public static File getResourceFile(Class aClass) {
+  public static File getResourceFile(Class<?> aClass) {
     return new File(getResourcePath(aClass));
   }
 

@@ -30,11 +30,11 @@ public class FetchExternalResourcesFixTest extends LightQuickFixParameterizedTes
 
   // just check for action availability
   @Override
-  protected void doAction(@NotNull ActionHint actionHint, String testFullPath, String testName) {
+  protected void doAction(@NotNull ActionHint actionHint, @NotNull String testFullPath, @NotNull String testName) {
     IntentionAction action = findActionAndCheck(actionHint, testFullPath);
     if (action != null && testName.equals("5.xml")) {
-      final String uri = FetchExtResourceAction.findUri(myFile, myEditor.getCaretModel().getOffset());
-      final String url = FetchExtResourceAction.findUrl(myFile, myEditor.getCaretModel().getOffset(),uri);
+      final String uri = FetchExtResourceAction.findUri(getFile(), getEditor().getCaretModel().getOffset());
+      final String url = FetchExtResourceAction.findUrl(getFile(), getEditor().getCaretModel().getOffset(), uri);
       assertEquals("http://www.springframework.org/schema/aop/spring-aop.xsd",url);
     }
   }

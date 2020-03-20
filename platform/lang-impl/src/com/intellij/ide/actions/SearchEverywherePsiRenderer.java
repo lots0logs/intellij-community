@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
 import com.intellij.ide.util.PlatformModuleRendererFactory;
@@ -33,6 +19,7 @@ import com.intellij.psi.presentation.java.SymbolPresentationUtil;
 import com.intellij.psi.util.PsiUtilCore;
 import com.intellij.ui.ColoredListCellRenderer;
 import com.intellij.util.ObjectUtils;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
@@ -45,10 +32,7 @@ import java.util.Optional;
 */
 public class SearchEverywherePsiRenderer extends PsiElementListCellRenderer<PsiElement> {
 
-  private final JList myList;
-
-  public SearchEverywherePsiRenderer(JList list) {
-    myList = list;
+  public SearchEverywherePsiRenderer() {
     setFocusBorderEnabled(false);
     setLayout(new BorderLayout() {
       @Override
@@ -78,15 +62,17 @@ public class SearchEverywherePsiRenderer extends PsiElementListCellRenderer<PsiE
     return StringUtil.notNullize(name, "<unnamed>");
   }
 
+  @Nullable
   @Override
   protected String getContainerText(PsiElement element, String name) {
-    return getSymbolContainerText(name, element);
+    return getContainerTextForLeftComponent(element, name, -1, null);
   }
 
-  private String getSymbolContainerText(String name, PsiElement element) {
+  @Nullable
+  @Override
+  protected String getContainerTextForLeftComponent(PsiElement element, String name, int maxWidth, FontMetrics fm) {
     String text = SymbolPresentationUtil.getSymbolContainerText(element);
 
-    if (myList.getWidth() == 0) return text;
     if (text == null) return null;
 
     if (text.startsWith("(") && text.endsWith(")")) {
@@ -119,11 +105,9 @@ public class SearchEverywherePsiRenderer extends PsiElementListCellRenderer<PsiE
 
     boolean in = text.startsWith("in ");
     if (in) text = text.substring(3);
-    FontMetrics fm = myList.getFontMetrics(myList.getFont());
-    int maxWidth = myList.getWidth() - fm.stringWidth(name) - 16 - myRightComponentWidth - 20;
-    String left = in ? "(in " : "(";
-    String right = ")";
-    String adjustedText = left + text + right;
+    String left = in ? "in " : "";
+    String adjustedText = left + text;
+    if (maxWidth < 0) return adjustedText;
 
     int fullWidth = fm.stringWidth(adjustedText);
     if (fullWidth < maxWidth) return adjustedText;
@@ -138,10 +122,10 @@ public class SearchEverywherePsiRenderer extends PsiElementListCellRenderer<PsiE
       parts.remove(index);
       if (fm.stringWidth(StringUtil.join(parts, separator) + "...") < maxWidth) {
         parts.add(index, "...");
-        return left + StringUtil.join(parts, separator) + right;
+        return left + StringUtil.join(parts, separator);
       }
     }
-    int adjustedWidth = Math.max(adjustedText.length() * maxWidth / fullWidth - 1, left.length() + right.length() + 3);
+    int adjustedWidth = Math.max(adjustedText.length() * maxWidth / fullWidth - 1, left.length() + 3);
     return StringUtil.trimMiddle(adjustedText, adjustedWidth);
   }
 

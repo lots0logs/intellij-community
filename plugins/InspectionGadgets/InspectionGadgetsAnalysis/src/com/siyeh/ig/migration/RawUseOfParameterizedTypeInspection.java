@@ -22,7 +22,6 @@ import com.intellij.psi.util.PsiUtil;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
 import com.siyeh.ig.BaseInspectionVisitor;
-import com.siyeh.ig.psiutils.ExpressionUtils;
 import com.siyeh.ig.psiutils.LibraryUtil;
 import com.siyeh.ig.psiutils.MethodCallUtils;
 import com.siyeh.ig.psiutils.MethodUtils;
@@ -34,11 +33,11 @@ import javax.swing.*;
 
 public class RawUseOfParameterizedTypeInspection extends BaseInspection {
 
-  @SuppressWarnings("PublicField") public boolean ignoreObjectConstruction = true;
+  @SuppressWarnings("PublicField") public boolean ignoreObjectConstruction = false;
 
   @SuppressWarnings("PublicField") public boolean ignoreTypeCasts = false;
 
-  @SuppressWarnings("PublicField") public boolean ignoreUncompilable = false;
+  @SuppressWarnings("PublicField") public boolean ignoreUncompilable = true;
 
   @SuppressWarnings("PublicField") public boolean ignoreParametersOfOverridingMethods = false;
 
@@ -53,12 +52,6 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
   @Override
   public String getAlternativeID() {
     return "RawUseOfParameterized";
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("raw.use.of.parameterized.type.display.name");
   }
 
   @Override
@@ -100,7 +93,7 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
       if (ignoreObjectConstruction) {
         return;
       }
-      if (ignoreUncompilable && ExpressionUtils.isArrayCreationExpression(expression)) {
+      if (ignoreUncompilable && expression.isArrayCreation()) {
         //array creation can (almost) never be generic
         return;
       }
@@ -115,9 +108,18 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
         return;
       }
       super.visitTypeElement(typeElement);
+      PsiElement directParent = typeElement.getParent();
+      if (ignoreUncompilable && directParent instanceof PsiTypeElement) {
+        PsiType parentType = ((PsiTypeElement)directParent).getType();
+        if (parentType instanceof PsiArrayType) {
+          if (PsiTreeUtil.skipParentsOfType(directParent, PsiTypeElement.class) instanceof PsiMethodReferenceExpression) {
+            return;
+          }
+        }
+      }
       final PsiElement parent = PsiTreeUtil.skipParentsOfType(
         typeElement, PsiTypeElement.class, PsiReferenceParameterList.class, PsiJavaCodeReferenceElement.class);
-      if (parent instanceof PsiInstanceOfExpression || parent instanceof PsiClassObjectAccessExpression) {
+      if (parent instanceof PsiTypeTestPattern || parent instanceof PsiClassObjectAccessExpression) {
         return;
       }
       if (ignoreTypeCasts && parent instanceof PsiTypeCastExpression) {
@@ -129,7 +131,7 @@ public class RawUseOfParameterizedTypeInspection extends BaseInspection {
       if (ignoreUncompilable && parent instanceof PsiAnnotationMethod) {
         // type of class type parameter cannot be parameterized if annotation method has default value
         final PsiAnnotationMemberValue defaultValue = ((PsiAnnotationMethod)parent).getDefaultValue();
-        if (defaultValue != null && typeElement.getParent() instanceof PsiTypeElement) {
+        if (defaultValue != null && directParent instanceof PsiTypeElement) {
           return;
         }
       }

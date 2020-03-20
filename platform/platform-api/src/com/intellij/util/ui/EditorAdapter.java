@@ -52,7 +52,7 @@ class Line {
 }
 
 public class EditorAdapter {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.util.ui.EditorAdapter");
+  private static final Logger LOG = Logger.getInstance(EditorAdapter.class);
 
   private final Editor myEditor;
 
@@ -93,7 +93,7 @@ public class EditorAdapter {
   }
 
   @NotNull
-  private Runnable writingCommand(@NotNull Collection<Line> lines) {
+  private Runnable writingCommand(@NotNull Collection<? extends Line> lines) {
     final Runnable command = () -> {
       Document document = myEditor.getDocument();
 

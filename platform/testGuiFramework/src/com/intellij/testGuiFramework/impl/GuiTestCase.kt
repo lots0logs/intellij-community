@@ -1,15 +1,13 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testGuiFramework.impl
 
 import com.intellij.openapi.fileChooser.ex.FileChooserDialogImpl
-import com.intellij.openapi.util.io.FileUtil
 import com.intellij.testGuiFramework.fixtures.*
 import com.intellij.testGuiFramework.fixtures.extended.ExtendedTableFixture
 import com.intellij.testGuiFramework.fixtures.extended.RowFixture
 import com.intellij.testGuiFramework.fixtures.newProjectWizard.NewProjectWizardFixture
 import com.intellij.testGuiFramework.framework.GuiTestLocalRunner
 import com.intellij.testGuiFramework.framework.GuiTestUtil
-import com.intellij.testGuiFramework.framework.GuiTestPaths.testScreenshotDirPath
 import com.intellij.testGuiFramework.framework.Timeouts
 import com.intellij.testGuiFramework.framework.toPrintable
 import com.intellij.testGuiFramework.impl.GuiTestUtilKt.tryWithPause
@@ -17,6 +15,8 @@ import com.intellij.testGuiFramework.impl.GuiTestUtilKt.typeMatcher
 import com.intellij.testGuiFramework.launcher.system.SystemInfo
 import com.intellij.testGuiFramework.launcher.system.SystemInfo.isMac
 import com.intellij.testGuiFramework.util.*
+import com.intellij.ui.components.JBPanel
+import com.intellij.util.io.createDirectories
 import org.fest.swing.exception.ComponentLookupException
 import org.fest.swing.exception.WaitTimedOutError
 import org.fest.swing.fixture.AbstractComponentFixture
@@ -30,12 +30,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.rules.TestName
 import org.junit.runner.RunWith
-import java.awt.Component
-import java.awt.Rectangle
+import java.awt.Container
 import java.io.File
-import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.*
 import javax.swing.JDialog
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -65,17 +61,13 @@ import javax.swing.text.JTextComponent
  *
  */
 @RunWith(GuiTestLocalRunner::class)
-open class GuiTestCase {
+open class GuiTestCase(enableScreenshotsDuringTest: Boolean = true) {
 
   @Rule
   @JvmField
-  val screenshotsDuringTest = ScreenshotsDuringTest(500) // 0.5 sec
+  val guiTestRule = GuiTestRule(enableScreenshotsDuringTest)
 
-  @Rule
-  @JvmField
-  val guiTestRule = GuiTestRule()
-
-  val projectsFolder: File = guiTestRule.projectsFolder
+  val projectsFolder = guiTestRule.projectsFolder
 
   val settingsTitle: String = if (isMac()) "Preferences" else "Settings"
   //  val defaultSettingsTitle: String = if (isMac()) "Default Preferences" else "Default Settings"
@@ -87,11 +79,9 @@ open class GuiTestCase {
   val testMethod = TestName()
 
   val projectFolder: String by lazy {
-    val dir = File(projectsFolder, testMethod.methodName)
-    if (!dir.mkdirs()) {
-      throw IOException("project dir '${dir.absolutePath}' creation failed")
-    }
-    dir.canonicalPath
+    val dir = projectsFolder.resolve(testMethod.methodName)
+    dir.createDirectories()
+    dir.toRealPath().toString()
   }
 
   fun robot() = guiTestRule.robot()
@@ -141,6 +131,15 @@ open class GuiTestCase {
       if (!needToKeepDialog) dialog.waitTillGone()
     }
   }
+
+  fun templatesDialogPanel(title: String, func: ContainerFixtureImpl.() -> Unit) =
+    step("search for 'CreateWithTemplatesDialogPanel'") {
+      ContainerFixtureImpl(robot(), findComponentWithTimeout(null, JBPanel::class.java, Timeouts.seconds10) { component ->
+        component.javaClass.canonicalName == "com.intellij.ide.actions.newclass.CreateWithTemplatesDialogPanel" &&
+        component.isShowing &&
+        robot().finder().findAll(component.parent) { it is JLabel && it.text.equals(title, true) }.size == 1
+      } as Container).apply(func)
+    }
 
   fun dialogWithTextComponent(timeout: Timeout, predicate: (JTextComponent) -> Boolean, func: JDialogFixture.() -> Unit) {
     step("at dialog with text component") {
@@ -381,7 +380,7 @@ open class GuiTestCase {
    * @param screenshotName name of create screenshot, added after timestamp
    * if [screenshotName] is empty the screenshot is create with only timestamp as a name
    */
-  fun screenshot(screenshotName: String = ""){
+  fun screenshot(screenshotName: String = "") {
     ScreenshotTaker.takeScreenshotAndHierarchy(screenshotName)
   }
 

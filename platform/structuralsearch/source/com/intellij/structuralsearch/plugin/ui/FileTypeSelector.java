@@ -1,17 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.structuralsearch.plugin.ui;
 
 import com.intellij.lang.Language;
-import com.intellij.lang.LanguageUtil;
-import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.LanguageFileType;
 import com.intellij.openapi.ui.ComboBox;
+import com.intellij.structuralsearch.PatternContext;
 import com.intellij.structuralsearch.StructuralSearchProfile;
-import com.intellij.structuralsearch.StructuralSearchProfileBase;
 import com.intellij.structuralsearch.StructuralSearchUtil;
-import com.intellij.ui.ComboboxSpeedSearch;
 import com.intellij.ui.LayeredIcon;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.ui.EmptyIcon;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
@@ -19,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -28,10 +25,10 @@ import java.util.List;
  */
 public class FileTypeSelector extends ComboBox<FileTypeInfo> {
 
-  public FileTypeSelector(@NotNull List<FileType> types) {
-    super(createModel(types));
+  public FileTypeSelector() {
+    super(createModel());
     setRenderer(new MyCellRenderer());
-    new MySpeedSearch(this);
+    setSwingPopup(false);
   }
 
   @Nullable
@@ -41,15 +38,17 @@ public class FileTypeSelector extends ComboBox<FileTypeInfo> {
   }
 
   @Nullable
-  public FileType getSelectedFileType() {
-    FileTypeInfo info = (FileTypeInfo)super.getSelectedItem();
+  public LanguageFileType getSelectedFileType() {
+    final FileTypeInfo info = (FileTypeInfo)super.getSelectedItem();
     return info != null ? info.getFileType() : null;
   }
 
-  public void setSelectedItem(@NotNull FileType type, @Nullable Language dialect, @Nullable String context) {
-    DefaultComboBoxModel<FileTypeInfo> model = (DefaultComboBoxModel<FileTypeInfo>)getModel();
+  public void setSelectedItem(@NotNull LanguageFileType type,
+                              @Nullable Language dialect,
+                              @Nullable PatternContext context) {
+    final DefaultComboBoxModel<FileTypeInfo> model = (DefaultComboBoxModel<FileTypeInfo>)getModel();
     for (int i = 0; i < model.getSize(); i++) {
-      FileTypeInfo info = model.getElementAt(i);
+      final FileTypeInfo info = model.getElementAt(i);
       if (info.isEqualTo(type, dialect, context)) {
         setSelectedItem(info);
         return;
@@ -57,64 +56,41 @@ public class FileTypeSelector extends ComboBox<FileTypeInfo> {
     }
   }
 
-  @Override
-  public void setSelectedItem(Object anObject) {
-    if (anObject instanceof FileTypeInfo) {
-      final FileTypeInfo selectedInfo = (FileTypeInfo)anObject;
-      if (!selectedInfo.isEnabled()) {
-        final MyComboBoxModel model = (MyComboBoxModel)getModel();
-        final int index = model.getIndexOf(selectedInfo);
-        if (index >= 0 && index + 1 < model.getSize()) {
-          final FileTypeInfo nextInfo = model.getElementAt(index + 1);
-          super.setSelectedItem(nextInfo);
-          return;
-        }
+  @NotNull
+  private static DefaultComboBoxModel<FileTypeInfo> createModel() {
+    final List<LanguageFileType> types = new ArrayList<>();
+    for (LanguageFileType fileType : StructuralSearchUtil.getSuitableFileTypes()) {
+      if (StructuralSearchUtil.getProfileByFileType(fileType) != null) {
+        types.add(fileType);
       }
     }
-    super.setSelectedItem(anObject);
-  }
-
-  @NotNull
-  private static DefaultComboBoxModel<FileTypeInfo> createModel(List<FileType> types) {
+    Collections.sort(types, (o1, o2) -> o1.getDescription().compareToIgnoreCase(o2.getDescription()));
     final List<FileTypeInfo> infos = new ArrayList<>();
-    for (FileType fileType : types) {
-      final boolean duplicated = isDuplicated(fileType, types);
-
+    for (LanguageFileType fileType : types) {
       final StructuralSearchProfile profile = StructuralSearchUtil.getProfileByFileType(fileType);
-      if (profile instanceof StructuralSearchProfileBase) {
-        final String[] contextNames = ((StructuralSearchProfileBase)profile).getContextNames();
-        if (contextNames.length != 0) {
-          infos.add(new FileTypeInfo(fileType, null, null, false, duplicated));
-          for (String contextName: contextNames) {
-            infos.add(new FileTypeInfo(fileType, null, contextName, true, duplicated));
-          }
-          continue; // proceed with the next file type
+      assert profile != null;
+      final Language language = fileType.getLanguage();
+      final List<PatternContext> patternContexts = new ArrayList<>(profile.getPatternContexts());
+      if (!patternContexts.isEmpty()) {
+        infos.add(new FileTypeInfo(fileType, language, patternContexts.get(0), false));
+        for (int i = 1; i < patternContexts.size(); i++) {
+          infos.add(new FileTypeInfo(fileType, language, patternContexts.get(i), true));
         }
+        continue; // proceed with the next file type
       }
 
-      infos.add(new FileTypeInfo(fileType, null, null, true, duplicated));
+      infos.add(new FileTypeInfo(fileType, language, null, false));
 
-      if (fileType instanceof LanguageFileType) {
-        final Language language = ((LanguageFileType)fileType).getLanguage();
-        final Language[] languageDialects = LanguageUtil.getLanguageDialects(language);
-        Arrays.sort(languageDialects, Comparator.comparing(Language::getDisplayName));
-        for (Language dialect : languageDialects) {
-          infos.add(new FileTypeInfo(fileType, dialect, null, true, duplicated));
+      List<Language> dialects = new ArrayList<>(language.getDialects());
+      Collections.sort(dialects, Comparator.comparing(Language::getDisplayName));
+      for (Language dialect : dialects) {
+        if (profile.isMyLanguage(dialect)) {
+          infos.add(new FileTypeInfo(fileType, dialect, null, true));
         }
       }
     }
 
     return new MyComboBoxModel(infos);
-  }
-
-  private static boolean isDuplicated(@NotNull FileType fileType, @NotNull List<FileType> types) {
-    String description = fileType.getDescription();
-    for (FileType type : types) {
-      if (type != fileType && description.equals(type.getDescription())) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private static class MyComboBoxModel extends DefaultComboBoxModel<FileTypeInfo> {
@@ -123,43 +99,30 @@ public class FileTypeSelector extends ComboBox<FileTypeInfo> {
     }
   }
 
-  private static class MyCellRenderer extends ListCellRendererWrapper<FileTypeInfo> {
+  private static class MyCellRenderer extends SimpleListCellRenderer<FileTypeInfo> {
     private static final Icon EMPTY_ICON = EmptyIcon.ICON_18;
     private static final Icon WIDE_EMPTY_ICON = JBUI.scale(EmptyIcon.create(32, 18));
 
+    MyCellRenderer() {}
+
     @Override
-    public void customize(JList list, FileTypeInfo info, int index, boolean selected, boolean hasFocus) {
-      if (info == null) {
+    public void customize(@NotNull JList<? extends FileTypeInfo> list, FileTypeInfo value, int index, boolean selected, boolean hasFocus) {
+      if (value == null) {
         return;
       }
-      if (info.isNested() && index >= 0) {
-        setIcon(WIDE_EMPTY_ICON);
-        setText(info.getText());
-      }
-      else {
-        setIcon(getFileTypeIcon(info));
-        setText(info.getFullText());
-      }
+      setIcon(value.isNested() && index >= 0 ? WIDE_EMPTY_ICON : getFileTypeIcon(value));
+      setText(value.getText());
     }
 
     @NotNull
     private static Icon getFileTypeIcon(FileTypeInfo info) {
-      LayeredIcon layeredIcon = new LayeredIcon(2);
+      final LayeredIcon layeredIcon = new LayeredIcon(2);
       layeredIcon.setIcon(EMPTY_ICON, 0);
-      Icon icon = info.getFileType().getIcon();
+      final Icon icon = info.getFileType().getIcon();
       if (icon != null) {
         layeredIcon.setIcon(icon, 1);
       }
       return layeredIcon;
-    }
-  }
-
-  private static class MySpeedSearch extends ComboboxSpeedSearch {
-    MySpeedSearch(FileTypeSelector comboBox) {super(comboBox);}
-
-    @Override
-    protected String getElementText(Object element) {
-      return ((FileTypeInfo)element).getSearchText();
     }
   }
 }

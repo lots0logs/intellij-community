@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.devkit.references;
 
 import com.intellij.codeInsight.lookup.LookupElement;
@@ -23,14 +23,14 @@ import org.jetbrains.idea.devkit.dom.Extension;
 import org.jetbrains.idea.devkit.inspections.RegistryPropertiesAnnotator;
 import org.jetbrains.uast.UExpression;
 
+import java.util.Collections;
 import java.util.List;
 
 import static com.intellij.patterns.PsiJavaPatterns.psiMethod;
 import static com.intellij.patterns.StandardPatterns.string;
 import static com.intellij.patterns.uast.UastPatterns.injectionHostUExpression;
 
-class RegistryKeyIdReferenceContributor extends PsiReferenceContributor {
-
+final class RegistryKeyIdReferenceContributor extends PsiReferenceContributor {
   @Override
   public void registerReferenceProviders(@NotNull PsiReferenceRegistrar registrar) {
     UastReferenceRegistrar
@@ -39,11 +39,10 @@ class RegistryKeyIdReferenceContributor extends PsiReferenceContributor {
                                        .withName(string().oneOf("get", "is", "intValue", "doubleValue", "stringValue", "getColor"))
                                        .definedInClass(Registry.class.getName())),
                                      new UastInjectionHostReferenceProvider() {
-                                       @NotNull
                                        @Override
-                                       public PsiReference[] getReferencesForInjectionHost(@NotNull UExpression uExpression,
-                                                                                           @NotNull PsiLanguageInjectionHost host,
-                                                                                           @NotNull ProcessingContext context) {
+                                       public PsiReference @NotNull [] getReferencesForInjectionHost(@NotNull UExpression uExpression,
+                                                                                                     @NotNull PsiLanguageInjectionHost host,
+                                                                                                     @NotNull ProcessingContext context) {
                                          return new PsiReference[]{new RegistryKeyIdReference(host)};
                                        }
                                      }, PsiReferenceRegistrar.DEFAULT_PRIORITY);
@@ -68,8 +67,7 @@ class RegistryKeyIdReferenceContributor extends PsiReferenceContributor {
     }
 
     @Override
-    protected GenericAttributeValue<String> getNameElement(Extension extension) {
-      //noinspection unchecked
+    protected GenericAttributeValue<?> getNameElement(Extension extension) {
       return getAttribute(extension, "key");
     }
 
@@ -87,15 +85,14 @@ class RegistryKeyIdReferenceContributor extends PsiReferenceContributor {
       return super.resolve();
     }
 
-    @NotNull
     @Override
-    public Object[] getVariants() {
+    public Object @NotNull [] getVariants() {
       final PropertiesFile registryProperties = getRegistryPropertiesFile();
       if (registryProperties == null) {
         return EMPTY_ARRAY;
       }
 
-      final List<LookupElement> variants = new SmartList<>();
+      final List<LookupElement> variants = Collections.synchronizedList(new SmartList<>());
       processCandidates(extension -> {
         final String key = getNameElement(extension).getStringValue();
         if (key == null || extension.getXmlElement() == null) return true;

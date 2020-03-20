@@ -5,7 +5,7 @@
       <option name="SELECTION_BACKGROUND" value="5974ab"/>
       <option name="CARET_ROW_COLOR" value="fffae3"/>
       <option name="METHOD_SEPARATORS_COLOR" value="c0c0c0"/>
-      <option name="WHITESPACES" value="c5c5c5"/>
+      <option name="WHITESPACES" value="adadad"/>
       <option name="INDENT_GUIDE" value="e6e6e6"/>
       <option name="GUTTER_BACKGROUND" value="f0f0f0" />
       <option name="NOTIFICATION_BACKGROUND" value="fff8d1" />
@@ -23,6 +23,9 @@
       <option name="READONLY_FRAGMENT_BACKGROUND" value="cfe7ff"/>
       <option name="VISUAL_INDENT_GUIDE" value="eeeeee"/>
       <option name="FOLDED_TEXT_BORDER_COLOR" value="add9c7"/>
+      <option name="RECENT_LOCATIONS_SELECTION" value="e9eef5"/>
+      <option name="DOC_COMMENT_GUIDE" value="e8e8e8"/>
+      <option name="DOC_COMMENT_LINK" value="4585be"/>
 
       <option name="ADDED_LINES_COLOR" value="c9dec1" deuteranopia="99ca90" protanopia="99ca90"/>
       <option name="MODIFIED_LINES_COLOR" value="c3d6e8" deuteranopia="9ca9bf" protanopia="9ca9bf"/>
@@ -33,6 +36,7 @@
       <option name="IGNORED_DELETED_LINES_BORDER_COLOR" value="9f9f9f"/>
       <option name="CONSOLE_BACKGROUND_KEY" value="ffffff" />
       <option name="DIFF_SEPARATORS_BACKGROUND" value="D9D9D9"/>
+      <option name="STRING_CONTENT_INDENT_GUIDE" value="afd5b5"/>
 
       <option name="FILESTATUS_ADDED" value="0a7700"/>
       <option name="FILESTATUS_COPIED" value="0a7700"/>
@@ -88,10 +92,26 @@
       <option name="ScrollBar.Mac.Transparent.hoverTrackColor" value="8080801A"/>
       <option name="ScrollBar.Mac.Transparent.hoverThumbColor" value="00000080"/>
       <option name="ScrollBar.Mac.Transparent.hoverThumbBorderColor" value="00000080"/>
+      <option name="ActionButton.hoverBackground" value="dfdfdf"/>
+      <option name="ActionButton.pressedBackground" value="cfcfcf"/>
+      <option name="ActionButton.iconTextForeground" value="787878"/>
     </colors>
 
     <attributes>
-
+      <option name="DEBUGGER_SMART_STEP_INTO_TARGET">
+        <value>
+          <option name="BACKGROUND" value="E2D3F0" />
+          <option name="FOREGROUND" value="000" />
+        </value>
+      </option>
+      <option name="DEBUGGER_SMART_STEP_INTO_SELECTION">
+        <value>
+          <option name="BACKGROUND" value="F2B3FF" />
+          <option name="FOREGROUND" value="000" />
+          <option name="EFFECT_COLOR" value="CC29CC"/>
+          <option name="EFFECT_TYPE" value="0"/>
+        </value>
+      </option>
       <option name="DEBUGGER_INLINED_VALUES">
         <value>
           <option name="FOREGROUND" value="868686" />
@@ -1166,6 +1186,30 @@
              <option name="FOREGROUND" value="585858"/>
            </value>
         </option>
+        <option name="CODE_LENS_BORDER_COLOR">
+          <value>
+            <option name="EFFECT_COLOR" value="595959"/>
+            <option name="EFFECT_TYPE" value="0"/>
+          </value>
+        </option>
+      <option name="XPATH.KEYWORD">
+        <value>
+          <option name="FOREGROUND" value="0000FF" />
+          <option name="FONT_TYPE" value="1"/>
+        </value>
+      </option>
+      <option name="XPATH.XPATH_NAME">
+        <value>
+          <option name="FOREGROUND" value="80" />
+          <option name="FONT_TYPE" value="1"/>
+        </value>
+      </option>
+      <option name="XPATH.FUNCTION">
+        <value>
+          <option name="FOREGROUND" value="0000FF" />
+          <option name="FONT_TYPE" value="1"/>
+        </value>
+      </option>
     </attributes>
 
   </scheme>
@@ -1218,10 +1262,14 @@
       <option name="SELECTION_BACKGROUND" value="214283" />
       <option name="SELECTION_FOREGROUND" value="" />
       <option name="TEARLINE_COLOR" value="555555" />
-      <option name="WHITESPACES" value="505050" />
+      <option name="WHITESPACES" value="606060" />
       <option name="DIFF_SEPARATORS_BACKGROUND" value="212121"/>
+      <option name="STRING_CONTENT_INDENT_GUIDE" value="4a5f3e"/>
       <option name="VISUAL_INDENT_GUIDE" value="3c3c3c"/>
       <option name="FOLDED_TEXT_BORDER_COLOR" value="43474a"/>
+      <option name="RECENT_LOCATIONS_SELECTION" value="383838"/>
+      <option name="DOC_COMMENT_GUIDE" value="3b4b38"/>
+      <option name="DOC_COMMENT_LINK" value="4f86cd"/>
 
       <option name="VCS_ANNOTATIONS_COLOR_1" value="464c43"/>
       <option name="VCS_ANNOTATIONS_COLOR_2" value="444342"/>
@@ -1254,6 +1302,9 @@
       <option name="ScrollBar.Mac.Transparent.hoverTrackColor" value="8080801A"/>
       <option name="ScrollBar.Mac.Transparent.hoverThumbColor" value="8080808C"/>
       <option name="ScrollBar.Mac.Transparent.hoverThumbBorderColor" value="2626268C"/>
+      <option name="ActionButton.hoverBackground" value="4c5052"/>
+      <option name="ActionButton.pressedBackground" value="5c6164"/>
+      <option name="ActionButton.iconTextForeground" value="8c8c8c"/>
     </colors>
     <attributes>
       <option name="ANNOTATION_ATTRIBUTE_NAME_ATTRIBUTES">
@@ -1418,16 +1469,6 @@
           <option name="FONT_TYPE" value="1" />
         </value>
       </option>
-      <option name="CSS.KEYWORD">
-        <value>
-          <option name="FOREGROUND" value="cc7832" deuteranopia="597cc2" protanopia="597cc2"/>
-        </value>
-      </option>
-      <option name="CSS.TAG_NAME">
-        <value>
-          <option name="FOREGROUND" value="cc7832" deuteranopia="597cc2" protanopia="597cc2"/>
-        </value>
-      </option>
       <option name="CSS.URL">
         <value>
           <option name="FOREGROUND" value="287bde" />
@@ -1473,6 +1514,18 @@
       </option>
       <option name="Class">
         <value />
+      </option>
+      <option name="DEBUGGER_SMART_STEP_INTO_TARGET">
+        <value>
+          <option name="BACKGROUND" value="53385E" />
+        </value>
+      </option>
+      <option name="DEBUGGER_SMART_STEP_INTO_SELECTION">
+        <value>
+          <option name="BACKGROUND" value="824991" />
+          <option name="EFFECT_COLOR" value="C76DC7"/>
+          <option name="EFFECT_TYPE" value="0"/>
+        </value>
       </option>
       <option name="DEBUGGER_INLINED_VALUES">
         <value>
@@ -1883,16 +1936,6 @@
           <option name="BACKGROUND" value="364135" deuteranopia="1f2433" protanopia="1f2433"/>
         </value>
       </option>
-      <option name="JAVA_KEYWORD">
-        <value>
-          <option name="FOREGROUND" value="cc7832" deuteranopia="597cc2" protanopia="597cc2"/>
-        </value>
-      </option>
-      <option name="JAVA_VALID_STRING_ESCAPE">
-        <value>
-          <option name="FOREGROUND" value="cc7832" deuteranopia="597cc2" protanopia="597cc2"/>
-        </value>
-      </option>
       <option name="JSP_DIRECTIVE_NAME">
         <value>
           <option name="FOREGROUND" value="cc7832" deuteranopia="597cc2" protanopia="597cc2"/>
@@ -1970,9 +2013,7 @@
       </option>
       <option name="NOT_USED_ELEMENT_ATTRIBUTES">
         <value>
-          <option name="FOREGROUND" value="808080" />
-          <option name="EFFECT_COLOR" value="808080" />
-          <option name="EFFECT_TYPE" value="2" />
+          <option name="FOREGROUND" value="72737A" />
         </value>
       </option>
       <option name="PROPERTIES.INVALID_STRING_ESCAPE">
@@ -2295,13 +2336,17 @@
       </option>
       <option name="XPATH.KEYWORD">
         <value>
-          <option name="FOREGROUND" value="cc7832" deuteranopia="597cc2" protanopia="597cc2"/>
-          <option name="FONT_TYPE" value="1" />
+          <option name="FOREGROUND" value="e8bf6a" deuteranopia="597cc2" protanopia="597cc2"/>
         </value>
       </option>
       <option name="XPATH.XPATH_NAME">
         <value>
-          <option name="FOREGROUND" value="da4939" />
+          <option name="FOREGROUND" value="cc7832" />
+        </value>
+      </option>
+      <option name="XPATH.FUNCTION">
+        <value>
+          <option name="FOREGROUND" value="e8bf6a" deuteranopia="597cc2" protanopia="597cc2"/>
         </value>
       </option>
       <option name="XPATH.XPATH_VARIABLE">
@@ -2375,6 +2420,12 @@
          <value>
            <option name="FOREGROUND" value="bbbbbb"/>
          </value>
+      </option>
+      <option name="CODE_LENS_BORDER_COLOR">
+        <value>
+          <option name="EFFECT_COLOR" value="999999"/>
+          <option name="EFFECT_TYPE" value="0"/>
+        </value>
       </option>
     </attributes>
   </scheme>

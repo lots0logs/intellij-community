@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution;
 
 import com.intellij.execution.configurations.GeneralCommandLine;
@@ -16,6 +16,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.rules.TempDirectory;
 import com.intellij.util.containers.ContainerUtil;
+import org.assertj.core.api.Assertions;
 import org.intellij.lang.annotations.MagicConstant;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -189,7 +190,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void passingArgumentsToJavaAppThroughWinShell() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     Pair<GeneralCommandLine, File> command = makeHelperCommand(null, CommandTestHelper.ARG, ARGUMENTS);
     String javaPath = command.first.getExePath();
@@ -201,7 +202,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void passingArgumentsToJavaAppThroughNestedWinShell() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     Pair<GeneralCommandLine, File> command = makeHelperCommand(null, CommandTestHelper.ARG, ARGUMENTS);
     String javaPath = command.first.getExePath();
@@ -216,7 +217,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void passingArgumentsToJavaAppThroughCmdScriptAndWinShell() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     Pair<GeneralCommandLine, File> command = makeHelperCommand(null, CommandTestHelper.ARG);
     File script = ExecUtil.createTempExecutableScript("my script ", ".cmd", "@" + command.first.getCommandLineString() + " %*");
@@ -233,7 +234,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void passingArgumentsToJavaAppThroughCmdScriptAndNestedWinShell() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     Pair<GeneralCommandLine, File> command = makeHelperCommand(null, CommandTestHelper.ARG);
     File script = ExecUtil.createTempExecutableScript("my script ", ".cmd", "@" + command.first.getCommandLineString() + " %*");
@@ -253,7 +254,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void passingArgumentsToEchoThroughWinShell() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     for (String argument : ARGUMENTS) {
       if (argument.trim().isEmpty()) continue;  // would report "ECHO is on"
@@ -265,7 +266,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void passingArgumentsToCygwinPrintf() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     File cygwinPrintf = FileUtil.findFirstThatExist("C:\\cygwin\\bin\\printf.exe", "C:\\cygwin64\\bin\\printf.exe");
     assumeTrue("Cygwin not found", cygwinPrintf != null);
@@ -293,7 +294,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void winShellCommand() {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     String string = "http://localhost/wtf?a=b&c=d";
     String echo = ExecUtil.execAndReadLine(createCommandLine(ExecUtil.getWindowsShellName(), "/c", "echo", string));
@@ -302,7 +303,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void winShellScriptQuoting() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     String scriptPrefix = "my_script";
     for (String scriptExt : new String[]{".cmd", ".bat"}) {
@@ -322,7 +323,7 @@ public class GeneralCommandLineTest {
 
   @Test(timeout = 60000)
   public void winShellQuotingWithExtraSwitch() throws Exception {
-    assumeTrue("Windows-only test", SystemInfo.isWindows);
+    IoTestUtil.assumeWindows();
 
     String param = "a&b";
     GeneralCommandLine commandLine = createCommandLine(ExecUtil.getWindowsShellName(), "/D", "/C", "echo", param);
@@ -416,15 +417,15 @@ public class GeneralCommandLineTest {
   public void deleteTempFileWhenProcessCreationFails() throws Exception {
     File temp = tempDir.newFile("temp");
     FileUtil.writeToFile(temp, "something");
-    assertTrue(temp.exists());
+    Assertions.assertThat(temp).exists();
     GeneralCommandLine cmd = new GeneralCommandLine("there_should_not_be_such_command");
     OSProcessHandler.deleteFileOnTermination(cmd, temp);
     try {
       ExecUtil.execAndGetOutput(cmd);
-      fail("Process creation should fail");
+      throw new AssertionError("Process creation should fail");
     }
     catch (ProcessNotCreatedException ignored) { }
-    assertFalse(temp.exists());
+    Assertions.assertThat(temp).doesNotExist();
   }
 
   @NotNull

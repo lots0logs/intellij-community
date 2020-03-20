@@ -62,14 +62,13 @@ public interface InspectionProfile extends Comparable {
    * @param toolConsumer the callback that receives the tool.
    */
   <T extends InspectionProfileEntry>
-  void modifyToolSettings(@NotNull Key<T> shortNameKey, @NotNull PsiElement psiElement, @NotNull Consumer<T> toolConsumer);
+  void modifyToolSettings(@NotNull Key<T> shortNameKey, @NotNull PsiElement psiElement, @NotNull Consumer<? super T> toolConsumer);
 
   /**
    * @param element context element
    * @return all (both enabled and disabled) tools
    */
-  @NotNull
-  InspectionToolWrapper[] getInspectionTools(@Nullable PsiElement element);
+  InspectionToolWrapper @NotNull [] getInspectionTools(@Nullable PsiElement element);
 
   boolean isToolEnabled(@Nullable HighlightDisplayKey key, @Nullable PsiElement element);
 

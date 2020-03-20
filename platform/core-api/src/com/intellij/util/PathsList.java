@@ -140,7 +140,7 @@ public class PathsList  {
     addAllFiles(Arrays.asList(files));
   }
 
-  public void addAllFiles(List<File> files) {
+  public void addAllFiles(List<? extends File> files) {
     for (File file : files) {
       add(file);
     }
@@ -150,7 +150,11 @@ public class PathsList  {
     add(FileUtil.toCanonicalPath(file.getAbsolutePath()).replace('/', File.separatorChar));
   }
 
-  public void addVirtualFiles(Collection<VirtualFile> files) {
+  public void addFirst(File file) {
+    addFirst(FileUtil.toCanonicalPath(file.getAbsolutePath()).replace('/', File.separatorChar));
+  }
+
+  public void addVirtualFiles(Collection<? extends VirtualFile> files) {
     for (VirtualFile file : files) {
       add(file);
     }

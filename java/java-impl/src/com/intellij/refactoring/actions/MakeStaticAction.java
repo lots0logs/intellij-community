@@ -23,14 +23,14 @@ import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.makeStatic.MakeStaticHandler;
 import org.jetbrains.annotations.NotNull;
 
-public class MakeStaticAction extends BaseRefactoringAction {
+public class MakeStaticAction extends BaseJavaRefactoringAction {
   @Override
   protected boolean isAvailableInEditorOnly() {
     return false;
   }
 
   @Override
-  protected boolean isEnabledOnElements(@NotNull PsiElement[] elements) {
+  protected boolean isEnabledOnElements(PsiElement @NotNull [] elements) {
     return (elements.length == 1) && (elements[0] instanceof PsiMethod) && !((PsiMethod)elements[0]).isConstructor();
   }
 

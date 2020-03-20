@@ -1,20 +1,13 @@
 <idea-plugin>
-  <project-components>
-    <component>
-      <interface-class>com.intellij.xdebugger.XDebuggerManager</interface-class>
-      <implementation-class>com.intellij.xdebugger.impl.XDebuggerManagerImpl</implementation-class>
-    </component>
-  </project-components>
-
   <extensionPoints>
-    <extensionPoint name="xdebugger.settings" interface="com.intellij.xdebugger.settings.XDebuggerSettings"/>
-    <extensionPoint name="xdebugger.breakpointType" interface="com.intellij.xdebugger.breakpoints.XBreakpointType"/>
-    <extensionPoint name="xdebugger.debuggerSupport" interface="com.intellij.xdebugger.impl.DebuggerSupport"/>
-    <extensionPoint name="xdebugger.configurableProvider" interface="com.intellij.xdebugger.settings.DebuggerConfigurableProvider"/>
+    <extensionPoint name="xdebugger.settings" interface="com.intellij.xdebugger.settings.XDebuggerSettings" dynamic="true"/>
+    <extensionPoint name="xdebugger.breakpointType" interface="com.intellij.xdebugger.breakpoints.XBreakpointType" dynamic="true"/>
+    <extensionPoint name="xdebugger.debuggerSupport" interface="com.intellij.xdebugger.impl.DebuggerSupport" dynamic="true"/>
+    <extensionPoint name="xdebugger.configurableProvider" interface="com.intellij.xdebugger.settings.DebuggerConfigurableProvider" dynamic="true"/>
 
-    <extensionPoint name="xdebugger.attachHostProvider" interface="com.intellij.xdebugger.attach.XAttachHostProvider"/>
-    <extensionPoint name="xdebugger.attachDebuggerProvider" interface="com.intellij.xdebugger.attach.XAttachDebuggerProvider"/>
-    <extensionPoint name="xdebugger.localAttachDebuggerProvider" interface="com.intellij.xdebugger.attach.XLocalAttachDebuggerProvider"/>
+    <extensionPoint name="xdebugger.attachHostProvider" interface="com.intellij.xdebugger.attach.XAttachHostProvider" dynamic="true"/>
+    <extensionPoint name="xdebugger.attachDebuggerProvider" interface="com.intellij.xdebugger.attach.XAttachDebuggerProvider" dynamic="true"/>
+    <extensionPoint name="xdebugger.localAttachDebuggerProvider" interface="com.intellij.xdebugger.attach.XLocalAttachDebuggerProvider" dynamic="true"/>
   </extensionPoints>
 
   <extensions defaultExtensionNs="com.intellij">
@@ -26,13 +19,14 @@
     <applicationService serviceInterface="com.intellij.xdebugger.XDebuggerUtil"
                         serviceImplementation="com.intellij.xdebugger.impl.XDebuggerUtilImpl"/>
 
+    <projectService serviceInterface="com.intellij.xdebugger.XDebuggerManager"
+                    serviceImplementation="com.intellij.xdebugger.impl.XDebuggerManagerImpl"
+                    preload="notLightEdit"/>
     <projectService serviceImplementation="com.intellij.xdebugger.impl.evaluate.quick.common.ValueLookupManager"/>
 
-    <projectService serviceInterface="com.intellij.xdebugger.impl.breakpoints.ui.BreakpointsDialogFactory"
-                    serviceImplementation="com.intellij.xdebugger.impl.breakpoints.ui.BreakpointsDialogFactory"/>
+    <projectService serviceImplementation="com.intellij.xdebugger.impl.breakpoints.ui.BreakpointsDialogFactory"/>
 
-    <projectService serviceInterface="com.intellij.xdebugger.impl.XDebuggerHistoryManager"
-                    serviceImplementation="com.intellij.xdebugger.impl.XDebuggerHistoryManager"/>
+    <projectService serviceImplementation="com.intellij.xdebugger.impl.XDebuggerHistoryManager"/>
 
     <applicationConfigurable groupId="build" dynamic="true" groupWeight="120" key="debugger.configurable.display.name" bundle="messages.XDebuggerBundle"
                              id="project.propDebugger" provider="com.intellij.xdebugger.impl.settings.DebuggerConfigurableProvider"/>
@@ -49,8 +43,9 @@
 
     <virtualFileSystem key="lazyAttachVfs" implementationClass="com.intellij.xdebugger.attach.fs.LazyAttachVirtualFS"/>
 
+    <statistics.validation.customWhiteListRule implementation="com.intellij.xdebugger.impl.breakpoints.BreakpointsUtilValidator"/>
     <statistics.projectUsagesCollector implementation="com.intellij.xdebugger.impl.breakpoints.BreakpointsStatisticsCollector"/>
-    <statistics.counterUsagesCollector groupId="debugger.breakpoints.usage" version="1"/>
+    <statistics.counterUsagesCollector groupId="debugger.breakpoints.usage" version="2"/>
 
     <editorActionHandler action="EditorUp" implementationClass="com.intellij.xdebugger.impl.actions.handlers.XDebuggerSmartStepIntoHandler$UpHandler"
                          id="smart-step-into-up"/>
@@ -65,15 +60,30 @@
     <editorActionHandler action="NextParameter" implementationClass="com.intellij.xdebugger.impl.actions.handlers.XDebuggerSmartStepIntoHandler$RightHandler"
                          id="smart-step-into-next"/>
     <editorActionHandler action="EditorEnter" implementationClass="com.intellij.xdebugger.impl.actions.handlers.XDebuggerSmartStepIntoHandler$EnterHandler"
-                         id="smart-step-into-enter"/>
+                         order="first" id="smart-step-into-enter"/>
     <editorActionHandler action="EditorEscape" implementationClass="com.intellij.xdebugger.impl.actions.handlers.XDebuggerSmartStepIntoHandler$EscHandler"
                          order="before hide-search" id="smart-step-into-escape"/>
+    <applicationService serviceImplementation="com.intellij.xdebugger.memory.component.MemoryViewManager"/>
+
+    <projectService serviceImplementation="com.intellij.xdebugger.memory.component.InstancesTracker" />
+
+    <titleInfoProvider implementation="com.intellij.xdebugger.impl.ui.DebuggerTitleInfoProvider"/>
   </extensions>
-  
+
   <actions>
     <group id="XDebugger.AttachGroup">
       <action id="XDebugger.AttachToProcess" class="com.intellij.xdebugger.impl.actions.AttachToProcessAction"/>
       <add-to-group group-id="RunMenu" anchor="before" relative-to-action="editRunConfigurations"/>
     </group>
+
+    <group id="MemoryView.SettingsPopupActionGroup">
+      <action class="com.intellij.xdebugger.memory.action.ShowClassesWithDiffAction" id="MemoryView.ShowOnlyWithDiff"/>
+      <separator/>
+      <action class="com.intellij.xdebugger.memory.action.SwitchUpdateModeAction" id="MemoryView.SwitchUpdateMode"/>
+    </group>
+
+    <action id="XDebugger.PinToTop" class="com.intellij.xdebugger.impl.pinned.items.actions.XDebuggerPinToTopAction">
+      <add-to-group group-id="XDebugger.ValueGroup" anchor="last"/>
+    </action>
   </actions>
 </idea-plugin>

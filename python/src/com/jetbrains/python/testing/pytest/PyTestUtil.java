@@ -15,11 +15,13 @@
  */
 package com.jetbrains.python.testing.pytest;
 
+import com.intellij.openapi.util.text.StringUtil;
 import com.jetbrains.python.psi.PyClass;
 import com.jetbrains.python.psi.PyFunction;
 import com.jetbrains.python.psi.types.PyClassLikeType;
 import com.jetbrains.python.psi.types.TypeEvalContext;
 import com.jetbrains.python.testing.PythonUnitTestUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -27,6 +29,7 @@ import org.jetbrains.annotations.Nullable;
  *
  * @deprecated use {@link PythonUnitTestUtil} will be removed in 2018
  */
+@ApiStatus.ScheduledForRemoval(inVersion = "2018")
 @Deprecated
 public class PyTestUtil {
 
@@ -50,7 +53,7 @@ public class PyTestUtil {
     }
     final String className = pyClass.getName();
     if (className == null) return false;
-    final String name = className.toLowerCase();
+    final String name = StringUtil.toLowerCase(className);
     if (name.startsWith("test")) {
       for (PyFunction cls : pyClass.getMethods()) {
         if (isPyTestFunction(cls)) {

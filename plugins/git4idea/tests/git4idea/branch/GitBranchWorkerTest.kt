@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.branch
 
 import com.intellij.dvcs.repo.Repository
@@ -14,7 +14,6 @@ import com.intellij.openapi.vcs.changes.ChangesUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.testFramework.runInEdtAndWait
 import com.intellij.util.LineSeparator
-import com.intellij.util.containers.ContainerUtil
 import git4idea.GitCommit
 import git4idea.branch.GitBranchUiHandler.DeleteRemoteBranchDecision
 import git4idea.branch.GitBranchUtil.getTrackInfoForBranch
@@ -28,7 +27,6 @@ import git4idea.repo.GitRepository
 import git4idea.test.*
 import git4idea.test.GitScenarios.*
 import java.io.File
-import java.util.*
 
 class GitBranchWorkerTest : GitPlatformTest() {
 
@@ -247,7 +245,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
   private fun `test untracked files overwritten by in first repo`(operation: String, untrackedFiles: Int) {
     branchWithCommit(myRepositories, "feature")
 
-    val files = ContainerUtil.newArrayList<String>()
+    val files = mutableListOf<String>()
     (0 until untrackedFiles).mapTo(files) { "untracked$it.txt" }
     untrackedFileOverwrittenBy(first, "feature", files)
 
@@ -275,10 +273,10 @@ class GitBranchWorkerTest : GitPlatformTest() {
     branchWithCommit(myRepositories, "feature")
 
 
-    val untracked = Arrays.asList<String>("untracked.txt")
+    val untracked = listOf("untracked.txt")
     untrackedFileOverwrittenBy(second, "feature", untracked)
 
-    val untrackedPaths = ContainerUtil.newArrayList<String>()
+    val untrackedPaths = mutableListOf<String>()
     checkoutOrMerge(operation, "feature", object : TestUiHandler() {
       override fun showUntrackedFilesDialogWithRollback(operationName: String,
                                                         rollbackProposal: String,
@@ -289,7 +287,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
       }
     })
 
-    assertTrue("Untracked files dialog was not shown", !untrackedPaths.isEmpty())
+    assertTrue("Untracked files dialog was not shown", untrackedPaths.isNotEmpty())
     assertEquals("Incorrect set of untracked files was shown in the dialog", untracked, untrackedPaths)
   }
 
@@ -309,7 +307,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
     val repoWithLocalChangesProblem = first
     val expectedChanges = prepareLocalChangesOverwrittenBy(repoWithLocalChangesProblem, numFiles)
 
-    val actualChanges = ContainerUtil.newArrayList<Change>()
+    val actualChanges = mutableListOf<Change>()
     checkoutOrMerge(operation, "feature", object : TestUiHandler() {
       override fun showSmartOperationDialog(project: Project,
                                             changes: List<Change>,
@@ -317,7 +315,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
                                             operation: String,
                                             forceButton: String?): GitSmartOperationDialog.Choice {
         actualChanges.addAll(changes)
-        return GitSmartOperationDialog.Choice.CANCEL
+        return CANCEL
       }
     })
 
@@ -362,7 +360,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
   }
 
   private fun prepareLocalChangesOverwrittenBy(repository: GitRepository, numFiles: Int = 1): List<String> {
-    val localChanges = ContainerUtil.newArrayList<String>()
+    val localChanges = mutableListOf<String>()
     (0 until numFiles).mapTo(localChanges) { String.format("local%d.txt", it) }
     localChangesOverwrittenByWithoutConflict(repository, "feature", localChanges)
     updateChangeListManager()
@@ -415,7 +413,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
                                             forceButton: String?): GitSmartOperationDialog.Choice {
         smartOperationDialogTimes++
         filesInDialog.addAll(ChangesUtil.getPaths(changes).map { it.path })
-        return GitSmartOperationDialog.Choice.SMART
+        return SMART
       }
     })
 
@@ -431,7 +429,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
                                             changes: List<Change>,
                                             paths: Collection<String>,
                                             operation: String,
-                                            forceButton: String?) = GitSmartOperationDialog.Choice.CANCEL
+                                            forceButton: String?) = CANCEL
     })
 
     assertNull("Notification was unexpectedly shown:" + vcsNotifier.lastNotification, vcsNotifier.lastNotification)
@@ -695,7 +693,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
     git("branch $todelete")
     git("push -u origin todelete")
 
-    GitSharedSettings.getInstance(project).setForcePushProhibitedPatters(listOf("todelete"))
+    GitSharedSettings.getInstance(project).forcePushProhibitedPatterns = listOf("todelete")
 
     first.deleteBranch(todelete)
 
@@ -835,7 +833,7 @@ class GitBranchWorkerTest : GitPlatformTest() {
 
     deleteRemoteBranch("origin/feature", DeleteRemoteBranchDecision.DELETE_WITH_TRACKING)
 
-    assertSuccessfulNotification("Deleted remote branch origin/feature")
+    assertSuccessfulNotification("Deleted remote branch origin/feature", "Also deleted local branch: feature")
     myRepositories.forEach { `assert remote branch deleted`(it, "origin/feature") }
     myRepositories.forEach { assertBranchDeleted(it, "feature") }
   }
@@ -845,9 +843,9 @@ class GitBranchWorkerTest : GitPlatformTest() {
     last.git("checkout feature")
 
     GitBranchWorker(project, git, object : TestUiHandler() {
-      override fun confirmRemoteBranchDeletion(branchName: String,
-                                               trackingBranches: MutableCollection<String>,
-                                               repositories: MutableCollection<GitRepository>): DeleteRemoteBranchDecision {
+      override fun confirmRemoteBranchDeletion(branchNames: List<String>,
+                                               trackingBranches: Collection<String>,
+                                               repositories: Collection<GitRepository>): DeleteRemoteBranchDecision {
         assertEmpty("No tracking branches should be proposed for deletion", trackingBranches)
         return DeleteRemoteBranchDecision.DELETE
       }
@@ -870,7 +868,12 @@ class GitBranchWorkerTest : GitPlatformTest() {
   }
 
   private fun `assert remote branch deleted`(repository: GitRepository, name: String) {
-    assertNull("Branch should be deleted", repository.branches.findBranchByName(name))
+    val branch = repository.branches.findBranchByName(name)
+    if (branch != null) {
+      assertNull("Branch $name should be deleted in $repository but was found in the repo info." +
+                 "native git branch list: \n${git("branch --list --all")}", branch)
+
+    }
   }
 
   private fun assertDetachedState(reference: String) {
@@ -943,11 +946,11 @@ class GitBranchWorkerTest : GitPlatformTest() {
     }
   }
 
-  private fun deleteRemoteBranch(branchName: String, decision: GitBranchUiHandler.DeleteRemoteBranchDecision) {
+  private fun deleteRemoteBranch(branchName: String, decision: DeleteRemoteBranchDecision) {
     GitBranchWorker(project, git, object : TestUiHandler() {
-      override fun confirmRemoteBranchDeletion(branchName: String,
-                                               trackingBranches: MutableCollection<String>,
-                                               repositories: MutableCollection<GitRepository>): DeleteRemoteBranchDecision {
+      override fun confirmRemoteBranchDeletion(branchNames: List<String>,
+                                               trackingBranches: Collection<String>,
+                                               repositories: Collection<GitRepository>): DeleteRemoteBranchDecision {
         return decision
       }
     })
@@ -1007,10 +1010,10 @@ class GitBranchWorkerTest : GitPlatformTest() {
       throw UnsupportedOperationException("$operationName\n$rollbackProposal\n$root\n$relativePaths")
     }
 
-    override fun confirmRemoteBranchDeletion(branchName: String,
-                                             trackingBranches: MutableCollection<String>,
-                                             repositories: MutableCollection<GitRepository>): DeleteRemoteBranchDecision {
-      throw UnsupportedOperationException("$branchName\n$trackingBranches\n$repositories")
+    override fun confirmRemoteBranchDeletion(branchNames: List<String>,
+                                             trackingBranches: Collection<String>,
+                                             repositories: Collection<GitRepository>): DeleteRemoteBranchDecision {
+      throw UnsupportedOperationException("$branchNames\n$trackingBranches\n$repositories")
     }
   }
 

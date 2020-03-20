@@ -4,10 +4,10 @@ package com.intellij.codeInspection.reference;
 import com.intellij.codeInsight.ExternalAnnotationsManager;
 import com.intellij.codeInspection.BatchSuppressManager;
 import com.intellij.codeInspection.InspectionProfileEntry;
-import com.intellij.codeInspection.InspectionsBundle;
 import com.intellij.codeInspection.SuppressionUtilCore;
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspectionBase;
 import com.intellij.codeInspection.ex.*;
+import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ProjectRootManager;
@@ -45,7 +45,7 @@ import java.util.stream.Stream;
 public class RefJavaManagerImpl extends RefJavaManager {
   private static final Condition<PsiElement> PROBLEM_ELEMENT_CONDITION =
     Conditions.or(Conditions.instanceOf(PsiFile.class, PsiJavaModule.class),
-                  Conditions.and(Conditions.notInstanceOf(PsiTypeParameter.class), psi -> {
+                  Conditions.and(Conditions.and(Conditions.notInstanceOf(PsiTypeParameter.class), Conditions.instanceOf(PsiNamedElement.class)), psi -> {
                     UDeclaration decl = UastContextKt.toUElement(psi, UDeclaration.class);
                     return decl != null && (decl instanceof UField || !(decl instanceof UVariable)) && (!(decl instanceof UClassInitializer));
                   }));
@@ -145,7 +145,7 @@ public class RefJavaManagerImpl extends RefJavaManager {
   private UnusedDeclarationInspectionBase getDeadCodeTool(PsiFile file) {
     GlobalInspectionContextBase contextBase = (GlobalInspectionContextBase)myRefManager.getContext();
     Tools tools = contextBase.getTools().get(UnusedDeclarationInspectionBase.SHORT_NAME);
-    InspectionToolWrapper toolWrapper;
+    InspectionToolWrapper<?,?> toolWrapper;
     if (tools != null) {
       toolWrapper = tools.getEnabledTool(file);
     }
@@ -166,7 +166,7 @@ public class RefJavaManagerImpl extends RefJavaManager {
   public RefPackage getDefaultPackage() {
     RefPackage defaultPackage = myCachedDefaultPackage;
     if (defaultPackage == null) {
-      myCachedDefaultPackage = defaultPackage = getPackage(InspectionsBundle.message("inspection.reference.default.package"));
+      myCachedDefaultPackage = defaultPackage = getPackage(JavaAnalysisBundle.message("inspection.reference.default.package"));
     }
     return defaultPackage;
   }
@@ -351,7 +351,7 @@ public class RefJavaManagerImpl extends RefJavaManager {
     if (projectIterator == null) {
       myProjectIterator = projectIterator = new UastVisitorAdapter(new MyJavaElementVisitor(), true) {
         @Override
-        public void visitElement(PsiElement element) {
+        public void visitElement(@NotNull PsiElement element) {
           super.visitElement(element);
           if (element instanceof PsiJavaModule) {
             visitJavaModule((PsiJavaModule)element);
@@ -386,7 +386,7 @@ public class RefJavaManagerImpl extends RefJavaManager {
     String packageName = RefJavaUtil.getInstance().getPackageName(refEntity);
     if (packageName != null) {
       final Element packageElement = new Element("package");
-      packageElement.addContent(packageName.isEmpty() ? InspectionsBundle.message("inspection.reference.default.package") : packageName);
+      packageElement.addContent(packageName.isEmpty() ? JavaAnalysisBundle.message("inspection.reference.default.package") : packageName);
       element.addContent(packageElement);
     }
   }
@@ -550,21 +550,19 @@ public class RefJavaManagerImpl extends RefJavaManager {
     //TODO support suppressions by comment tag in kotlin
     private void processComments(@NotNull UElement node) {
       for (UComment comment : node.getComments()) {
-        if (comment instanceof UComment) {
-          PsiElement psi = comment.getSourcePsi();
-          if (psi instanceof PsiDocComment) {
-            final PsiDocTag[] tags = ((PsiDocComment)psi).getTags();
-            for (PsiDocTag tag : tags) {
-              if (Comparing.strEqual(tag.getName(), SuppressionUtilCore.SUPPRESS_INSPECTIONS_TAG_NAME)) {
-                final PsiElement[] dataElements = tag.getDataElements();
-                if (dataElements.length > 0) {
-                  final PsiModifierListOwner listOwner = PsiTreeUtil.getParentOfType(psi, PsiModifierListOwner.class);
-                  if (listOwner != null) {
-                    final WritableRefElement element = (WritableRefElement)myRefManager.getReference(listOwner);
-                    if (element != null) {
-                      String suppression = StringUtil.join(dataElements, PsiElement::getText, ",");
-                      element.addSuppression(suppression);
-                    }
+        PsiElement psi = comment.getSourcePsi();
+        if (psi instanceof PsiDocComment) {
+          final PsiDocTag[] tags = ((PsiDocComment)psi).getTags();
+          for (PsiDocTag tag : tags) {
+            if (Comparing.strEqual(tag.getName(), SuppressionUtilCore.SUPPRESS_INSPECTIONS_TAG_NAME)) {
+              final PsiElement[] dataElements = tag.getDataElements();
+              if (dataElements.length > 0) {
+                final PsiModifierListOwner listOwner = PsiTreeUtil.getParentOfType(psi, PsiModifierListOwner.class);
+                if (listOwner != null) {
+                  final WritableRefElement element = (WritableRefElement)myRefManager.getReference(listOwner);
+                  if (element != null) {
+                    String suppression = StringUtil.join(dataElements, PsiElement::getText, ",");
+                    element.addSuppression(suppression);
                   }
                 }
               }

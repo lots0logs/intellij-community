@@ -35,6 +35,7 @@ import com.intellij.util.textCompletion.TextFieldWithCompletion;
 import com.intellij.util.textCompletion.ValuesCompletionProvider.ValuesCompletionProviderDumbAware;
 import com.intellij.util.ui.JBDimension;
 import com.intellij.util.ui.JBUI;
+import com.intellij.vcs.log.VcsLogBundle;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,25 +46,24 @@ import java.util.Collection;
 import java.util.List;
 
 class MultilinePopupBuilder {
-  private static final char[] SEPARATORS = {'|', '\n'};
-  private static final String COMPLETION_ADVERTISEMENT = "Select one or more values separated with | or new lines";
+  static final char[] SEPARATORS = {'|', '\n'};
 
   @NotNull private final EditorTextField myTextField;
 
   MultilinePopupBuilder(@NotNull Project project,
                         @NotNull final Collection<String> values,
                         @NotNull String initialValue,
-                        boolean supportsNegativeValues) {
-    myTextField = createTextField(project, values, supportsNegativeValues, initialValue);
+                        @Nullable CompletionPrefixProvider completionPrefixProvider) {
+    myTextField = createTextField(project, values, completionPrefixProvider, initialValue);
   }
 
   @NotNull
   private static EditorTextField createTextField(@NotNull Project project,
                                                  Collection<String> values,
-                                                 boolean supportsNegativeValues,
+                                                 @Nullable CompletionPrefixProvider completionPrefixProvider,
                                                  @NotNull String initialValue) {
     TextFieldWithCompletion textField =
-      new TextFieldWithCompletion(project, new MyCompletionProvider(values, supportsNegativeValues), initialValue, false, true, false) {
+      new TextFieldWithCompletion(project, new MyCompletionProvider(values, completionPrefixProvider), initialValue, false, true, false) {
         @Override
         protected EditorEx createEditor() {
           EditorEx editor = super.createEditor();
@@ -82,7 +82,8 @@ class MultilinePopupBuilder {
     ComponentPopupBuilder builder = JBPopupFactory.getInstance().createComponentPopupBuilder(panel, myTextField)
       .setCancelOnClickOutside(true)
       .setAdText(
-        COMPLETION_ADVERTISEMENT + ", use " + KeymapUtil.getShortcutsText(CommonShortcuts.CTRL_ENTER.getShortcuts()) + " to finish")
+        VcsLogBundle.message("vcs.log.filter.popup.advertisement.with.key.text",
+                             KeymapUtil.getShortcutsText(CommonShortcuts.CTRL_ENTER.getShortcuts())))
       .setRequestFocus(true)
       .setResizable(true)
       .setMayBeParent(true);
@@ -108,26 +109,31 @@ class MultilinePopupBuilder {
     });
   }
 
-  private static class MyCompletionProvider extends ValuesCompletionProviderDumbAware<String> {
-    private final boolean mySupportsNegativeValues;
+  interface CompletionPrefixProvider {
+    String getPrefix(@NotNull String text, int offset);
+  }
 
-    MyCompletionProvider(@NotNull Collection<String> values, boolean supportsNegativeValues) {
+  private static class MyCompletionProvider extends ValuesCompletionProviderDumbAware<String> {
+    @Nullable private final CompletionPrefixProvider myCompletionPrefixProvider;
+
+    MyCompletionProvider(@NotNull Collection<String> values, @Nullable CompletionPrefixProvider completionPrefixProvider) {
       super(new DefaultTextCompletionValueDescriptor.StringValueDescriptor(), Chars.asList(SEPARATORS), values, false);
-      mySupportsNegativeValues = supportsNegativeValues;
+      myCompletionPrefixProvider = completionPrefixProvider;
     }
 
     @Nullable
     @Override
     public String getPrefix(@NotNull String text, int offset) {
-      String prefix = super.getPrefix(text, offset);
-      if (mySupportsNegativeValues && prefix != null) return StringUtil.trimLeading(prefix, '-');
-      return prefix;
+      if (myCompletionPrefixProvider != null) {
+        return myCompletionPrefixProvider.getPrefix(text, offset);
+      }
+      return super.getPrefix(text, offset);
     }
 
     @Nullable
     @Override
     public String getAdvertisement() {
-      return COMPLETION_ADVERTISEMENT;
+      return VcsLogBundle.message("vcs.log.filter.popup.advertisement.text");
     }
   }
 }

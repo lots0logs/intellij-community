@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.engine.evaluation.expression;
 
 import com.intellij.debugger.engine.evaluation.EvaluateException;
@@ -8,9 +8,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
- * @author egor
- */
 public class SwitchStatementEvaluator implements Evaluator {
   private final Evaluator myExpressionEvaluator;
   private final Evaluator[] myBodyEvaluators;
@@ -51,10 +48,10 @@ public class SwitchStatementEvaluator implements Evaluator {
   }
 
   static class SwitchCaseEvaluator implements Evaluator {
-    private final List<Evaluator> myEvaluators;
+    private final List<? extends Evaluator> myEvaluators;
     private final boolean myDefaultCase;
 
-    SwitchCaseEvaluator(List<Evaluator> evaluators, boolean defaultCase) {
+    SwitchCaseEvaluator(List<? extends Evaluator> evaluators, boolean defaultCase) {
       myEvaluators = evaluators;
       myDefaultCase = defaultCase;
     }

@@ -15,6 +15,7 @@ import org.gradle.launcher.daemon.protocol.Stop;
 import org.gradle.launcher.daemon.registry.DaemonInfo;
 import org.gradle.launcher.daemon.registry.DaemonRegistry;
 
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -40,8 +41,9 @@ public class DaemonStopAction extends DaemonAction {
       public void onOutput(OutputEvent event) { }
     };
     BuildLayoutParameters layout = new BuildLayoutParameters();
-    DaemonParameters daemonParameters = new DaemonParameters(layout);
-    ServiceRegistry daemonServices = daemonClientFactory.createStopDaemonServices(outputEventListener, daemonParameters);
+    DaemonParameters daemonParameters = getDaemonParameters(layout);
+    ServiceRegistry daemonServices = daemonClientFactory.createBuildClientServices(outputEventListener, daemonParameters,
+                                                                                   new ByteArrayInputStream(new byte[0]));
 
     DaemonRegistry daemonRegistry = daemonServices.get(DaemonRegistry.class);
     DaemonConnector daemonConnector = daemonServices.get(DaemonConnector.class);

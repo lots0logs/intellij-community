@@ -6,6 +6,7 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
+import com.intellij.psi.search.SearchScope;
 import com.intellij.psi.search.searches.OverridingMethodsSearch;
 import com.intellij.refactoring.RefactoringBundle;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
@@ -40,8 +41,10 @@ public class RenameAliasImportedMethodProcessor extends RenameJavaMethodProcesso
 
   @NotNull
   @Override
-  public Collection<PsiReference> findReferences(@NotNull PsiElement element) {
-    return RenameAliasedUsagesUtil.filterAliasedRefs(super.findReferences(element), element);
+  public Collection<PsiReference> findReferences(@NotNull PsiElement element,
+                                                 @NotNull SearchScope searchScope,
+                                                 boolean searchInCommentsAndStrings) {
+    return RenameAliasedUsagesUtil.filterAliasedRefs(super.findReferences(element, searchScope, searchInCommentsAndStrings), element);
   }
 
   @NotNull
@@ -58,7 +61,7 @@ public class RenameAliasImportedMethodProcessor extends RenameJavaMethodProcesso
   @Override
   public void renameElement(@NotNull PsiElement psiElement,
                             @NotNull String newName,
-                            @NotNull UsageInfo[] usages,
+                            UsageInfo @NotNull [] usages,
                             @Nullable RefactoringElementListener listener) throws IncorrectOperationException {
     boolean isGetter = GroovyPropertyUtils.isSimplePropertyGetter((PsiMethod)psiElement);
     boolean isSetter = GroovyPropertyUtils.isSimplePropertySetter((PsiMethod)psiElement);

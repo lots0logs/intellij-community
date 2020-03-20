@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.ui;
 
 import com.intellij.diff.DiffDialogHints;
@@ -23,7 +23,6 @@ import com.intellij.openapi.vcs.changes.actions.diff.ShowDiffAction;
 import com.intellij.openapi.vcs.changes.actions.diff.ShowDiffContext;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.ScrollPaneFactory;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -40,8 +39,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static com.intellij.openapi.vcs.changes.ChangesUtil.*;
-import static com.intellij.openapi.vcs.changes.ui.ChangesBrowserNode.UNVERSIONED_FILES_TAG;
-import static com.intellij.openapi.vcs.changes.ui.ChangesListView.UNVERSIONED_FILES_DATA_KEY;
 import static com.intellij.openapi.vcs.changes.ui.ChangesListView.getVirtualFiles;
 
 /**
@@ -118,7 +115,7 @@ public abstract class OldChangesBrowserBase extends JPanel implements TypeSafeDa
     add(createToolbar(), BorderLayout.NORTH);
 
     myViewer.installPopupHandler(myToolBarGroup);
-    myViewer.setDoubleClickHandler(() -> showDiff());
+    myViewer.setDoubleClickAndEnterKeyHandler(() -> showDiff());
   }
 
   @NotNull
@@ -187,9 +184,6 @@ public abstract class OldChangesBrowserBase extends JPanel implements TypeSafeDa
       final List<Change> selectedChanges = getSelectedChanges();
       sink.put(VcsDataKeys.SELECTED_CHANGES_IN_DETAILS, selectedChanges.toArray(new Change[0]));
     }
-    else if (UNVERSIONED_FILES_DATA_KEY.equals(key)) {
-      sink.put(UNVERSIONED_FILES_DATA_KEY, getVirtualFiles(myViewer.getSelectionPaths(), UNVERSIONED_FILES_TAG));
-    }
     else if (PlatformDataKeys.DELETE_ELEMENT_PROVIDER.equals(key)) {
       sink.put(PlatformDataKeys.DELETE_ELEMENT_PROVIDER, myDeleteProvider);
     }
@@ -205,7 +199,7 @@ public abstract class OldChangesBrowserBase extends JPanel implements TypeSafeDa
 
   private class ToggleChangeAction extends CheckboxAction {
     ToggleChangeAction() {
-      super(VcsBundle.message("commit.dialog.include.action.name"));
+      super(VcsBundle.messagePointer("commit.dialog.include.action.name"));
     }
 
     @Override
@@ -339,7 +333,7 @@ public abstract class OldChangesBrowserBase extends JPanel implements TypeSafeDa
   @NotNull
   private List<Change> getCurrentDisplayedChanges() {
     if (myChangesToDisplay != null) return myChangesToDisplay;
-    return mySelectedChangeList != null ? ContainerUtil.newArrayList(mySelectedChangeList.getChanges()) : Collections.emptyList();
+    return mySelectedChangeList != null ? new ArrayList<>(mySelectedChangeList.getChanges()) : Collections.emptyList();
   }
 
   public JComponent getPreferredFocusedComponent() {

@@ -1,37 +1,20 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.wm.impl;
 
 import com.intellij.openapi.ui.AbstractPainter;
 import com.intellij.openapi.ui.impl.ShadowPainter;
-import com.intellij.util.ui.UIUtil;
+import com.intellij.ui.ComponentUtil;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.AWTEventListener;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.intellij.icons.AllIcons.Ide.Shadow.*;
-import static com.intellij.util.containers.ContainerUtil.newArrayList;
 
-/**
- * @author Sergey.Malenkov
- */
 final class WindowShadowPainter extends AbstractPainter {
   private static final ShadowPainter PAINTER = new ShadowPainter(Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left, TopLeft);
   private static final long MASK = AWTEvent.WINDOW_EVENT_MASK | AWTEvent.WINDOW_STATE_EVENT_MASK | AWTEvent.COMPONENT_EVENT_MASK;
@@ -72,7 +55,7 @@ final class WindowShadowPainter extends AbstractPainter {
 
   @Override
   public void executePaint(Component component, Graphics2D g) {
-    Window window = UIUtil.getWindow(component);
+    Window window = ComponentUtil.getWindow(component);
     if (window != null) {
       if (myComponent != component) {
         myComponent = component;
@@ -98,7 +81,7 @@ final class WindowShadowPainter extends AbstractPainter {
       for (Window window : windows) {
         Rectangle bounds = getShadowBounds(point, window);
         if (bounds != null) {
-          if (list == null) list = newArrayList();
+          if (list == null) list = new ArrayList<>();
           list.add(bounds);
         }
         list = getShadows(list, point, window.getOwnedWindows());

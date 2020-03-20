@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options;
 
 import com.intellij.lang.Language;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -70,14 +71,21 @@ public class CodeStyle {
    */
   @NotNull
   public static CodeStyleSettings getSettings(@NotNull PsiFile file) {
-    for (FileCodeStyleProvider provider : FileCodeStyleProvider.EP_NAME.getExtensionList()) {
-      CodeStyleSettings fileSettings = provider.getSettings(file);
-      if (fileSettings != null) return fileSettings;
+    final Project project = file.getProject();
+    CodeStyleSettings tempSettings = CodeStyleSettingsManager.getInstance(project).getTemporarySettings();
+    if (tempSettings != null) {
+      return tempSettings;
     }
+
+    CodeStyleSettings result = FileCodeStyleProvider.EP_NAME.computeSafeIfAny(provider -> provider.getSettings(file));
+    if (result != null) {
+      return result;
+    }
+
     if (!file.isPhysical()) {
-      return getSettings(file.getProject());
+      return getSettings(project);
     }
-    return CodeStyleCachingUtil.getCachedCodeStyle(file);
+    return CodeStyleCachedValueProvider.getInstance(file).tryGetSettings();
   }
 
 
@@ -232,7 +240,17 @@ public class CodeStyle {
    */
   @TestOnly
   public static void dropTemporarySettings(@Nullable Project project) {
-    CodeStyleSettingsManager.getInstance(project).dropTemporarySettings();
+    CodeStyleSettingsManager codeStyleSettingsManager;
+    if (project == null || project.isDefault()) {
+      codeStyleSettingsManager = ApplicationManager.getApplication().getServiceIfCreated(AppCodeStyleSettingsManager.class);
+    }
+    else {
+      codeStyleSettingsManager = project.getServiceIfCreated(ProjectCodeStyleSettingsManager.class);
+    }
+
+    if (codeStyleSettingsManager != null) {
+      codeStyleSettingsManager.dropTemporarySettings();
+    }
   }
 
   /**
@@ -314,7 +332,19 @@ public class CodeStyle {
     return !getSettings(file).getExcludedFiles().contains(file);
   }
 
-
+  /**
+   * Reformat the given {@code fileToReformat} using code style settings for the {@code contextFile}. The method may be
+   * useful to reformat a fragment of code (temporary file) which eventually will be inserted to the context file.
+   *
+   * @param fileToReformat The file to reformat (may be a temporary dummy file).
+   * @param contextFile    The actual (target) file whose settings must be used.
+   */
+  public static void reformatWithFileContext(@NotNull PsiFile fileToReformat, @NotNull PsiFile contextFile) {
+    final Project project = contextFile.getProject();
+    CodeStyleManager codeStyleManager = CodeStyleManager.getInstance(project);
+    CodeStyleSettings realFileSettings = getSettings(contextFile);
+    doWithTemporarySettings(project, realFileSettings, () -> codeStyleManager.reformat(fileToReformat));
+  }
 
 
 }

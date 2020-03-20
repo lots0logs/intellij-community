@@ -3,7 +3,6 @@ package org.jetbrains.plugins.groovy.lang.psi.impl.statements;
 
 import com.intellij.lang.ASTNode;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.util.RecursionGuard;
 import com.intellij.openapi.util.RecursionManager;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
@@ -39,9 +38,7 @@ import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
  * @author ilyas
  */
 public abstract class GrVariableBaseImpl<T extends GrVariableStubBase> extends GrStubElementBase<T> implements GrVariable, StubBasedPsiElement<T> {
-  public static final Logger LOG = Logger.getInstance("org.jetbrains.plugins.groovy.lang.psi.impl.statements.GrVariableImpl");
-
-  private static final RecursionGuard ourGuard = RecursionManager.createGuard("grVariableInitializer");
+  protected static final Logger LOG = Logger.getInstance(GrVariableBaseImpl.class);
 
   protected GrVariableBaseImpl(ASTNode node) {
     super(node);
@@ -151,7 +148,7 @@ public abstract class GrVariableBaseImpl<T extends GrVariableStubBase> extends G
     }
 
     if (initializer != null) {
-      PsiType initializerType = ourGuard.doPreventingRecursion(this, true, initializer::getType);
+      PsiType initializerType = RecursionManager.doPreventingRecursion(this, true, initializer::getType);
       if (declaredType == null) return initializerType;
       if (initializerType instanceof PsiClassType && TypesUtil.isAssignable(declaredType, initializerType, this)) {
         return initializerType;

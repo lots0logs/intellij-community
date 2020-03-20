@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.history.integration;
 
 import com.intellij.history.core.LocalHistoryFacade;
@@ -21,17 +21,18 @@ import com.intellij.openapi.util.Clock;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.*;
-import com.intellij.testFramework.PlatformTestCase;
+import com.intellij.testFramework.HeavyPlatformTestCase;
 import com.intellij.testFramework.PsiTestUtil;
-import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 
-public abstract class IntegrationTestCase extends PlatformTestCase {
+public abstract class IntegrationTestCase extends HeavyPlatformTestCase {
   protected static final int TIMESTAMP_INCREMENT = 3000;
   protected static final String FILTERED_DIR_NAME = "CVS";
 
@@ -48,7 +49,7 @@ public abstract class IntegrationTestCase extends PlatformTestCase {
     super.setUp();
 
     LocalHistoryImpl.getInstanceImpl().cleanupForNextTest();
-    
+
     Clock.reset();
     Paths.useSystemCaseSensitivity();
 
@@ -75,7 +76,7 @@ public abstract class IntegrationTestCase extends PlatformTestCase {
 
   protected void setUpInWriteAction() throws Exception {
     VirtualFile tmpTestDir =
-      ObjectUtils.assertNotNull(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(new File(FileUtil.getTempDirectory())));
+      Objects.requireNonNull(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(new File(FileUtil.getTempDirectory())));
     myRoot = tmpTestDir.createChildDirectory(null, "idea_test_integration");
     PsiTestUtil.addContentRoot(myModule, myRoot);
   }
@@ -117,7 +118,7 @@ public abstract class IntegrationTestCase extends PlatformTestCase {
   }
 
   protected void setContent(VirtualFile f, String content, long timestamp) {
-    setBinaryContent(f, content.getBytes(CharsetToolkit.UTF8_CHARSET), -1, timestamp,this);
+    setBinaryContent(f, content.getBytes(StandardCharsets.UTF_8), -1, timestamp, this);
   }
 
   protected String createFileExternally(String name) throws IOException {
@@ -128,7 +129,7 @@ public abstract class IntegrationTestCase extends PlatformTestCase {
     File f = new File(myRoot.getPath(), name);
     assertTrue(f.getPath(), f.getParentFile().mkdirs() || f.getParentFile().isDirectory());
     assertTrue(f.getPath(), f.createNewFile() || f.exists());
-    if (content != null) FileUtil.writeToFile(f, content.getBytes(CharsetToolkit.UTF8_CHARSET));
+    if (content != null) FileUtil.writeToFile(f, content.getBytes(StandardCharsets.UTF_8));
     return FileUtil.toSystemIndependentName(f.getPath());
   }
 
@@ -140,7 +141,7 @@ public abstract class IntegrationTestCase extends PlatformTestCase {
 
   protected void setContentExternally(String path, String content) throws IOException {
     File f = new File(path);
-    FileUtil.writeToFile(f, content.getBytes(CharsetToolkit.UTF8_CHARSET));
+    FileUtil.writeToFile(f, content.getBytes(StandardCharsets.UTF_8));
     assertTrue(f.getPath(), f.setLastModified(f.lastModified() + 2000));
   }
 
@@ -181,7 +182,7 @@ public abstract class IntegrationTestCase extends PlatformTestCase {
       ModifiableRootModel m = rm.getModifiableModel();
       for (ContentEntry e : m.getContentEntries()) {
         if (!Comparing.equal(e.getFile(), myRoot)) continue;
-        e.addExcludeFolder(VfsUtilCore.pathToUrl(FileUtil.toSystemIndependentName(path)));
+        e.addExcludeFolder(VfsUtilCore.pathToUrl(path));
       }
       m.commit();
     });
@@ -198,6 +199,6 @@ public abstract class IntegrationTestCase extends PlatformTestCase {
   }
 
   protected static void assertContent(String expected, Entry e) {
-    assertEquals(expected, new String(e.getContent().getBytes()));
+    assertEquals(expected, new String(e.getContent().getBytes(), StandardCharsets.UTF_8));
   }
 }

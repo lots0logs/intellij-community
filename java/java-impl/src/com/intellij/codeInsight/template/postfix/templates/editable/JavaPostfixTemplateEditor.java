@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.template.postfix.templates.editable;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
@@ -7,6 +7,7 @@ import com.intellij.codeInsight.template.postfix.templates.PostfixTemplate;
 import com.intellij.codeInsight.template.postfix.templates.PostfixTemplateProvider;
 import com.intellij.ide.util.TreeClassChooser;
 import com.intellij.ide.util.TreeClassChooserFactory;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.editor.Document;
@@ -18,8 +19,11 @@ import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.pom.java.LanguageLevel;
-import com.intellij.psi.*;
-import com.intellij.ui.ColoredListCellRenderer;
+import com.intellij.psi.JavaCodeFragment;
+import com.intellij.psi.JavaCodeFragmentFactory;
+import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiDocumentManager;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.FormBuilder;
@@ -28,6 +32,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class JavaPostfixTemplateEditor extends PostfixTemplateEditorBase<JavaPostfixTemplateExpressionCondition> {
@@ -38,15 +43,10 @@ public class JavaPostfixTemplateEditor extends PostfixTemplateEditorBase<JavaPos
   public JavaPostfixTemplateEditor(@NotNull PostfixTemplateProvider provider) {
     super(provider, createEditor(), true);
     myLanguageLevelCombo = new ComboBox<>(LanguageLevel.values());
-    myLanguageLevelCombo.setRenderer(new ColoredListCellRenderer<LanguageLevel>() {
-      @Override
-      protected void customizeCellRenderer(@NotNull JList list, LanguageLevel value, int index, boolean selected, boolean hasFocus) {
-        append(value.getPresentableText());
-      }
-    });
+    myLanguageLevelCombo.setRenderer(SimpleListCellRenderer.create("", LanguageLevel::getPresentableText));
 
     myPanel = FormBuilder.createFormBuilder()
-                         .addLabeledComponent("Minimum language level:", myLanguageLevelCombo)
+                         .addLabeledComponent(JavaBundle.message("postfix.template.language.level.title"), myLanguageLevelCombo)
                          .addComponentFillVertically(myEditTemplateAndConditionsPanel, UIUtil.DEFAULT_VGAP)
                          .getPanel();
   }
@@ -61,7 +61,7 @@ public class JavaPostfixTemplateEditor extends PostfixTemplateEditorBase<JavaPos
   public JavaEditablePostfixTemplate createTemplate(@NotNull String templateId, @NotNull String templateName) {
     LanguageLevel selectedLanguageLevel = ObjectUtils.tryCast(myLanguageLevelCombo.getSelectedItem(), LanguageLevel.class);
     LanguageLevel languageLevel = ObjectUtils.notNull(selectedLanguageLevel, LanguageLevel.JDK_1_3);
-    Set<JavaPostfixTemplateExpressionCondition> conditions = ContainerUtil.newLinkedHashSet();
+    Set<JavaPostfixTemplateExpressionCondition> conditions = new LinkedHashSet<>();
     ContainerUtil.addAll(conditions, myExpressionTypesListModel.elements());
     String templateText = myTemplateEditor.getDocument().getText();
     boolean useTopmostExpression = myApplyToTheTopmostJBCheckBox.isSelected();
@@ -79,9 +79,8 @@ public class JavaPostfixTemplateEditor extends PostfixTemplateEditorBase<JavaPos
     if (project == null) {
       return EditorFactory.getInstance().createDocument("");
     }
-    final JavaPsiFacade psiFacade = JavaPsiFacade.getInstance(project);
     final JavaCodeFragmentFactory factory = JavaCodeFragmentFactory.getInstance(project);
-    final JavaCodeFragment fragment = factory.createCodeBlockCodeFragment("", psiFacade.findPackage(""), true);
+    final JavaCodeFragment fragment = factory.createCodeBlockCodeFragment("", null, true);
     DaemonCodeAnalyzer.getInstance(project).setHighlightingEnabled(fragment, false);
     return PsiDocumentManager.getInstance(project).getDocument(fragment);
   }
@@ -108,13 +107,14 @@ public class JavaPostfixTemplateEditor extends PostfixTemplateEditorBase<JavaPos
       myLanguageLevelCombo.setSelectedItem(((JavaEditablePostfixTemplate)template).getMinimumLanguageLevel());
     }
   }
-  
+
   private class ChooseClassAction extends DumbAwareAction {
     @Nullable
     private final Project myProject;
 
     protected ChooseClassAction(@Nullable Project project) {
-      super((project != null && !project.isDefault() ? "choose class in " + project.getName() + "..." : "enter class name..."));
+      super((project != null && !project.isDefault() ? JavaBundle.message("action.text.choose.class.in.0", project.getName())
+                                                     : JavaBundle.message("action.text.enter.class.name")));
       myProject = project;
     }
 
@@ -129,7 +129,8 @@ public class JavaPostfixTemplateEditor extends PostfixTemplateEditorBase<JavaPos
     private String getFqn() {
       String title = "Choose Class";
       if (myProject == null || myProject.isDefault()) {
-        return Messages.showInputDialog(myPanel, title, title, null);
+        return Messages.showInputDialog(myPanel, JavaBundle.message("label.enter.fully.qualified.class.name"),
+                                        JavaBundle.message("dialog.title.choose.class"), null);
       }
       TreeClassChooser chooser = TreeClassChooserFactory.getInstance(myProject).createAllProjectScopeChooser(title);
       chooser.showDialog();

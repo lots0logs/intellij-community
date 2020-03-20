@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.actions;
 
 import com.intellij.openapi.actionSystem.AnAction;
@@ -24,7 +24,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public class OpenRepositoryVersionAction extends AnAction implements DumbAware {
   public OpenRepositoryVersionAction() {
-    super(VcsBundle.message("open.repository.version.text"), VcsBundle.message("open.repository.version.description"), null);
+    super(VcsBundle.messagePointer("open.repository.version.text"), VcsBundle.messagePointer("open.repository.version.description"), null);
   }
 
   @Override
@@ -40,16 +40,16 @@ public class OpenRepositoryVersionAction extends AnAction implements DumbAware {
     Change[] changes = e.getData(VcsDataKeys.SELECTED_CHANGES);
     e.getPresentation().setEnabled(project != null && changes != null &&
                                    (!CommittedChangesBrowserUseCase.IN_AIR
-                                     .equals(CommittedChangesBrowserUseCase.DATA_KEY.getData(e.getDataContext()))) &&
+                                     .equals(e.getData(CommittedChangesBrowserUseCase.DATA_KEY))) &&
                                    hasValidChanges(changes) &&
                                    ModalityState.NON_MODAL.equals(ModalityState.current()));
   }
 
-  private static boolean hasValidChanges(@NotNull Change[] changes) {
+  private static boolean hasValidChanges(Change @NotNull [] changes) {
     return ContainerUtil.exists(changes, c -> c.getAfterRevision() != null && !c.getAfterRevision().getFile().isDirectory());
   }
 
-  private static void openRepositoryVersion(@NotNull Project project, @NotNull Change[] changes) {
+  private static void openRepositoryVersion(@NotNull Project project, Change @NotNull [] changes) {
     for (Change change : changes) {
       ContentRevision revision = change.getAfterRevision();
 

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.designer.palette;
 
 import com.intellij.designer.componentTree.TreeTransfer;
@@ -8,10 +8,10 @@ import com.intellij.ide.dnd.DnDDragStartBean;
 import com.intellij.ide.dnd.DnDManager;
 import com.intellij.ide.dnd.DnDSource;
 import com.intellij.openapi.util.IconLoader;
-import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.ColoredListCellRenderer;
+import com.intellij.ui.ListActions;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.ui.components.JBList;
 import com.intellij.util.ui.UIUtil;
@@ -67,7 +67,7 @@ public class PaletteItemsComponent extends JBList {
           setIcon(item.getIcon());
         }
         else {
-          setIcon(IconLoader.getDisabledIcon(item.getIcon()));
+          setIcon(item.getIcon() == null ? null : IconLoader.getDisabledIcon(item.getIcon()));
         }
 
         String title = item.getTitle();
@@ -149,20 +149,6 @@ public class PaletteItemsComponent extends JBList {
       @Override
       public DnDDragStartBean startDragging(DnDAction action, Point dragOrigin) {
         return null;
-      }
-
-      @Nullable
-      @Override
-      public Pair<Image, Point> createDraggedImage(DnDAction action, Point dragOrigin) {
-        return null;
-      }
-
-      @Override
-      public void dragDropEnd() {
-      }
-
-      @Override
-      public void dropActionChanged(int gestureModifiers) {
       }
     }, this);
 
@@ -260,10 +246,10 @@ public class PaletteItemsComponent extends JBList {
 
   private void initActions() {
     ActionMap map = getActionMap();
-    map.put("selectPreviousRow", new MoveFocusAction(map.get("selectPreviousRow"), false));
-    map.put("selectNextRow", new MoveFocusAction(map.get("selectNextRow"), true));
-    map.put("selectPreviousColumn", new MoveFocusAction(new ChangeColumnAction(map.get("selectPreviousColumn"), false), false));
-    map.put("selectNextColumn", new MoveFocusAction(new ChangeColumnAction(map.get("selectNextColumn"), true), true));
+    map.put(ListActions.Up.ID, new MoveFocusAction(map.get(ListActions.Up.ID), false));
+    map.put(ListActions.Down.ID, new MoveFocusAction(map.get(ListActions.Down.ID), true));
+    map.put(ListActions.Left.ID, new MoveFocusAction(new ChangeColumnAction(map.get(ListActions.Left.ID), false), false));
+    map.put(ListActions.Right.ID, new MoveFocusAction(new ChangeColumnAction(map.get(ListActions.Right.ID), true), true));
   }
 
   private class MoveFocusAction extends AbstractAction {

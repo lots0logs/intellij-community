@@ -20,6 +20,7 @@ import com.intellij.lang.injection.InjectedLanguageManager;
 import com.intellij.lang.properties.charset.Native2AsciiCharset;
 import com.intellij.openapi.fileEditor.impl.LoadTextUtil;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
@@ -54,13 +55,6 @@ public class NonAsciiCharactersInspection extends LocalInspectionTool {
   }
 
   @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return InspectionsBundle.message("non.ascii.characters");
-  }
-
-  @Override
   @NonNls
   @NotNull
   public String getShortName() {
@@ -76,16 +70,21 @@ public class NonAsciiCharactersInspection extends LocalInspectionTool {
     if (!isFileWorthIt(session.getFile())) return PsiElementVisitor.EMPTY_VISITOR;
     return new PsiElementVisitor() {
       @Override
-      public void visitElement(PsiElement element) {
+      public void visitElement(@NotNull PsiElement element) {
         if (CHECK_FOR_NOT_ASCII_IDENTIFIER_NAME || CHECK_FOR_DIFFERENT_LANGUAGES_IN_IDENTIFIER_NAME) {
           PsiElement parent = element.getParent();
-          if (parent instanceof PsiNameIdentifierOwner && ((PsiNameIdentifierOwner)parent).getNameIdentifier() == element) {
+          PsiElement identifier;
+          if (parent instanceof PsiNameIdentifierOwner &&
+              (identifier = ((PsiNameIdentifierOwner)parent).getNameIdentifier()) != null) {
+            // Groovy has this twisted PSI where method.geNameIdentifier() is some random light element
             String text = element.getText();
-            if (CHECK_FOR_NOT_ASCII_IDENTIFIER_NAME) {
-              checkAscii(element, text, holder, "an identifier");
-            }
-            if (CHECK_FOR_DIFFERENT_LANGUAGES_IN_IDENTIFIER_NAME) {
-              checkSameLanguage(element, text, holder);
+            if (identifier == element || text.equals(identifier.getText())) {
+              if (CHECK_FOR_NOT_ASCII_IDENTIFIER_NAME) {
+                checkAscii(element, text, holder, "an identifier");
+              }
+              if (CHECK_FOR_DIFFERENT_LANGUAGES_IN_IDENTIFIER_NAME) {
+                checkSameLanguage(element, text, holder);
+              }
             }
           }
         }
@@ -102,7 +101,7 @@ public class NonAsciiCharactersInspection extends LocalInspectionTool {
       }
 
       @Override
-      public void visitFile(PsiFile file) {
+      public void visitFile(@NotNull PsiFile file) {
         super.visitFile(file);
         if (CHECK_FOR_FILES_CONTAINING_BOM) {
           VirtualFile virtualFile = file.getVirtualFile();
@@ -110,7 +109,7 @@ public class NonAsciiCharactersInspection extends LocalInspectionTool {
           if (bom != null) {
             String hex = IntStream.range(0, bom.length)
               .map(i -> bom[i])
-              .mapToObj(b -> Integer.toString(b & 0x00ff, 16).toUpperCase())
+              .mapToObj(b -> StringUtil.toUpperCase(Integer.toString(b & 0x00ff, 16)))
               .collect(Collectors.joining());
             Charset charsetFromBOM = CharsetToolkit.guessFromBOM(bom);
             holder.registerProblem(file, "File contains BOM: '" + hex +"'"+

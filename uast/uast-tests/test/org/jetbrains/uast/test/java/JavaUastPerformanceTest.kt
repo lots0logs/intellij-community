@@ -4,13 +4,13 @@ package org.jetbrains.uast.test.java
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
 import com.intellij.testFramework.PlatformTestUtil
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase
 import junit.framework.TestCase
 import org.jetbrains.uast.UQualifiedReferenceExpression
 import org.jetbrains.uast.toUElement
 import org.junit.Test
 
-class JavaUastPerformanceTest : LightCodeInsightFixtureTestCase() {
+class JavaUastPerformanceTest : LightJavaCodeInsightFixtureTestCase() {
 
   class EachPsiToUastWalker : PsiElementVisitor() {
     var totalCount = 0
@@ -42,7 +42,7 @@ class JavaUastPerformanceTest : LightCodeInsightFixtureTestCase() {
           }
       }
     """.trimIndent())
-    val nonCachedWalk = EachPsiToUastWalker().apply {
+    EachPsiToUastWalker().apply {
       PlatformTestUtil.startPerformanceTest("convert each element to uast first time", 2000) {
         clazz.accept(this)
         TestCase.assertEquals(expectedUElementsCount, totalCount)

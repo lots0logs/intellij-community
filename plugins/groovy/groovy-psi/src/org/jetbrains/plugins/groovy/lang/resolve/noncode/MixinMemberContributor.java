@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.resolve.noncode;
 
 import com.intellij.psi.*;
@@ -20,9 +6,9 @@ import com.intellij.psi.impl.light.LightMethod;
 import com.intellij.psi.scope.DelegatingScopeProcessor;
 import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.plugins.groovy.GroovyLanguage;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotation;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotationArrayInitializer;
 import org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.annotation.GrAnnotationMemberValue;
@@ -31,27 +17,27 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrRefere
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.GrGdkMethodImpl;
 import org.jetbrains.plugins.groovy.lang.psi.util.GdkMethodUtil;
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames;
-import org.jetbrains.plugins.groovy.lang.resolve.NonCodeMembersContributor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @author Max Medvedev
  */
-public class MixinMemberContributor extends NonCodeMembersContributor {
-  @Override
-  public void processDynamicElements(@NotNull final PsiType qualifierType,
-                                     @NotNull PsiScopeProcessor processor,
-                                     @NotNull final PsiElement place,
-                                     @NotNull ResolveState state) {
-    if (isInAnnotation(place)) return;
+public class MixinMemberContributor {
+  public static boolean processClassMixins(@NotNull final PsiType qualifierType,
+                                           @NotNull PsiScopeProcessor processor,
+                                           @NotNull final PsiElement place,
+                                           @NotNull ResolveState state) {
+    if (isInAnnotation(place)) return true;
 
     final PsiClass aClass = PsiUtil.resolveClassInClassTypeOnly(qualifierType);
-    if (aClass == null) return;
+    if (aClass == null) return true;
+    if (aClass.getLanguage() != GroovyLanguage.INSTANCE) return true;
 
     final PsiModifierList modifierList = aClass.getModifierList();
-    if (modifierList == null) return;
+    if (modifierList == null) return true;
 
     List<PsiClass> mixins = new ArrayList<>();
     for (PsiAnnotation annotation : getAllMixins(modifierList)) {
@@ -71,9 +57,11 @@ public class MixinMemberContributor extends NonCodeMembersContributor {
     final MixinProcessor delegate = new MixinProcessor(processor, qualifierType, place);
     for (PsiClass mixin : mixins) {
       if (!mixin.processDeclarations(delegate, state, null, place)) {
-        return;
+        return false;
       }
     }
+
+    return true;
   }
 
   public static String getOriginInfoForCategory(PsiMethod element) {
@@ -116,7 +104,7 @@ public class MixinMemberContributor extends NonCodeMembersContributor {
     private final PsiMethod myPrototype;
 
     MixinedMethod(@NotNull PsiMethod method, String originInfo) {
-      super(method.getManager(), method, ObjectUtils.assertNotNull(method.getContainingClass()));
+      super(method.getManager(), method, Objects.requireNonNull(method.getContainingClass()));
       myOriginInfo = originInfo;
       myPrototype = method;
     }

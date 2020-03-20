@@ -20,13 +20,10 @@ import com.intellij.openapi.util.text.StringUtil;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * @author nik
- */
 //todo[nik,anyone] feel free to rename this class
-public abstract class ListCellRendererWithRightAlignedComponent<T> implements ListCellRenderer {
-  private final ListCellRenderer myLeftRenderer;
-  private final ListCellRenderer myRightRenderer;
+public abstract class ListCellRendererWithRightAlignedComponent<T> implements ListCellRenderer<T> {
+  private final ListCellRenderer<T> myLeftRenderer;
+  private final ListCellRenderer<T> myRightRenderer;
   private final JComponent myPanel;
   private String myLeftText;
   private String myRightText;
@@ -36,38 +33,36 @@ public abstract class ListCellRendererWithRightAlignedComponent<T> implements Li
   private Color myRightForeground;
 
   public ListCellRendererWithRightAlignedComponent() {
-    myPanel = new JPanel(new BorderLayout());
-    myLeftRenderer = new ListCellRendererWrapper<T>() {
-      @Override
-      public void customize(JList list, T value, int index, boolean selected, boolean hasFocus) {
-        setText(myLeftText);
-        setIcon(myIcon);
-        setForeground(myLeftForeground);
-      }
-    };
-    myRightRenderer = new ListCellRendererWrapper<T>() {
-      @Override
-      public void customize(JList list, T value, int index, boolean selected, boolean hasFocus) {
-        setText(StringUtil.notNullize(myRightText));
-        setIcon(myRightIcon);
-        setForeground(myRightForeground);
-      }
-    };
+    myPanel = new CellRendererPanel();
+    myPanel.setLayout(new BorderLayout());
+    myLeftRenderer = SimpleListCellRenderer.create((label, value, index) -> {
+      label.setText(myLeftText);
+      label.setIcon(myIcon);
+    });
+    myRightRenderer = SimpleListCellRenderer.create((label, value, index) -> {
+      label.setText(StringUtil.notNullize(myRightText));
+      label.setIcon(myRightIcon);
+    });
   }
 
   protected abstract void customize(T value);
 
   @Override
-  public Component getListCellRendererComponent(JList list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+  public Component getListCellRendererComponent(JList<? extends T> list, T value, int index, boolean isSelected, boolean cellHasFocus) {
     myPanel.removeAll();
     myLeftText = null;
     myRightText = null;
     myIcon = null;
     myRightForeground = null;
-    //noinspection unchecked
-    customize((T)value);
-    myPanel.add(myLeftRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus), BorderLayout.CENTER);
-    myPanel.add(myRightRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus), BorderLayout.EAST);
+    customize(value);
+    Component left = myLeftRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+    Component right = myRightRenderer.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+    if (!isSelected) {
+      left.setForeground(myLeftForeground);
+      right.setForeground(myRightForeground);
+    }
+    myPanel.add(left, BorderLayout.CENTER);
+    myPanel.add(right, BorderLayout.EAST);
     return myPanel;
   }
 

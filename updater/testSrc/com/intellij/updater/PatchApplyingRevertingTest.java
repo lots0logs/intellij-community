@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.updater;
 
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.IoTestUtil;
 import com.intellij.testFramework.RunFirst;
 import com.intellij.util.containers.ContainerUtil;
 import org.junit.Before;
@@ -12,6 +13,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -21,7 +24,6 @@ import java.util.zip.ZipOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.*;
 import static org.junit.Assume.assumeFalse;
-import static org.junit.Assume.assumeTrue;
 
 @RunFirst
 public abstract class PatchApplyingRevertingTest extends PatchTestCase {
@@ -91,13 +93,13 @@ public abstract class PatchApplyingRevertingTest extends PatchTestCase {
 
   @Test
   public void testRevertedWhenFileToDeleteIsLocked() throws Exception {
-    assumeTrue(Utils.IS_WINDOWS);
+    IoTestUtil.assumeWindows();
     doLockedFileTest();
   }
 
   @Test
   public void testRevertedWhenFileToUpdateIsLocked() throws Exception {
-    assumeTrue(Utils.IS_WINDOWS);
+    IoTestUtil.assumeWindows();
     FileUtil.writeToFile(new File(myNewerDir, "bin/idea.bat"), "new text");
     doLockedFileTest();
   }
@@ -477,7 +479,7 @@ public abstract class PatchApplyingRevertingTest extends PatchTestCase {
 
   @Test
   public void testSymlinkAdded() throws Exception {
-    assumeFalse(Utils.IS_WINDOWS);
+    IoTestUtil.assumeSymLinkCreationIsSupported();
 
     Utils.createLink("Readme.txt", new File(myNewerDir, "Readme.link"));
 
@@ -486,7 +488,7 @@ public abstract class PatchApplyingRevertingTest extends PatchTestCase {
 
   @Test
   public void testSymlinkRemoved() throws Exception {
-    assumeFalse(Utils.IS_WINDOWS);
+    IoTestUtil.assumeSymLinkCreationIsSupported();
 
     Utils.createLink("Readme.txt", new File(myOlderDir, "Readme.link"));
 
@@ -495,7 +497,7 @@ public abstract class PatchApplyingRevertingTest extends PatchTestCase {
 
   @Test
   public void testSymlinkRenamed() throws Exception {
-    assumeFalse(Utils.IS_WINDOWS);
+    IoTestUtil.assumeSymLinkCreationIsSupported();
 
     Utils.createLink("Readme.txt", new File(myOlderDir, "Readme.link"));
     Utils.createLink("Readme.txt", new File(myNewerDir, "Readme.lnk"));
@@ -505,7 +507,7 @@ public abstract class PatchApplyingRevertingTest extends PatchTestCase {
 
   @Test
   public void testSymlinkRetargeted() throws Exception {
-    assumeFalse(Utils.IS_WINDOWS);
+    IoTestUtil.assumeSymLinkCreationIsSupported();
 
     Utils.createLink("Readme.txt", new File(myOlderDir, "Readme.link"));
     Utils.createLink("./Readme.txt", new File(myNewerDir, "Readme.link"));
@@ -579,7 +581,7 @@ public abstract class PatchApplyingRevertingTest extends PatchTestCase {
 
   @Test
   public void testExecutableFlagChange() throws Exception {
-    assumeFalse(Utils.IS_WINDOWS);
+    assumeFalse("Windows-allergic", Utils.IS_WINDOWS);
 
     FileUtil.writeToFile(new File(myOlderDir, "bin/to_become_executable"), "to_become_executable");
     FileUtil.writeToFile(new File(myOlderDir, "bin/to_become_plain"), "to_become_plain");
@@ -587,6 +589,38 @@ public abstract class PatchApplyingRevertingTest extends PatchTestCase {
     resetNewerDir();
     Utils.setExecutable(new File(myNewerDir, "bin/to_become_plain"), false);
     Utils.setExecutable(new File(myNewerDir, "bin/to_become_executable"), true);
+
+    assertAppliedAndReverted();
+  }
+
+  @Test
+  public void multipleDirectorySymlinks() throws Exception {
+    assumeFalse("Windows-allergic", Utils.IS_WINDOWS);
+
+    resetNewerDir();
+
+    randomFile(myOlderDir.toPath().resolve("A.framework/Versions/A/Libraries/lib1.dylib"));
+    randomFile(myOlderDir.toPath().resolve("A.framework/Versions/A/Libraries/lib2.dylib"));
+    randomFile(myOlderDir.toPath().resolve("A.framework/Versions/A/Resources/r1.bin"));
+    randomFile(myOlderDir.toPath().resolve("A.framework/Versions/A/Resources/r2.bin"));
+    Files.createSymbolicLink(myOlderDir.toPath().resolve("A.framework/Versions/Current"), Paths.get("A"));
+    Files.createSymbolicLink(myOlderDir.toPath().resolve("A.framework/Libraries"), Paths.get("Versions/Current/Libraries"));
+    Files.createSymbolicLink(myOlderDir.toPath().resolve("A.framework/Resources"), Paths.get("Versions/Current/Resources"));
+    Files.createDirectories(myOlderDir.toPath().resolve("Home/Frameworks"));
+    Files.createSymbolicLink(myOlderDir.toPath().resolve("Home/Frameworks/A.framework"), Paths.get("../../A.framework"));
+
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/A/Libraries/lib1.dylib"));
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/A/Libraries/lib2.dylib"));
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/A/Resources/r1.bin"));
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/A/Resources/r2.bin"));
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/B/Libraries/lib1.dylib"));
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/B/Libraries/lib2.dylib"));
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/B/Resources/r1.bin"));
+    randomFile(myNewerDir.toPath().resolve("A.framework/Versions/B/Resources/r2.bin"));
+    Files.createSymbolicLink(myNewerDir.toPath().resolve("A.framework/Versions/Previous"), Paths.get("A"));
+    Files.createSymbolicLink(myNewerDir.toPath().resolve("A.framework/Versions/Current"), Paths.get("B"));
+    Files.createSymbolicLink(myNewerDir.toPath().resolve("A.framework/Libraries"), Paths.get("Versions/Current/Libraries"));
+    Files.createSymbolicLink(myNewerDir.toPath().resolve("A.framework/Resources"), Paths.get("Versions/Current/Resources"));
 
     assertAppliedAndReverted();
   }

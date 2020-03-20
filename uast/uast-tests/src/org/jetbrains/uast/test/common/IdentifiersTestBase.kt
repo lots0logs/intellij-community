@@ -5,9 +5,9 @@ package org.jetbrains.uast.test.common
 
 import com.intellij.psi.PsiCodeBlock
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiFile
 import junit.framework.TestCase
 import org.jetbrains.uast.*
+import org.jetbrains.uast.util.IndentedPrintingVisitor
 import kotlin.reflect.KClass
 
 
@@ -50,6 +50,6 @@ open class UElementToParentMap(shouldIndent: (PsiElement) -> Boolean,
 }
 
 fun IndentedPrintingVisitor.visitUFileAndGetResult(uFile: UFile): String {
-  (uFile.sourcePsi as PsiFile).accept(this)
+  uFile.sourcePsi.accept(this)
   return result
 }

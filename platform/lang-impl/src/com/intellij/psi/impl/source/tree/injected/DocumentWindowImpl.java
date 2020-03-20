@@ -35,7 +35,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 class DocumentWindowImpl extends UserDataHolderBase implements Disposable, DocumentWindow, DocumentEx {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.injected.editor.DocumentWindowImpl");
+  private static final Logger LOG = Logger.getInstance(DocumentWindowImpl.class);
   private final DocumentEx myDelegate;
   private final boolean myOneLine;
   private Place myShreds; // guarded by myLock
@@ -367,11 +367,6 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
   }
 
   @Override
-  public void moveText(int srcStart, int srcEnd, int dstOffset) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public boolean isWritable() {
     return myDelegate.isWritable();
   }
@@ -513,8 +508,7 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
   }
 
   @Override
-  @NotNull
-  public Segment[] getHostRanges() {
+  public Segment @NotNull [] getHostRanges() {
     synchronized (myLock) {
       List<Segment> markers = new ArrayList<>(myShreds.size());
       for (PsiLanguageInjectionHost.Shred shred : myShreds) {
@@ -765,8 +759,7 @@ class DocumentWindowImpl extends UserDataHolderBase implements Disposable, Docum
   // result[i] == null means no change
   // result[i] == "" means delete
   // result[i] == string means replace
-  @NotNull
-  String[] calculateMinEditSequence(String newText) {
+  String @NotNull [] calculateMinEditSequence(String newText) {
     synchronized (myLock) {
       String[] result = new String[myShreds.size()];
       String hostText = myDelegate.getText();

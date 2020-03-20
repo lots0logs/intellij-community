@@ -18,9 +18,6 @@ import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.*;
 
-/**
- * @author nik
- */
 public abstract class ChooseElementsDialog<T> extends DialogWrapper {
   protected ElementsChooser<T> myChooser;
   private final String myDescription;
@@ -78,7 +75,7 @@ public abstract class ChooseElementsDialog<T> extends DialogWrapper {
 
     new DoubleClickListener() {
       @Override
-      protected boolean onDoubleClick(MouseEvent e) {
+      protected boolean onDoubleClick(@NotNull MouseEvent e) {
         doOKAction();
         return true;
       }
@@ -111,7 +108,7 @@ public abstract class ChooseElementsDialog<T> extends DialogWrapper {
     return isOK() ? myChooser.getSelectedElements() : Collections.emptyList();
   }
 
-  public void selectElements(@NotNull List<T> elements) {
+  public void selectElements(@NotNull List<? extends T> elements) {
     myChooser.selectElements(elements);
   }
 

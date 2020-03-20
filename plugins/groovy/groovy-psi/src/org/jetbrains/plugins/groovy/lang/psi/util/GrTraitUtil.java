@@ -14,7 +14,7 @@ import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.indexing.FileBasedIndex;
-import com.intellij.util.indexing.SingleEntryFileBasedIndexExtension;
+import gnu.trove.THashMap;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,10 +30,7 @@ import org.jetbrains.plugins.groovy.lang.resolve.GroovyTraitFieldsFileIndex;
 import org.jetbrains.plugins.groovy.lang.resolve.GroovyTraitFieldsFileIndex.TraitFieldDescriptor;
 import org.jetbrains.plugins.groovy.lang.resolve.GroovyTraitMethodsFileIndex;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static com.intellij.psi.PsiModifier.ABSTRACT;
 import static org.jetbrains.plugins.groovy.lang.psi.api.auxiliary.modifiers.GrModifierFlags.*;
@@ -48,7 +45,7 @@ public class GrTraitUtil {
   private static final Logger LOG = Logger.getInstance(GrTraitUtil.class);
   private static final PsiTypeMapper ID_MAPPER = new PsiTypeMapper() {
     @Override
-    public PsiType visitClassType(PsiClassType classType) {
+    public PsiType visitClassType(@NotNull PsiClassType classType) {
       return classType;
     }
   };
@@ -65,7 +62,7 @@ public class GrTraitUtil {
 
   public static List<PsiClass> getSelfTypeClasses(@NotNull PsiClass trait) {
     return CachedValuesManager.getCachedValue(trait, () -> {
-      List<PsiClass> result = ContainerUtil.newArrayList();
+      List<PsiClass> result = new ArrayList<>();
       InheritanceUtil.processSupers(trait, true, clazz -> {
         if (isTrait(clazz)) {
           PsiAnnotation annotation = AnnotationUtil.findAnnotation(clazz, "groovy.transform.SelfType");
@@ -116,7 +113,7 @@ public class GrTraitUtil {
   @NotNull
   public static Collection<PsiMethod> getCompiledTraitConcreteMethods(@NotNull final ClsClassImpl trait) {
     return CachedValuesManager.getCachedValue(trait, () -> {
-      final Collection<PsiMethod> result = ContainerUtil.newArrayList();
+      final Collection<PsiMethod> result = new ArrayList<>();
       doCollectCompiledTraitMethods(trait, result);
       return CachedValueProvider.Result.create(result, trait);
     });
@@ -172,7 +169,7 @@ public class GrTraitUtil {
     final PsiTypeParameter[] traitTypeParameters = trait.getTypeParameters();
     if (traitTypeParameters.length == 0) return ID_MAPPER;
 
-    final Map<String, PsiTypeParameter> substitutionMap = ContainerUtil.newTroveMap();
+    final Map<String, PsiTypeParameter> substitutionMap = new THashMap<>();
     for (PsiTypeParameter parameter : traitTypeParameters) {
       substitutionMap.put(parameter.getName(), parameter);
     }
@@ -180,7 +177,7 @@ public class GrTraitUtil {
     final PsiElementFactory elementFactory = JavaPsiFacade.getInstance(trait.getProject()).getElementFactory();
     return new PsiTypeMapper() {
       @Override
-      public PsiType visitClassType(PsiClassType originalType) {
+      public PsiType visitClassType(@NotNull PsiClassType originalType) {
         final PsiClass resolved = originalType.resolve();
         // if resolved to method parameter -> return as is
         if (resolved instanceof PsiTypeParameter && compiledMethod.equals(((PsiTypeParameter)resolved).getOwner())) return originalType;
@@ -208,7 +205,7 @@ public class GrTraitUtil {
   @NotNull
   public static Collection<GrField> getCompiledTraitFields(@NotNull final ClsClassImpl trait) {
     return CachedValuesManager.getCachedValue(trait, () -> {
-      final Collection<GrField> result = ContainerUtil.newArrayList();
+      final Collection<GrField> result = new ArrayList<>();
       doCollectCompiledTraitFields(trait, result);
       return CachedValueProvider.Result.create(result, trait);
     });
@@ -219,11 +216,11 @@ public class GrTraitUtil {
     if (traitFile == null) return;
     VirtualFile helperFile = traitFile.getParent().findChild(trait.getName() + GroovyTraitFieldsFileIndex.HELPER_SUFFIX);
     if (helperFile == null) return;
-    int key = SingleEntryFileBasedIndexExtension.getFileKey(helperFile);
-    final List<Collection<TraitFieldDescriptor>> values = FileBasedIndex.getInstance().getValues(
-      GroovyTraitFieldsFileIndex.INDEX_ID, key, trait.getResolveScope()
-    );
-    values.forEach(descriptors -> descriptors.forEach(descriptor -> result.add(createTraitField(descriptor, trait))));
+
+    Map<Integer, Collection<TraitFieldDescriptor>> data =
+      FileBasedIndex.getInstance().getFileData(GroovyTraitFieldsFileIndex.INDEX_ID, helperFile, trait.getProject());
+    Collection<TraitFieldDescriptor> values = ContainerUtil.getFirstItem(data.values(), Collections.emptyList());
+    values.forEach(descriptor -> result.add(createTraitField(descriptor, trait)));
   }
 
   private static GrLightField createTraitField(TraitFieldDescriptor descriptor, PsiClass trait) {

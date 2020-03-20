@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.actions;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -35,6 +21,7 @@ import com.intellij.openapi.vcs.*;
 import com.intellij.openapi.vcs.annotate.AnnotationProvider;
 import com.intellij.openapi.vcs.annotate.FileAnnotation;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
+import com.intellij.openapi.vcs.impl.BackgroundableActionLock;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
@@ -42,8 +29,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-
-import static com.intellij.util.ObjectUtils.assertNotNull;
+import java.util.Objects;
 
 public class AnnotateLocalFileAction {
   private static final Logger LOG = Logger.getInstance(AnnotateLocalFileAction.class);
@@ -76,18 +62,18 @@ public class AnnotateLocalFileAction {
 
   private static boolean isAnnotated(@NotNull AnActionEvent e) {
     List<Editor> editors = getEditors(e.getDataContext());
-    return ContainerUtil.exists(editors, editor -> editor.getGutter().isAnnotationsShown());
+    return ContainerUtil.exists(editors, editor -> AnnotateToggleAction.hasVcsAnnotations(editor));
   }
 
   private static void perform(AnActionEvent e, boolean selected) {
     if (!selected) {
       List<Editor> editors = getEditors(e.getDataContext());
       for (Editor editor : editors) {
-        editor.getGutter().closeAllAnnotations();
+        AnnotateToggleAction.closeVcsAnnotations(editor);
       }
     }
     else {
-      Project project = assertNotNull(e.getProject());
+      Project project = Objects.requireNonNull(e.getProject());
 
       Editor editor = e.getData(CommonDataKeys.EDITOR);
       if (editor == null) {
@@ -126,7 +112,8 @@ public class AnnotateLocalFileAction {
     final Ref<FileAnnotation> fileAnnotationRef = new Ref<>();
     final Ref<VcsException> exceptionRef = new Ref<>();
 
-    VcsAnnotateUtil.getBackgroundableLock(project, file).lock();
+    final BackgroundableActionLock actionLock = VcsAnnotateUtil.getBackgroundableLock(project, file);
+    actionLock.lock();
 
     final Task.Backgroundable annotateTask = new Task.Backgroundable(project, VcsBundle.message("retrieving.annotations"), true) {
       @Override
@@ -152,8 +139,6 @@ public class AnnotateLocalFileAction {
 
       @Override
       public void onSuccess() {
-        VcsAnnotateUtil.getBackgroundableLock(project, file).unlock();
-
         if (!exceptionRef.isNull()) {
           LOG.warn(exceptionRef.get());
           AbstractVcsHelper.getInstance(project).showErrors(Collections.singletonList(exceptionRef.get()), VcsBundle.message("message.title.annotate"));
@@ -162,6 +147,11 @@ public class AnnotateLocalFileAction {
         if (!fileAnnotationRef.isNull()) {
           AnnotateToggleAction.doAnnotate(editor, project, fileAnnotationRef.get(), vcs);
         }
+      }
+
+      @Override
+      public void onFinished() {
+        actionLock.unlock();
       }
     };
     ProgressManager.getInstance().run(annotateTask);

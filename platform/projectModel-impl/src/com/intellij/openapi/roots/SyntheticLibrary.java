@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.roots;
 
 import com.intellij.navigation.ItemPresentation;
@@ -8,13 +8,12 @@ import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
+import gnu.trove.THashSet;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Set;
+import java.util.*;
 
 /**
  * A lightweight library definition comparing to {@link com.intellij.openapi.roots.libraries.Library}.
@@ -41,7 +40,6 @@ import java.util.Set;
  * </ul>
  * @see AdditionalLibraryRootsProvider
  */
-@ApiStatus.Experimental
 public abstract class SyntheticLibrary {
 
   @NotNull
@@ -101,20 +99,30 @@ public abstract class SyntheticLibrary {
   public abstract int hashCode();
 
   @NotNull
-  public static SyntheticLibrary newImmutableLibrary(@NotNull Collection<VirtualFile> sourceRoots) {
+  public static SyntheticLibrary newImmutableLibrary(@NotNull List<VirtualFile> sourceRoots) {
     return newImmutableLibrary(sourceRoots, Collections.emptySet(), null);
   }
 
+  /**
+   * @deprecated use {@link #newImmutableLibrary(List)} instead
+   */
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.2")
+  @Deprecated
   @NotNull
-  public static SyntheticLibrary newImmutableLibrary(@NotNull Collection<VirtualFile> sourceRoots,
-                                                     @NotNull Set<VirtualFile> excludedRoots,
-                                                     @Nullable Condition<VirtualFile> excludeCondition) {
-    return newImmutableLibrary(sourceRoots, Collections.emptySet(), excludedRoots, excludeCondition);
+  public static SyntheticLibrary newImmutableLibrary(@NotNull Collection<VirtualFile> sourceRoots) {
+    return newImmutableLibrary(asList(sourceRoots), Collections.emptySet(), null);
   }
 
   @NotNull
-  public static SyntheticLibrary newImmutableLibrary(@NotNull Collection<VirtualFile> sourceRoots,
-                                                     @NotNull Collection<VirtualFile> binaryRoots,
+  public static SyntheticLibrary newImmutableLibrary(@NotNull List<VirtualFile> sourceRoots,
+                                                     @NotNull Set<VirtualFile> excludedRoots,
+                                                     @Nullable Condition<VirtualFile> excludeCondition) {
+    return newImmutableLibrary(sourceRoots, Collections.emptyList(), excludedRoots, excludeCondition);
+  }
+
+  @NotNull
+  public static SyntheticLibrary newImmutableLibrary(@NotNull List<VirtualFile> sourceRoots,
+                                                     @NotNull List<VirtualFile> binaryRoots,
                                                      @NotNull Set<VirtualFile> excludedRoots,
                                                      @Nullable Condition<VirtualFile> excludeCondition) {
     return new ImmutableSyntheticLibrary(sourceRoots, binaryRoots, excludedRoots, excludeCondition);
@@ -158,6 +166,11 @@ public abstract class SyntheticLibrary {
 
   @NotNull
   private static <T extends VirtualFile> Set<T> asSet(@NotNull Collection<T> collection) {
-    return collection instanceof Set ? (Set<T>)collection : ContainerUtil.newTroveSet(collection);
+    return collection instanceof Set ? (Set<T>)collection : new THashSet<>(collection);
+  }
+
+  @NotNull
+  static <T extends VirtualFile> List<T> asList(@NotNull Collection<T> collection) {
+    return collection instanceof List ? (List<T>)collection : new ArrayList<>(collection);
   }
 }

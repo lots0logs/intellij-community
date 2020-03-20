@@ -10,7 +10,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,6 +30,13 @@ public class GeneralCodeStylePropertyMapper extends AbstractCodeStylePropertyMap
     "FORMATTER_TAGS_ACCEPT_REGEXP"
   );
 
+  private final static Set<String> INDENT_FIELDS = ContainerUtil.newHashSet(
+    "INDENT_SIZE",
+    "USE_TAB_CHARACTER",
+    "TAB_SIZE",
+    "SMART_TABS"
+  );
+
   public GeneralCodeStylePropertyMapper(@NotNull CodeStyleSettings settings) {
     super(settings);
   }
@@ -37,7 +44,10 @@ public class GeneralCodeStylePropertyMapper extends AbstractCodeStylePropertyMap
   @NotNull
   @Override
   protected List<CodeStyleObjectDescriptor> getSupportedFields() {
-    return Collections.singletonList(new CodeStyleObjectDescriptor(getRootSettings(), GENERAL_FIELDS));
+    List<CodeStyleObjectDescriptor> supportedFields = new ArrayList<>(2);
+    supportedFields.add(new CodeStyleObjectDescriptor(getRootSettings(), GENERAL_FIELDS));
+    supportedFields.add(new CodeStyleObjectDescriptor(getRootSettings().OTHER_INDENT_OPTIONS, INDENT_FIELDS));
+    return supportedFields;
   }
 
   @Override
@@ -53,7 +63,7 @@ public class GeneralCodeStylePropertyMapper extends AbstractCodeStylePropertyMap
 
   @Nullable
   @Override
-  protected CodeStylePropertyAccessor getAccessor(@NotNull Object codeStyleObject, @NotNull Field field) {
+  protected CodeStylePropertyAccessor<?> getAccessor(@NotNull Object codeStyleObject, @NotNull Field field) {
     if (codeStyleObject instanceof CodeStyleSettings) {
       if ("LINE_SEPARATOR".equals(field.getName())) {
         return new LineSeparatorAccessor(codeStyleObject, field);
@@ -109,11 +119,11 @@ public class GeneralCodeStylePropertyMapper extends AbstractCodeStylePropertyMap
   @Nullable
   public String getPropertyDescription(@NotNull String externalName) {
     String key = "codestyle.property.description." + externalName;
-    return OptionsBundle.getBundle().containsKey(key) ? OptionsBundle.message("codestyle.property.description." + externalName) : null;
+    return OptionsBundle.INSTANCE.containsKey(key) ? OptionsBundle.message("codestyle.property.description." + externalName) : null;
   }
 
   @Override
-  protected void addAdditionalAccessors(@NotNull Map<String, CodeStylePropertyAccessor> accessorMap) {
+  protected void addAdditionalAccessors(@NotNull Map<String, CodeStylePropertyAccessor<?>> accessorMap) {
     accessorMap.put(VisualGuidesAccessor.VISUAL_GUIDES_PROPERTY_NAME, new VisualGuidesAccessor(getRootSettings(), null));
   }
 }

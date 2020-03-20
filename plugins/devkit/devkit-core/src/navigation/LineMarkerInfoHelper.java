@@ -18,12 +18,12 @@ import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
 import icons.DevkitIcons;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.PropertyKey;
 import org.jetbrains.idea.devkit.DevKitBundle;
 import org.jetbrains.idea.devkit.util.PointableCandidate;
 
 import java.text.MessageFormat;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 
 class LineMarkerInfoHelper {
@@ -76,7 +76,7 @@ class LineMarkerInfoHelper {
   }
 
   @NotNull
-  private static NullableFunction<PointableCandidate, String> createNamer(String tooltipPatternPropertyName,
+  private static NullableFunction<PointableCandidate, String> createNamer(@PropertyKey(resourceBundle = DevKitBundle.BUNDLE) String tooltipPatternPropertyName,
                                                                           NotNullFunction<? super XmlTag, String> nameProvider) {
     return target -> {
       XmlTag tag = target.pointer.getElement();

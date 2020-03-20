@@ -2,29 +2,27 @@
 package com.intellij.openapi.externalSystem.model.project;
 
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
+import com.intellij.serialization.PropertyMapping;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collections;
 import java.util.Set;
 
-public class TestData extends AbstractExternalEntityData {
-
+public final class TestData extends AbstractExternalEntityData {
   private final @NotNull String testName;
   private final @NotNull String testTaskName;
-  private final @NotNull String cleanTestTaskName;
   private final @NotNull Set<String> sourceFolders;
 
+  @PropertyMapping({"owner", "testName", "testTaskName", "sourceFolders"})
   public TestData(
     @NotNull ProjectSystemId owner,
     @NotNull String testName,
     @NotNull String testTaskName,
-    @NotNull String cleanTestTaskName,
     @NotNull Set<String> sourceFolders
   ) {
     super(owner);
     this.testName = testName;
     this.testTaskName = testTaskName;
-    this.cleanTestTaskName = cleanTestTaskName;
     this.sourceFolders = sourceFolders;
   }
 
@@ -36,11 +34,6 @@ public class TestData extends AbstractExternalEntityData {
   @NotNull
   public String getTestTaskName() {
     return testTaskName;
-  }
-
-  @NotNull
-  public String getCleanTestTaskName() {
-    return cleanTestTaskName;
   }
 
   @NotNull

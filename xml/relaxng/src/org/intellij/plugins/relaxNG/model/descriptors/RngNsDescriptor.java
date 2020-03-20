@@ -18,6 +18,7 @@ package org.intellij.plugins.relaxNG.model.descriptors;
 
 import com.intellij.codeInsight.daemon.Validator;
 import com.intellij.javaee.ExternalResourceManager;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.util.ModificationTracker;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -38,7 +39,7 @@ import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.XmlElementDescriptor;
 import com.intellij.xml.XmlNSDescriptorEx;
 import com.intellij.xml.impl.schema.AnyXmlElementDescriptor;
-import org.intellij.plugins.relaxNG.ApplicationLoader;
+import org.intellij.plugins.relaxNG.RelaxNgMetaDataContributor;
 import org.intellij.plugins.relaxNG.model.resolve.RelaxIncludeIndex;
 import org.intellij.plugins.relaxNG.validation.RngParser;
 import org.intellij.plugins.relaxNG.validation.XmlInstanceValidator;
@@ -54,7 +55,7 @@ import java.util.*;
 
 public class RngNsDescriptor implements XmlNSDescriptorEx, Validator {
   private final Map<QName, CachedValue<XmlElementDescriptor>> myDescriptorsMap =
-    Collections.synchronizedMap(new HashMap<QName, CachedValue<XmlElementDescriptor>>());
+    Collections.synchronizedMap(new HashMap<>());
 
   private XmlFile myFile;
   private PsiElement myElement;
@@ -107,13 +108,13 @@ public class RngNsDescriptor implements XmlNSDescriptorEx, Validator {
     return descriptor != null ? descriptor : findDescriptor(qName, ChildElementFinder.find(myPattern));
   }
 
-  public XmlElementDescriptor findDescriptor(XmlTag tag, List<DElementPattern> list) {
+  public XmlElementDescriptor findDescriptor(XmlTag tag, List<? extends DElementPattern> list) {
     final QName qName = new QName(tag.getNamespace(), tag.getLocalName());
 
     return findDescriptor(qName, list);
   }
 
-  private XmlElementDescriptor findDescriptor(final QName qName, List<DElementPattern> list) {
+  private XmlElementDescriptor findDescriptor(final QName qName, List<? extends DElementPattern> list) {
     int max = -1;
     DElementPattern maxPattern = null;
     for (DElementPattern pattern : list) {
@@ -143,8 +144,7 @@ public class RngNsDescriptor implements XmlNSDescriptorEx, Validator {
   }
 
   @Override
-  @NotNull
-  public XmlElementDescriptor[] getRootElementsDescriptors(@Nullable XmlDocument document) {
+  public XmlElementDescriptor @NotNull [] getRootElementsDescriptors(@Nullable XmlDocument document) {
     if (myPattern == null) {
       return XmlElementDescriptor.EMPTY_ARRAY;
     }
@@ -153,11 +153,13 @@ public class RngNsDescriptor implements XmlNSDescriptorEx, Validator {
     return convertElementDescriptors(list);
   }
 
-  XmlElementDescriptor[] convertElementDescriptors(List<DElementPattern> patterns) {
+  XmlElementDescriptor[] convertElementDescriptors(List<? extends DElementPattern> patterns) {
     patterns = ContainerUtil.findAll(patterns, NamedPatternFilter.INSTANCE);
 
     final Map<QName, List<DElementPattern>> name2patterns = new LinkedHashMap<>();
     for (DElementPattern pattern : patterns) {
+      ProgressManager.checkCanceled();
+
       for (QName qName : pattern.getName().listNames()) {
         List<DElementPattern> dPatterns = name2patterns.get(qName);
         if (dPatterns == null) {
@@ -219,9 +221,8 @@ public class RngNsDescriptor implements XmlNSDescriptorEx, Validator {
     return getDescriptorFile().getName();
   }
 
-  @NotNull
   @Override
-  public Object[] getDependencies() {
+  public Object @NotNull [] getDependencies() {
     if (myPattern != null) {
       if (DumbService.isDumb(myElement.getProject())) {
         return new Object[] { ModificationTracker.EVER_CHANGED, ExternalResourceManager.getInstance()};
@@ -263,7 +264,7 @@ public class RngNsDescriptor implements XmlNSDescriptorEx, Validator {
       return;
     }
     // RNG XML itself is validated by parsing it with Jing, so we don't want to schema-validate it
-    if (!ApplicationLoader.RNG_NAMESPACE.equals(rootTag.getNamespace())) {
+    if (!RelaxNgMetaDataContributor.RNG_NAMESPACE.equals(rootTag.getNamespace())) {
       XmlInstanceValidator.doValidation(doc, host, getDescriptorFile());
     }
   }

@@ -5,6 +5,7 @@ import com.intellij.codeInsight.guess.GuessManager;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.PsiTypeLookupItem;
 import com.intellij.codeInsight.template.*;
+import com.intellij.codeInsight.template.impl.ConstantNode;
 import com.intellij.codeInsight.template.impl.MacroCallNode;
 import com.intellij.codeInsight.template.macro.SuggestVariableNameMacro;
 import com.intellij.psi.PsiElement;
@@ -15,6 +16,7 @@ import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -53,30 +55,14 @@ public class CastVarPostfixTemplate extends StringBasedPostfixTemplate {
     template.addVariable(VAR_NAME, nameMacro, nameMacro, true);
   }
 
-  private static void fill(@NotNull Template template, @NotNull PsiType[] suggestedTypes, @NotNull PsiElement context) {
+  private static void fill(@NotNull Template template, PsiType @NotNull [] suggestedTypes, @NotNull PsiElement context) {
     Set<LookupElement> itemSet = new LinkedHashSet<>();
     for (PsiType type : suggestedTypes) {
       itemSet.add(PsiTypeLookupItem.createLookupItem(type, null));
     }
-    final LookupElement[] lookupItems = itemSet.toArray(LookupElement.EMPTY_ARRAY);
     final Result result = suggestedTypes.length > 0 ? new PsiTypeResult(suggestedTypes[0], context.getProject()) : null;
 
-    Expression expr = new Expression() {
-      @Override
-      public LookupElement[] calculateLookupItems(ExpressionContext context) {
-        return lookupItems.length > 1 ? lookupItems : null;
-      }
-
-      @Override
-      public Result calculateResult(ExpressionContext context) {
-        return result;
-      }
-
-      @Override
-      public Result calculateQuickResult(ExpressionContext context) {
-        return null;
-      }
-    };
+    Expression expr = new ConstantNode(result).withLookupItems(itemSet.size() > 1 ? itemSet : Collections.emptyList());
 
     template.addVariable(TYPE_VAR, expr, expr, true);
   }

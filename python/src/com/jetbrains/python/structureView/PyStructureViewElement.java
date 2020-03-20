@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.structureView;
 
 import com.intellij.ide.structureView.StructureViewTreeElement;
@@ -9,12 +9,11 @@ import com.intellij.openapi.editor.colors.TextAttributesKey;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.ui.LayeredIcon;
-import com.intellij.util.containers.ContainerUtil;
 import com.jetbrains.python.PyNames;
 import com.jetbrains.python.psi.*;
 import com.jetbrains.python.psi.impl.PyPsiUtils;
 import com.jetbrains.python.psi.types.TypeEvalContext;
-import icons.PythonIcons;
+import icons.PythonPsiApiIcons;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -111,8 +110,7 @@ public class PyStructureViewElement implements StructureViewTreeElement {
   }
 
   @Override
-  @NotNull
-  public StructureViewTreeElement[] getChildren() {
+  public StructureViewTreeElement @NotNull [] getChildren() {
     final PyElement element = getValue();
     if (element == null) {
       return EMPTY_ARRAY;
@@ -151,11 +149,11 @@ public class PyStructureViewElement implements StructureViewTreeElement {
   }
 
   private Collection<PyElement> getElementChildren(final PyElement element) {
-    Collection<PyElement> children = ContainerUtil.newLinkedHashSet();
+    Collection<PyElement> children = new LinkedHashSet<>();
     PyPsiUtils.assertValid(element);
     element.acceptChildren(new PyElementVisitor() {
       @Override
-      public void visitElement(PsiElement e) {
+      public void visitElement(@NotNull PsiElement e) {
         if (isWorthyItem(e, element)) {
           children.add((PyElement)e);
         }
@@ -275,13 +273,13 @@ public class PyStructureViewElement implements StructureViewTreeElement {
           icon.setIcon(normal_icon, 0);
           Icon overlay = null;
           if (myVisibility == Visibility.PRIVATE || myVisibility == Visibility.PROTECTED) {
-            overlay = PythonIcons.Python.Nodes.Lock;
+            overlay = PythonPsiApiIcons.Nodes.Lock;
           }
           else if (myVisibility == Visibility.PREDEFINED) {
-            overlay = PythonIcons.Python.Nodes.Cyan_dot;
+            overlay = PythonPsiApiIcons.Nodes.Cyan_dot;
           }
           else if (myVisibility == Visibility.INVISIBLE) {
-            overlay = PythonIcons.Python.Nodes.Red_inv_triangle;
+            overlay = PythonPsiApiIcons.Nodes.Red_inv_triangle;
           }
           if (overlay != null) {
             icon.setIcon(overlay, 1);

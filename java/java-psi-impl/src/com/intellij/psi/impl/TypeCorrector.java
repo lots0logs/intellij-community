@@ -3,6 +3,7 @@ package com.intellij.psi.impl;
 
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
+import com.intellij.psi.impl.light.LightClass;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiSuperMethodUtil;
 import com.intellij.psi.util.PsiUtilCore;
@@ -25,7 +26,7 @@ class TypeCorrector extends PsiTypeMapper {
   }
 
   @Override
-  public PsiType visitType(PsiType type) {
+  public PsiType visitType(@NotNull PsiType type) {
     if (LambdaUtil.notInferredType(type)) {
       return type;
     }
@@ -51,7 +52,7 @@ class TypeCorrector extends PsiTypeMapper {
   }
 
   @Override
-  public PsiType visitClassType(PsiClassType classType) {
+  public PsiType visitClassType(@NotNull PsiClassType classType) {
     if (classType instanceof PsiCorrectedClassType) {
       return myResolveScope.equals(classType.getResolveScope()) ? classType :
              visitClassType(((PsiCorrectedClassType)classType).myDelegate);
@@ -66,6 +67,7 @@ class TypeCorrector extends PsiTypeMapper {
     final PsiClass psiClass = classResolveResult.getElement();
     final PsiSubstitutor substitutor = classResolveResult.getSubstitutor();
     if (psiClass == null) return classType;
+    if (psiClass instanceof LightClass) return classType;
 
     PsiUtilCore.ensureValid(psiClass);
 
@@ -151,9 +153,8 @@ class TypeCorrector extends PsiTypeMapper {
       return myDelegate.getClassName();
     }
 
-    @NotNull
     @Override
-    public PsiType[] getParameters() {
+    public PsiType @NotNull [] getParameters() {
       return ContainerUtil.map2Array(myDelegate.getParameters(), PsiType.class, type -> {
         if (type == null) {
           LOG.error(myDelegate + " of " + myDelegate.getClass() + "; substitutor=" + myDelegate.resolveGenerics().getSubstitutor());

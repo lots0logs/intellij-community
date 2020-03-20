@@ -1,12 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.actions;
 
 import com.intellij.CommonBundle;
 import com.intellij.analysis.AnalysisScope;
-import com.intellij.analysis.AnalysisScopeBundle;
 import com.intellij.analysis.AnalysisUIOptions;
 import com.intellij.analysis.BaseAnalysisActionDialog;
 import com.intellij.analysis.dialog.ModelScopeItem;
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInspection.CleanupLocalInspectionTool;
 import com.intellij.codeInspection.InspectionManager;
 import com.intellij.codeInspection.InspectionProfile;
@@ -64,7 +64,7 @@ public class RunInspectionAction extends GotoActionBase implements DataProvider 
 
   public RunInspectionAction(String predefinedText) {
     myPredefinedText = predefinedText;
-    getTemplatePresentation().setText(IdeBundle.message("goto.inspection.action.text"));
+    getTemplatePresentation().setText(IdeBundle.messagePointer("goto.inspection.action.text"));
   }
 
   @Override
@@ -74,9 +74,9 @@ public class RunInspectionAction extends GotoActionBase implements DataProvider 
 
     PsiDocumentManager.getInstance(project).commitAllDocuments();
 
-    final PsiElement psiElement = CommonDataKeys.PSI_ELEMENT.getData(e.getDataContext());
-    final PsiFile psiFile = CommonDataKeys.PSI_FILE.getData(e.getDataContext());
-    final VirtualFile virtualFile = CommonDataKeys.VIRTUAL_FILE.getData(e.getDataContext());
+    final PsiElement psiElement = e.getData(CommonDataKeys.PSI_ELEMENT);
+    final PsiFile psiFile = e.getData(CommonDataKeys.PSI_FILE);
+    final VirtualFile virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE);
 
     FeatureUsageTracker.getInstance().triggerFeatureUsed("navigation.goto.inspection");
 
@@ -142,7 +142,7 @@ public class RunInspectionAction extends GotoActionBase implements DataProvider 
     final AnalysisScope initialAnalysisScope = analysisScope;
     List<ModelScopeItem> items = BaseAnalysisActionDialog.standardItems(project, analysisScope, module, psiElement);
     final BaseAnalysisActionDialog dialog = new BaseAnalysisActionDialog("Run '" + toolWrapper.getDisplayName() + "'",
-                                                                         AnalysisScopeBundle.message("analysis.scope.title", InspectionsBundle
+                                                                         CodeInsightBundle.message("analysis.scope.title", InspectionsBundle
                                                                            .message("inspection.action.noun")), project,
                                                                          items, options, true) {
 
@@ -194,12 +194,11 @@ public class RunInspectionAction extends GotoActionBase implements DataProvider 
         return myUpdatedSettingsToolWrapper == null ? toolWrapper : myUpdatedSettingsToolWrapper;
       }
 
-      @NotNull
       @Override
-      protected Action[] createActions() {
+      protected Action @NotNull [] createActions() {
         final List<Action> actions = new ArrayList<>();
         final boolean hasFixAll = toolWrapper.getTool() instanceof CleanupLocalInspectionTool;
-        actions.add(new AbstractAction(hasFixAll ? AnalysisScopeBundle.message("action.analyze.verb")
+        actions.add(new AbstractAction(hasFixAll ? CodeInsightBundle.message("action.analyze.verb")
                                                  : CommonBundle.getOkButtonText()) {
           {
             putValue(DEFAULT_ACTION, Boolean.TRUE);
@@ -213,7 +212,7 @@ public class RunInspectionAction extends GotoActionBase implements DataProvider 
           }
         });
         if (hasFixAll) {
-          actions.add(new AbstractAction("Fix All") {
+          actions.add(new AbstractAction(IdeBundle.message("goto.inspection.action.fix.all")) {
             @Override
             public void actionPerformed(ActionEvent e) {
               InspectionToolWrapper wrapper = getToolWrapper();

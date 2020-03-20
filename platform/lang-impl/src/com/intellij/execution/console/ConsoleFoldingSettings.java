@@ -1,13 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.console;
 
-import com.google.common.collect.Collections2;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
+import com.intellij.openapi.extensions.ExtensionPointListener;
+import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.ContainerUtil;
+import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -24,6 +27,19 @@ public class ConsoleFoldingSettings implements PersistentStateComponent<ConsoleF
     for (CustomizableConsoleFoldingBean regexp : CustomizableConsoleFoldingBean.EP_NAME.getExtensions()) {
       patternList(regexp.negate).add(regexp.substring);
     }
+    CustomizableConsoleFoldingBean.EP_NAME
+      .addExtensionPointListener(new ExtensionPointListener<CustomizableConsoleFoldingBean>() {
+                                   @Override
+                                   public void extensionAdded(@NotNull CustomizableConsoleFoldingBean extension, @NotNull PluginDescriptor pluginDescriptor) {
+                                     patternList(extension.negate).add(extension.substring);
+                                   }
+
+                                   @Override
+                                   public void extensionRemoved(@NotNull CustomizableConsoleFoldingBean extension, @NotNull PluginDescriptor pluginDescriptor) {
+                                     patternList(extension.negate).remove(extension.substring);
+                                   }
+                                 },
+                                 ApplicationManager.getApplication());
   }
 
   public static ConsoleFoldingSettings getSettings() {
@@ -59,8 +75,8 @@ public class ConsoleFoldingSettings implements PersistentStateComponent<ConsoleF
     return result;
   }
 
-  private void writeDiff(List<String> added, List<String> removed, boolean negated) {
-    Set<String> baseline = ContainerUtil.newTroveSet();
+  private void writeDiff(List<? super String> added, List<? super String> removed, boolean negated) {
+    Set<String> baseline = new THashSet<>();
     for (CustomizableConsoleFoldingBean regexp : CustomizableConsoleFoldingBean.EP_NAME.getExtensions()) {
       if (regexp.negate == negated) {
         baseline.add(regexp.substring);
@@ -79,8 +95,8 @@ public class ConsoleFoldingSettings implements PersistentStateComponent<ConsoleF
     return negated ? myNegativePatterns : myPositivePatterns;
   }
 
-  private Collection<String> filterEmptyStringsFromCollection(Collection<String> collection) {
-    return Collections2.filter(collection, input -> !StringUtil.isEmpty(input));
+  private static Collection<String> filterEmptyStringsFromCollection(Collection<String> collection) {
+    return ContainerUtil.filter(collection, input -> !StringUtil.isEmpty(input));
   }
 
   @Override

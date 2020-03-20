@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.uast
 
 import com.intellij.psi.*
@@ -39,21 +25,6 @@ interface UMethod : UDeclaration, PsiMethod {
    */
   val uastParameters: List<UParameter>
 
-  /**
-   * Returns true, if the method overrides a method of a super class.
-   *
-   * **Deprecated:** current implementation for Java relies on presence of `@Override` annotation which is not fully reliable.
-   * Please perform your own check with required level of reliability.
-   * To be removed in IDEA 2019.2
-   */
-  @Deprecated("Redundant method with uncertain implementation",
-              ReplaceWith(
-                "javaPsi.modifierList.hasAnnotation(CommonClassNames.JAVA_LANG_OVERRIDE) || javaPsi.findSuperMethods().isNotEmpty()",
-                "com.intellij.psi.CommonClassNames"
-              )
-  )
-  val isOverride: Boolean
-
   override fun getName(): String
 
   override fun getReturnType(): PsiType?
@@ -61,33 +32,33 @@ interface UMethod : UDeclaration, PsiMethod {
   override fun isConstructor(): Boolean
 
   @Deprecated("Use uastBody instead.", ReplaceWith("uastBody"))
-  override fun getBody(): PsiCodeBlock? = psi.body
+  override fun getBody(): PsiCodeBlock? = javaPsi.body
 
   override fun accept(visitor: UastVisitor) {
     if (visitor.visitMethod(this)) return
-    annotations.acceptList(visitor)
+    uAnnotations.acceptList(visitor)
     uastParameters.acceptList(visitor)
     uastBody?.accept(visitor)
     visitor.afterVisitMethod(this)
   }
 
   override fun asRenderString(): String = buildString {
-    if (annotations.isNotEmpty()) {
-      annotations.joinTo(buffer = this, separator = "\n", postfix = "\n", transform = UAnnotation::asRenderString)
+    if (uAnnotations.isNotEmpty()) {
+      uAnnotations.joinTo(buffer = this, separator = "\n", postfix = "\n", transform = UAnnotation::asRenderString)
     }
 
-    append(psi.renderModifiers())
+    append(javaPsi.renderModifiers())
     append("fun ").append(name)
 
     uastParameters.joinTo(this, prefix = "(", postfix = ")") { parameter ->
-      val annotationsText = if (parameter.annotations.isNotEmpty())
-        parameter.annotations.joinToString(separator = " ", postfix = " ") { it.asRenderString() }
+      val annotationsText = if (parameter.uAnnotations.isNotEmpty())
+        parameter.uAnnotations.joinToString(separator = " ", postfix = " ") { it.asRenderString() }
       else
         ""
       annotationsText + parameter.name + ": " + parameter.type.canonicalText
     }
 
-    psi.returnType?.let { append(" : " + it.canonicalText) }
+    javaPsi.returnType?.let { append(" : " + it.canonicalText) }
 
     val body = uastBody
     append(when (body) {
@@ -124,11 +95,11 @@ interface UAnnotationMethod : UMethod, PsiAnnotationMethod {
    */
   val uastDefaultValue: UExpression?
 
-  override fun getDefaultValue(): PsiAnnotationMemberValue? = psi.defaultValue
+  override fun getDefaultValue(): PsiAnnotationMemberValue? = (javaPsi as? PsiAnnotationMethod)?.defaultValue
 
   override fun accept(visitor: UastVisitor) {
     if (visitor.visitMethod(this)) return
-    annotations.acceptList(visitor)
+    uAnnotations.acceptList(visitor)
     uastParameters.acceptList(visitor)
     uastBody?.accept(visitor)
     uastDefaultValue?.accept(visitor)

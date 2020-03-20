@@ -23,6 +23,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
 import com.intellij.psi.tree.IElementType;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.Contract;
@@ -30,6 +31,7 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -325,7 +327,7 @@ public class PsiTypesUtil {
   }
 
   /**
-   *  Not compliant to specification, use {@link PsiTypesUtil#isDenotableType(PsiType, PsiElement)} instead
+   * @deprecated not compliant to specification, use {@link PsiTypesUtil#isDenotableType(PsiType, PsiElement)} instead
    */
   @Deprecated
   public static boolean isDenotableType(@Nullable PsiType type) {
@@ -351,7 +353,7 @@ public class PsiTypesUtil {
     return type.accept(new PsiTypeVisitor<Boolean>() {
       @Nullable
       @Override
-      public Boolean visitClassType(PsiClassType classType) {
+      public Boolean visitClassType(@NotNull PsiClassType classType) {
         PsiClassType.ClassResolveResult resolveResult = classType.resolveGenerics();
         final PsiClass psiClass = resolveResult.getElement();
         if (psiClass == null) {
@@ -369,26 +371,26 @@ public class PsiTypesUtil {
 
       @Nullable
       @Override
-      public Boolean visitArrayType(PsiArrayType arrayType) {
+      public Boolean visitArrayType(@NotNull PsiArrayType arrayType) {
         return arrayType.getComponentType().accept(this);
       }
 
       @NotNull
       @Override
-      public Boolean visitWildcardType(PsiWildcardType wildcardType) {
+      public Boolean visitWildcardType(@NotNull PsiWildcardType wildcardType) {
         final PsiType bound = wildcardType.getBound();
         return bound != null && bound.accept(this);
       }
 
       @Override
-      public Boolean visitType(PsiType type) {
+      public Boolean visitType(@NotNull PsiType type) {
         return false;
       }
     });
   }
 
   @NotNull
-  public static PsiType getParameterType(@NotNull PsiParameter[] parameters, int i, boolean varargs) {
+  public static PsiType getParameterType(PsiParameter @NotNull [] parameters, int i, boolean varargs) {
     final PsiParameter parameter = parameters[i < parameters.length ? i : parameters.length - 1];
     PsiType parameterType = parameter.getType();
     if (parameterType instanceof PsiEllipsisType && varargs) {
@@ -400,8 +402,7 @@ public class PsiTypesUtil {
     return parameterType;
   }
 
-  @NotNull
-  public static PsiTypeParameter[] filterUnusedTypeParameters(@NotNull PsiTypeParameter[] typeParameters, @NotNull PsiType... types) {
+  public static PsiTypeParameter @NotNull [] filterUnusedTypeParameters(PsiTypeParameter @NotNull [] typeParameters, PsiType @NotNull ... types) {
     if (typeParameters.length == 0) return PsiTypeParameter.EMPTY_ARRAY;
 
     TypeParameterSearcher searcher = new TypeParameterSearcher();
@@ -411,9 +412,8 @@ public class PsiTypesUtil {
     return searcher.getTypeParameters().toArray(PsiTypeParameter.EMPTY_ARRAY);
   }
 
-  @NotNull
-  public static PsiTypeParameter[] filterUnusedTypeParameters(@NotNull PsiType superReturnTypeInBaseClassType,
-                                                              @NotNull PsiTypeParameter[] typeParameters) {
+  public static PsiTypeParameter @NotNull [] filterUnusedTypeParameters(@NotNull PsiType superReturnTypeInBaseClassType,
+                                                                        PsiTypeParameter @NotNull [] typeParameters) {
     return filterUnusedTypeParameters(typeParameters, superReturnTypeInBaseClassType);
   }
 
@@ -460,6 +460,114 @@ public class PsiTypesUtil {
     return (PsiTypeElement)CodeStyleManager.getInstance(project).reformat(explicitTypeElement);
   }
 
+  public static PsiType getTypeByMethod(@NotNull PsiElement context,
+                                        PsiExpressionList argumentList,
+                                        PsiElement parentMethod,
+                                        boolean varargs,
+                                        PsiSubstitutor substitutor,
+                                        boolean inferParent) {
+    if (parentMethod instanceof PsiMethod) {
+      final PsiParameter[] parameters = ((PsiMethod)parentMethod).getParameterList().getParameters();
+      if (parameters.length == 0) return null;
+      final PsiExpression[] args = argumentList.getExpressions();
+      if (!((PsiMethod)parentMethod).isVarArgs() && parameters.length != args.length && !inferParent) return null;
+      PsiElement arg = context;
+      while (arg.getParent() instanceof PsiParenthesizedExpression) {
+        arg = arg.getParent();
+      }
+      final int i = ArrayUtilRt.find(args, arg);
+      if (i < 0) return null;
+      final PsiType parameterType = substitutor != null ? substitutor.substitute(getParameterType(parameters, i, varargs)) : null;
+      final boolean isRaw = substitutor != null && PsiUtil.isRawSubstitutor((PsiMethod)parentMethod, substitutor);
+      return isRaw ? TypeConversionUtil.erasure(parameterType) : parameterType;
+    }
+    return null;
+  }
+
+  /**
+   * Checks if {@code type} mentions type parameters from the passed {@code Set} 
+   * Implicit type arguments of types based on inner classes of generic outer classes are explicitly checked
+   */
+  public static boolean mentionsTypeParameters(@Nullable PsiType type, Set<PsiTypeParameter> typeParameters) {
+    return mentionsTypeParametersOrUnboundedWildcard(type, typeParameters, false);
+  }
+
+  /**
+   * Checks if {@code resolveResult} depicts unchecked method call
+   */
+  public static boolean isUncheckedCall(JavaResolveResult resolveResult) {
+    final PsiElement element = resolveResult.getElement();
+    if (element instanceof PsiMethod) {
+      PsiMethod method = (PsiMethod)element;
+      PsiSubstitutor substitutor = resolveResult.getSubstitutor();
+      if (PsiUtil.isRawSubstitutor(method, substitutor)) {
+        Set<PsiTypeParameter> typeParameters = new HashSet<>(substitutor.getSubstitutionMap().keySet());
+        Arrays.stream(method.getTypeParameters()).forEach(typeParameters::remove);
+        return Arrays.stream(method.getParameterList().getParameters())
+          .anyMatch(parameter -> mentionsTypeParametersOrUnboundedWildcard(parameter.getType(), typeParameters, true));
+      }
+    }
+    return false;
+  }
+  
+  private static boolean mentionsTypeParametersOrUnboundedWildcard(@Nullable PsiType type,
+                                                                   Set<PsiTypeParameter> typeParameters,
+                                                                   boolean acceptUnboundedWildcard) {
+    if (type == null) return false;
+    return type.accept(new PsiTypeVisitor<Boolean>() {
+      @Override
+      public Boolean visitType(@NotNull PsiType type) {
+        return false;
+      }
+
+      @Override
+      public Boolean visitWildcardType(@NotNull PsiWildcardType wildcardType) {
+        final PsiType bound = wildcardType.getBound();
+        if (bound != null) {
+          return bound.accept(this);
+        }
+        return acceptUnboundedWildcard;
+      }
+
+      @Override
+      public Boolean visitClassType(@NotNull PsiClassType classType) {
+        PsiClassType.ClassResolveResult result = classType.resolveGenerics();
+        final PsiClass psiClass = result.getElement();
+        if (psiClass != null) {
+          PsiSubstitutor substitutor = result.getSubstitutor();
+          for (PsiTypeParameter parameter : PsiUtil.typeParametersIterable(psiClass)) {
+            PsiType type = substitutor.substitute(parameter);
+            if (type != null && type.accept(this)) return true;
+          }
+        }
+        return psiClass instanceof PsiTypeParameter && typeParameters.contains(psiClass);
+      }
+
+      @Override
+      public Boolean visitIntersectionType(@NotNull PsiIntersectionType intersectionType) {
+        for (PsiType conjunct : intersectionType.getConjuncts()) {
+          if (conjunct.accept(this)) return true;
+        }
+        return false;
+      }
+
+      @Override
+      public Boolean visitMethodReferenceType(@NotNull PsiMethodReferenceType methodReferenceType) {
+        return false;
+      }
+
+      @Override
+      public Boolean visitLambdaExpressionType(@NotNull PsiLambdaExpressionType lambdaExpressionType) {
+        return false;
+      }
+
+      @Override
+      public Boolean visitArrayType(@NotNull PsiArrayType arrayType) {
+        return arrayType.getComponentType().accept(this);
+      }
+    });
+  }
+
   public static class TypeParameterSearcher extends PsiTypeVisitor<Boolean> {
     private final Set<PsiTypeParameter> myTypeParams = new HashSet<>();
 
@@ -469,17 +577,17 @@ public class PsiTypesUtil {
     }
 
     @Override
-    public Boolean visitType(final PsiType type) {
+    public Boolean visitType(@NotNull final PsiType type) {
       return false;
     }
 
     @Override
-    public Boolean visitArrayType(final PsiArrayType arrayType) {
+    public Boolean visitArrayType(@NotNull final PsiArrayType arrayType) {
       return arrayType.getComponentType().accept(this);
     }
 
     @Override
-    public Boolean visitClassType(final PsiClassType classType) {
+    public Boolean visitClassType(@NotNull final PsiClassType classType) {
       PsiClassType.ClassResolveResult resolveResult = classType.resolveGenerics();
       final PsiClass aClass = resolveResult.getElement();
       if (aClass instanceof PsiTypeParameter) {
@@ -499,7 +607,7 @@ public class PsiTypesUtil {
     }
 
     @Override
-    public Boolean visitWildcardType(final PsiWildcardType wildcardType) {
+    public Boolean visitWildcardType(@NotNull final PsiWildcardType wildcardType) {
       final PsiType bound = wildcardType.getBound();
       if (bound != null) {
         bound.accept(this);

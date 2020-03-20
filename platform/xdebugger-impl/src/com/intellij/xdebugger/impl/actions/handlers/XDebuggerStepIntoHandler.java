@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger.impl.actions.handlers;
 
 import com.intellij.openapi.actionSystem.DataContext;
@@ -12,9 +12,6 @@ import org.jetbrains.concurrency.Promise;
 
 import java.util.List;
 
-/**
- * @author egor
- */
 public class XDebuggerStepIntoHandler extends XDebuggerSmartStepIntoHandler {
   @Override
   protected boolean isEnabled(@NotNull XDebugSession session, DataContext dataContext) {
@@ -28,7 +25,7 @@ public class XDebuggerStepIntoHandler extends XDebuggerSmartStepIntoHandler {
 
   @Override
   protected <V extends XSmartStepIntoVariant> boolean handleSimpleCases(XSmartStepIntoHandler<V> handler,
-                                                                        List<V> variants,
+                                                                        List<? extends V> variants,
                                                                         XDebugSession session) {
     if (variants.size() < 2) {
       session.stepInto();

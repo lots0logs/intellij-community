@@ -27,7 +27,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.dom.model.MavenDomProjectModel;
 import org.jetbrains.idea.maven.dom.references.MavenPropertyPsiReference;
 
-public class MavenFilteredPropertiesCompletionAndResolutionTest extends MavenDomTestCase {
+public class MavenFilteredPropertiesCompletionAndResolutionTest extends MavenDomWithIndicesTestCase {
   public void testBasic() throws Exception {
     createProjectSubDir("res");
 
@@ -480,7 +480,7 @@ public class MavenFilteredPropertiesCompletionAndResolutionTest extends MavenDom
                                          "foo=abc${x<caret>xx}abc");
     assertResolved(f, findPropertyPsiElement(filter, "xxx"));
 
-    doRename(f, "bar");
+    doInlineRename(f, "bar");
 
     assertEquals("foo=abc${bar}abc", findPsiFile(f).getText());
     assertEquals("bar=1", findPsiFile(filter).getText());
@@ -638,6 +638,6 @@ public class MavenFilteredPropertiesCompletionAndResolutionTest extends MavenDom
       }
     }
 
-    assertTrue("Maven filter reference was not added", false);
+    fail("Maven filter reference was not added");
   }
 }

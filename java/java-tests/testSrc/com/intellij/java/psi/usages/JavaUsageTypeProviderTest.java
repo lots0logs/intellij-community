@@ -19,15 +19,12 @@ import com.intellij.JavaTestUtil;
 import com.intellij.find.findUsages.PsiElement2UsageTargetAdapter;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import com.intellij.usages.UsageTarget;
 import com.intellij.usages.impl.rules.JavaUsageTypeProvider;
 import com.intellij.usages.impl.rules.UsageType;
 
-/**
- * @author nik
- */
-public class JavaUsageTypeProviderTest extends LightCodeInsightFixtureTestCase {
+public class JavaUsageTypeProviderTest extends LightJavaCodeInsightFixtureTestCase {
   public void testNestedClassAccess() {
     myFixture.configureByFiles("NestedClassAccess.java", "Foo.java");
     assertUsageType(UsageType.CLASS_NESTED_CLASS_ACCESS, myFixture.findClass("Foo"));
@@ -51,6 +48,11 @@ public class JavaUsageTypeProviderTest extends LightCodeInsightFixtureTestCase {
   public void testStaticMethodUsageInImport() {
     myFixture.configureByFiles("StaticMethodUsageInImport.java", "Foo.java");
     assertUsageType(UsageType.CLASS_IMPORT, myFixture.findClass("Foo"));
+  }
+
+  public void testMethodReferenceConstructor() {
+    myFixture.configureByFiles("MethodReferenceConstructor.java");
+    assertUsageType(UsageType.CLASS_NEW_OPERATOR, myFixture.findClass("Foo"));
   }
 
   private void assertUsageType(UsageType expected, PsiClass target) {

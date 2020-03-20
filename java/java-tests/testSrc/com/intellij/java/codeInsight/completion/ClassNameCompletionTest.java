@@ -126,11 +126,6 @@ public class ClassNameCompletionTest extends LightFixtureCompletionTestCase {
 
   public void testBracesAfterNew() { doTest(); }
 
-  public void testInPlainTextFile() {
-    configureByFile(getTestName(false) + ".txt");
-    checkResultByFile(getTestName(false) + "_after.txt");
-  }
-
   public void testInPropertiesFile() {
     myFixture.configureByText("a.properties", "abc = StrinBui<caret>");
     complete();
@@ -290,6 +285,16 @@ public class ClassNameCompletionTest extends LightFixtureCompletionTestCase {
   public void testInCommentWithPackagePrefix() { doJavaTest('\n'); }
 
   public void testNestedAnonymousTab() { doJavaTest('\t');}
+
+  public void testClassStartsWithUnderscore() {
+    myFixture.addClass("package foo; public class _SomeClass {}");
+    doJavaTest('\n');
+  }
+
+  public void testNoInnerInaccessibleClass() {
+    myFixture.addClass("package foo; interface Intf { interface InnerInterface {} }");
+    doAntiTest();
+  }
 
   private void doJavaTest(char toType) {
     final String path = "/nameCompletion/java";

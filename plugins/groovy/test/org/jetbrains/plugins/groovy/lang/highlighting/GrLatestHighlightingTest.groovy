@@ -5,17 +5,19 @@ import com.intellij.codeInspection.InspectionProfileEntry
 import com.intellij.openapi.util.RecursionManager
 import com.intellij.testFramework.LightProjectDescriptor
 import org.jetbrains.annotations.NotNull
-import org.jetbrains.plugins.groovy.GroovyLightProjectDescriptor
 import org.jetbrains.plugins.groovy.codeInspection.assignment.GroovyAssignabilityCheckInspection
 import org.jetbrains.plugins.groovy.codeInspection.bugs.GroovyAccessibilityInspection
 import org.jetbrains.plugins.groovy.codeInspection.noReturnMethod.MissingReturnInspection
 import org.jetbrains.plugins.groovy.codeInspection.untypedUnresolvedAccess.GrUnresolvedAccessInspection
 
+import static org.jetbrains.plugins.groovy.GroovyProjectDescriptors.GROOVY_LATEST_REAL_JDK
+
 class GrLatestHighlightingTest extends GrHighlightingTestBase {
+
   @NotNull
   @Override
   protected LightProjectDescriptor getProjectDescriptor() {
-    return GroovyLightProjectDescriptor.GROOVY_LATEST_REAL_JDK
+    return GROOVY_LATEST_REAL_JDK
   }
 
   @Override
@@ -165,6 +167,7 @@ def method(Box<A> box) {
   }
 
   void testOverloadedInClosure() {
+    RecursionManager.disableAssertOnRecursionPrevention(myFixture.testRootDisposable)
     testHighlighting '''
 def <T> void foo(T t, Closure cl) {}
 
@@ -389,7 +392,7 @@ class GoodCodeRed {
   }
 
   void 'test recursive generics'() {
-    RecursionManager.disableAssertOnRecursionPrevention()
+    RecursionManager.disableAssertOnRecursionPrevention(myFixture.testRootDisposable)
     testHighlighting '''
 import groovy.transform.CompileStatic
 
@@ -522,7 +525,7 @@ class A {
 }
 
 new A(foo: {
-    prop
+    <warning descr="Cannot resolve symbol 'prop'">prop</warning>
 }) 
 '''
   }
@@ -575,11 +578,135 @@ def usage() {
 '''
   }
 
+  void testTypeSubstitutionWithClosureArg() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+
+def <T> T foo(T t) {
+    return t
+}
+
+@CompileStatic
+def m() {
+    foo( {print 'aa'}).call()
+}
+'''
+  }
+
   void 'test assign empty list literal to Set'() {
     testHighlighting 'Set<String> x = []'
   }
 
   void 'test assign empty list literal to Set @CS'() {
     testHighlighting '@groovy.transform.CompileStatic def bar() { Set<String> x = [] }'
+  }
+
+  void 'test nested closures expected type'() {
+    testHighlighting '''\
+@groovy.transform.TypeChecked
+int mmm(Closeable cc) {
+    1.with {
+        cc.withCloseable {}
+    }
+    return 42
+}
+'''
+  }
+
+  void 'test IDEA-216095'() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+@CompileStatic
+class AmbigousProblem {
+
+    class A{
+    }
+
+    void methodA(Object[] objects){
+    }
+
+    void methodA(Class... classes){}
+
+    void ambigous(){
+        methodA(A)
+    }
+}
+'''
+  }
+
+  void 'test IDEA-216095-2'() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+@CompileStatic
+class AmbigousProblem {
+    class A{
+    }
+
+    void methodA(Object o, Object... objects){
+    }
+
+    void methodA(String s, Object... classes){}
+
+    void ambigous(){
+        methodA("", A)
+    }
+}
+'''
+  }
+
+  void 'test IDEA-216095-3'() {
+    testHighlighting '''\
+void foo(Integer i, Object... objects){
+}
+
+void foo(Object i, Integer... objects){
+}
+
+foo<warning descr="Method call is ambiguous">(1, 1)</warning>
+'''
+  }
+
+  void 'test IDEA-219842'() {
+    testHighlighting '''\
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def m() {
+    ["a"]*.trim().findAll {
+        String line -> !line.isEmpty()
+    }
+}
+'''
+  }
+
+  void 'test IDEA-221874'() {
+    testHighlighting '''
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def m() {
+    def clazz = Thread
+    clazz.declaredFields
+        .findAll { !it.synthetic }
+        .each {
+            it.name
+        }
+}
+'''
+  }
+
+  void 'test IDEA-221874-2'() {
+    testHighlighting '''
+import groovy.transform.CompileStatic
+
+@CompileStatic
+def m2() {
+    def all = Thread.declaredFields
+            .findAll { !it.synthetic }
+
+    print all.<error>get</error>(0)
+}
+
+''',  true, false, false
   }
 }

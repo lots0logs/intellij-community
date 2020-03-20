@@ -31,8 +31,7 @@ import com.intellij.openapi.diff.DiffBundle;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.project.DumbAwareAction;
-import com.intellij.openapi.util.UserDataHolder;
-import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.project.Project;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NonNls;
@@ -41,6 +40,7 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.BitSet;
 import java.util.Iterator;
 import java.util.List;
 
@@ -68,7 +68,7 @@ public abstract class ThreesideTextDiffViewerEx extends ThreesideTextDiffViewer 
     myPrevNextDifferenceIterable = new MyPrevNextDifferenceIterable();
     myPrevNextConflictIterable = new MyPrevNextConflictIterable();
     myStatusPanel = new MyStatusPanel();
-    myFoldingModel = new MyFoldingModel(getEditors().toArray(new EditorEx[0]), this);
+    myFoldingModel = new MyFoldingModel(getProject(), getEditors().toArray(new EditorEx[0]), this);
 
     for (ThreeSide side : ThreeSide.values()) {
       DiffUtil.installLineConvertor(getEditor(side), getContent(side), myFoldingModel, side.getIndex());
@@ -259,6 +259,12 @@ public abstract class ThreesideTextDiffViewerEx extends ThreesideTextDiffViewer 
     return null;
   }
 
+  protected static boolean isChangeSelected(@NotNull ThreesideDiffChangeBase change, @NotNull BitSet lines, @NotNull ThreeSide side) {
+    int line1 = change.getStartLine(side);
+    int line2 = change.getEndLine(side);
+    return DiffUtil.isSelectedByLine(lines, line1, line2);
+  }
+
   //
   // Actions
   //
@@ -419,15 +425,7 @@ public abstract class ThreesideTextDiffViewerEx extends ThreesideTextDiffViewer 
       if (myChangesCount == 0 && myConflictsCount == 0) {
         return DiffBundle.message("merge.dialog.all.conflicts.resolved.message.text");
       }
-      return makeCounterWord(myChangesCount, "change") + ". " + makeCounterWord(myConflictsCount, "conflict");
-    }
-
-    @NotNull
-    private String makeCounterWord(int number, @NotNull String word) {
-      if (number == 0) {
-        return "No " + StringUtil.pluralize(word);
-      }
-      return number + " " + StringUtil.pluralize(word, number);
+      return DiffBundle.message("merge.differences.status.text", myChangesCount, myConflictsCount);
     }
   }
 
@@ -435,14 +433,14 @@ public abstract class ThreesideTextDiffViewerEx extends ThreesideTextDiffViewer 
     private final MyPaintable myPaintable1 = new MyPaintable(0, 1);
     private final MyPaintable myPaintable2 = new MyPaintable(1, 2);
 
-    public MyFoldingModel(@NotNull EditorEx[] editors, @NotNull Disposable disposable) {
-      super(editors, disposable);
+    public MyFoldingModel(@Nullable Project project, EditorEx @NotNull [] editors, @NotNull Disposable disposable) {
+      super(project, editors, disposable);
       assert editors.length == 3;
     }
 
-    public void install(@Nullable List<? extends MergeLineFragment> fragments,
-                        @NotNull UserDataHolder context,
-                        @NotNull FoldingModelSupport.Settings settings) {
+    @Nullable
+    public Data createState(@Nullable List<? extends MergeLineFragment> fragments,
+                            @NotNull FoldingModelSupport.Settings settings) {
       Iterator<int[]> it = map(fragments, fragment -> new int[]{
         fragment.getStartLine(ThreeSide.LEFT),
         fragment.getEndLine(ThreeSide.LEFT),
@@ -451,7 +449,7 @@ public abstract class ThreesideTextDiffViewerEx extends ThreesideTextDiffViewer 
         fragment.getStartLine(ThreeSide.RIGHT),
         fragment.getEndLine(ThreeSide.RIGHT)
       });
-      install(it, context, settings);
+      return computeFoldedRanges(it, settings);
     }
 
     public void paintOnDivider(@NotNull Graphics2D gg, @NotNull Component divider, @NotNull Side side) {

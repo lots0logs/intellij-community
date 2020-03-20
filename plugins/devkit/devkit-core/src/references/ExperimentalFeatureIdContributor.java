@@ -12,12 +12,13 @@ import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xml.DomElement;
 import com.intellij.util.xml.GenericAttributeValue;
+import com.intellij.util.xml.GenericDomValue;
 import com.intellij.util.xml.reflect.DomFixedChildDescription;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.devkit.dom.Extension;
-import org.jetbrains.idea.devkit.dom.impl.ExtensionDomExtender;
 
+import java.util.Collections;
 import java.util.List;
 
 import static com.intellij.patterns.PsiJavaPatterns.psiMethod;
@@ -50,16 +51,20 @@ class ExperimentalFeatureIdContributor extends PsiReferenceContributor {
       return ExperimentalFeatureImpl.class.getName();
     }
 
+    @Override
+    protected GenericAttributeValue<?> getNameElement(Extension extension) {
+      return extension.getId();
+    }
+
     @NotNull
     @Override
     public String getUnresolvedMessagePattern() {
       return "Cannot resolve feature '" + getValue() + "'";
     }
 
-    @NotNull
     @Override
-    public Object[] getVariants() {
-      final List<LookupElement> variants = new SmartList<>();
+    public Object @NotNull [] getVariants() {
+      final List<LookupElement> variants = Collections.synchronizedList(new SmartList<>());
       processCandidates(extension -> {
         final GenericAttributeValue<String> id = extension.getId();
         if (id == null || extension.getXmlElement() == null) return true;
@@ -87,10 +92,7 @@ class ExperimentalFeatureIdContributor extends PsiReferenceContributor {
       final DomFixedChildDescription description = extension.getGenericInfo().getFixedChildDescription("description");
       if (description == null) return null;
       final DomElement element = ContainerUtil.getFirstItem(description.getValues(extension));
-      if (element instanceof ExtensionDomExtender.SimpleTagValue) {
-        return ((ExtensionDomExtender.SimpleTagValue)element).getTagValue();
-      }
-      return null;
+      return element instanceof GenericDomValue ? ((GenericDomValue)element).getStringValue() : null;
     }
   }
 }

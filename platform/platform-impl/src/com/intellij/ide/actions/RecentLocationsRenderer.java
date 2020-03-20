@@ -2,6 +2,7 @@
 package com.intellij.ide.actions;
 
 import com.intellij.codeInsight.hint.HintUtil;
+import com.intellij.ide.ui.UISettings;
 import com.intellij.openapi.editor.CaretState;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.HighlighterColors;
@@ -16,14 +17,17 @@ import com.intellij.openapi.fileEditor.impl.IdeDocumentHistoryImpl;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.VerticalFlowLayout;
 import com.intellij.openapi.util.Iconable;
-import com.intellij.openapi.util.SystemInfoRt;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.*;
+import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.speedSearch.SpeedSearch;
 import com.intellij.ui.speedSearch.SpeedSearchUtil;
 import com.intellij.util.FontUtil;
 import com.intellij.util.IconUtil;
+import com.intellij.util.text.DateFormatUtil;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -34,17 +38,20 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.Iterator;
 
-import static com.intellij.ide.actions.RecentLocationsAction.EMPTY_FILE_TEXT;
-
 class RecentLocationsRenderer extends ColoredListCellRenderer<RecentLocationItem> {
   @NotNull private final Project myProject;
   @NotNull private final SpeedSearch mySpeedSearch;
   @NotNull private final RecentLocationsDataModel myData;
+  @NotNull private final JBCheckBox myCheckBox;
 
-  RecentLocationsRenderer(@NotNull Project project, @NotNull SpeedSearch speedSearch, @NotNull RecentLocationsDataModel data) {
+  RecentLocationsRenderer(@NotNull Project project,
+                          @NotNull SpeedSearch speedSearch,
+                          @NotNull RecentLocationsDataModel data,
+                          @NotNull JBCheckBox checkBox) {
     myProject = project;
     mySpeedSearch = speedSearch;
     myData = data;
+    myCheckBox = checkBox;
   }
 
   @Override
@@ -59,7 +66,7 @@ class RecentLocationsRenderer extends ColoredListCellRenderer<RecentLocationItem
     }
 
     EditorColorsScheme colorsScheme = editor.getColorsScheme();
-    String breadcrumbs = myData.getBreadcrumbsMap(RecentLocationsAction.showChanged(myProject)).get(value.getInfo());
+    String breadcrumbs = myData.getBreadcrumbsMap(myCheckBox.isSelected()).get(value.getInfo());
     JPanel panel = new JPanel(new VerticalFlowLayout(0, 0));
     if (index != 0) {
       panel.add(createSeparatorLine(colorsScheme));
@@ -72,7 +79,7 @@ class RecentLocationsRenderer extends ColoredListCellRenderer<RecentLocationItem
 
   @NotNull
   private static Color getBackgroundColor(@NotNull EditorColorsScheme colorsScheme, boolean selected) {
-    return selected ? HintUtil.getRecentLocationsSelectionColor() : colorsScheme.getDefaultBackground();
+    return selected ? HintUtil.getRecentLocationsSelectionColor(colorsScheme) : colorsScheme.getDefaultBackground();
   }
 
   @NotNull
@@ -121,9 +128,9 @@ class RecentLocationsRenderer extends ColoredListCellRenderer<RecentLocationItem
     editor.setBackgroundColor(getBackgroundColor(colorsScheme, selected));
     editor.setBorder(JBUI.Borders.empty(0, 4, 6, 0));
 
-    if (EMPTY_FILE_TEXT.equals(editor.getDocument().getText())) {
+    if (RecentLocationsAction.getEmptyFileText().equals(editor.getDocument().getText())) {
       editor.getMarkupModel().addRangeHighlighter(0,
-                                                  EMPTY_FILE_TEXT.length(),
+                                                  RecentLocationsAction.getEmptyFileText().length(),
                                                   HighlighterLayer.SYNTAX,
                                                   createEmptyTextForegroundTextAttributes(colorsScheme),
                                                   HighlighterTargetArea.EXACT_RANGE);
@@ -161,12 +168,17 @@ class RecentLocationsRenderer extends ColoredListCellRenderer<RecentLocationItem
 
     titleTextComponent.setBorder(JBUI.Borders.empty());
 
-    if (!SystemInfoRt.isWindows) {
+    if (!SystemInfo.isWindows) {
       titleTextComponent.setFont(FontUtil.minusOne(UIUtil.getLabelFont()));
     }
 
     if (speedSearch.matchingFragments(text) != null) {
       SpeedSearchUtil.applySpeedSearchHighlighting(list, titleTextComponent, false, selected);
+    }
+
+    long timeStamp = placeInfo.getTimeStamp();
+    if (UISettings.getInstance().getShowInplaceComments() && Registry.is("show.last.visited.timestamps") && timeStamp != -1) {
+      titleTextComponent.append(" " + DateFormatUtil.formatPrettyDateTime(timeStamp), SimpleTextAttributes.GRAYED_SMALL_ATTRIBUTES);
     }
 
     return titleTextComponent;
@@ -226,7 +238,7 @@ class RecentLocationsRenderer extends ColoredListCellRenderer<RecentLocationItem
                                        boolean hasFocus) {
   }
 
-  private static void selectSearchResultsInEditor(@NotNull Editor editor, @NotNull Iterator<TextRange> resultIterator) {
+  private static void selectSearchResultsInEditor(@NotNull Editor editor, @NotNull Iterator<? extends TextRange> resultIterator) {
     if (!editor.getCaretModel().supportsMultipleCarets()) {
       return;
     }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.uiDesigner.snapShooter;
 
@@ -19,7 +19,6 @@ import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorColorsScheme;
 import com.intellij.openapi.editor.markup.TextAttributes;
@@ -30,7 +29,6 @@ import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Ref;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.ui.ColoredTreeCellRenderer;
@@ -57,6 +55,7 @@ import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -66,7 +65,6 @@ import java.util.TreeSet;
  * @author yole
  */
 public class CreateSnapShotAction extends AnAction {
-  private static final Logger LOG = Logger.getInstance("com.intellij.uiDesigner.snapShooter.CreateSnapShotAction");
 
   @Override
   public void update(@NotNull AnActionEvent e) {
@@ -205,7 +203,7 @@ public class CreateSnapShotAction extends AnAction {
             PsiFile formFile = PsiFileFactory.getInstance(dir.getProject())
               .createFileFromText(dlg.getFormName() + GuiFormFileType.DOT_DEFAULT_EXTENSION, snapshot1);
             formFile = (PsiFile)dir.add(formFile);
-            formFile.getVirtualFile().setCharset(CharsetToolkit.UTF8_CHARSET);
+            formFile.getVirtualFile().setCharset(StandardCharsets.UTF_8);
             formFile.getViewProvider().getDocument().setText(snapshot1);
             view.selectElement(formFile);
           }

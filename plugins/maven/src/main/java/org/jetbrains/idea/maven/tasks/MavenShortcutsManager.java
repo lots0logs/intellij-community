@@ -1,10 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven.tasks;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.Shortcut;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.components.BaseComponent;
 import com.intellij.openapi.keymap.Keymap;
 import com.intellij.openapi.keymap.KeymapManager;
 import com.intellij.openapi.keymap.KeymapManagerListener;
@@ -14,20 +13,19 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.update.MergingUpdateQueue;
 import com.intellij.util.ui.update.Update;
 import gnu.trove.THashMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
-import org.jetbrains.idea.maven.execution.MavenRunner;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectChanges;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
 import org.jetbrains.idea.maven.project.MavenProjectsTree;
 import org.jetbrains.idea.maven.server.NativeMavenProjectHolder;
 import org.jetbrains.idea.maven.utils.MavenMergingUpdateQueue;
-import org.jetbrains.idea.maven.utils.MavenSimpleProjectComponent;
 import org.jetbrains.idea.maven.utils.MavenUtil;
 
 import java.io.File;
@@ -36,12 +34,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class MavenShortcutsManager extends MavenSimpleProjectComponent implements Disposable, BaseComponent {
+public final class MavenShortcutsManager implements Disposable {
+  private final Project myProject;
+
   private static final String ACTION_ID_PREFIX = "Maven_";
 
   private final AtomicBoolean isInitialized = new AtomicBoolean();
-
-  private final MavenProjectsManager myProjectsManager;
 
   private final List<Listener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
 
@@ -50,36 +48,27 @@ public class MavenShortcutsManager extends MavenSimpleProjectComponent implement
     return project.getComponent(MavenShortcutsManager.class);
   }
 
-  public MavenShortcutsManager(Project project, MavenProjectsManager projectsManager, MavenRunner runner) {
-    super(project);
-    myProjectsManager = projectsManager;
-  }
+  public MavenShortcutsManager(@NotNull Project project) {
+    myProject = project;
 
-  @Override
-  public void dispose() {
+    if (ApplicationManager.getApplication().isUnitTestMode() || ApplicationManager.getApplication().isHeadlessEnvironment()) {
+      return;
+    }
 
-  }
-
-  @Override
-  public void initComponent() {
-    if (!isNormalProject()) return;
-
-    MavenUtil.runWhenInitialized(myProject, (DumbAwareRunnable)() -> doInit());
+    MavenUtil.runWhenInitialized(myProject, (DumbAwareRunnable)() -> doInit(project));
   }
 
   @TestOnly
-  public void doInit() {
+  public void doInit(@NotNull Project project) {
     if (isInitialized.getAndSet(true)) return;
 
     MyProjectsTreeListener listener = new MyProjectsTreeListener();
-    myProjectsManager.addManagerListener(listener);
-    myProjectsManager.addProjectsTreeListener(listener);
+    MavenProjectsManager mavenProjectManager = MavenProjectsManager.getInstance(project);
+    mavenProjectManager.addManagerListener(listener);
+    mavenProjectManager.addProjectsTreeListener(listener);
 
-    ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(KeymapManagerListener.TOPIC, new KeymapManagerListener() {
-      {
-        ApplicationManager.getApplication().getMessageBus().connect(MavenShortcutsManager.this).subscribe(KeymapManagerListener.TOPIC, this);
-      }
-
+    MessageBusConnection busConnection = ApplicationManager.getApplication().getMessageBus().connect(this);
+    busConnection.subscribe(KeymapManagerListener.TOPIC, new KeymapManagerListener() {
       @Override
       public void activeKeymapChanged(Keymap keymap) {
         fireShortcutsUpdated();
@@ -93,12 +82,15 @@ public class MavenShortcutsManager extends MavenSimpleProjectComponent implement
   }
 
   @Override
-  public void disposeComponent() {
-    if (!isInitialized.getAndSet(false)) return;
+  public void dispose() {
+    if (!isInitialized.getAndSet(false)) {
+      return;
+    }
 
     MavenKeymapExtension.clearActions(myProject);
   }
 
+  @NotNull
   public String getActionId(@Nullable String projectPath, @Nullable String goal) {
     StringBuilder result = new StringBuilder(ACTION_ID_PREFIX);
     result.append(myProject.getLocationHash());
@@ -121,14 +113,12 @@ public class MavenShortcutsManager extends MavenSimpleProjectComponent implement
     return KeymapUtil.getShortcutsText(shortcuts);
   }
 
-  public boolean hasShortcuts(MavenProject project, String goal) {
+  boolean hasShortcuts(MavenProject project, String goal) {
     return getShortcuts(project, goal).length > 0;
   }
 
-  @NotNull
-  private Shortcut[] getShortcuts(MavenProject project, String goal) {
+  private Shortcut @NotNull [] getShortcuts(MavenProject project, String goal) {
     String actionId = getActionId(project.getPath(), goal);
-    if (actionId == null) return Shortcut.EMPTY_ARRAY;
     Keymap activeKeymap = KeymapManager.getInstance().getActiveKeymap();
     return activeKeymap.getShortcuts(actionId);
   }
@@ -143,6 +133,7 @@ public class MavenShortcutsManager extends MavenSimpleProjectComponent implement
     myListeners.add(listener);
   }
 
+  @FunctionalInterface
   public interface Listener {
     void shortcutsUpdated();
   }
@@ -150,19 +141,11 @@ public class MavenShortcutsManager extends MavenSimpleProjectComponent implement
   private class MyProjectsTreeListener implements MavenProjectsManager.Listener, MavenProjectsTree.Listener {
     private final Map<MavenProject, Boolean> mySheduledProjects = new THashMap<>();
     private final MergingUpdateQueue myUpdateQueue = new MavenMergingUpdateQueue("MavenShortcutsManager: Keymap Update",
-                                                                                 500, true, myProject);
+                                                                                 500, true, myProject).usePassThroughInUnitTestMode();
 
     @Override
     public void activated() {
-      scheduleKeymapUpdate(myProjectsManager.getNonIgnoredProjects(), true);
-    }
-
-    @Override
-    public void projectsScheduled() {
-    }
-
-    @Override
-    public void importAndResolveScheduled() {
+      scheduleKeymapUpdate(MavenProjectsManager.getInstance(myProject).getNonIgnoredProjects(), true);
     }
 
     @Override
@@ -188,7 +171,7 @@ public class MavenShortcutsManager extends MavenSimpleProjectComponent implement
       scheduleKeymapUpdate(Collections.singletonList(project), true);
     }
 
-    private void scheduleKeymapUpdate(List<MavenProject> mavenProjects, boolean forUpdate) {
+    private void scheduleKeymapUpdate(List<? extends MavenProject> mavenProjects, boolean forUpdate) {
       synchronized (mySheduledProjects) {
         for (MavenProject each : mavenProjects) {
           mySheduledProjects.put(each, forUpdate);
@@ -205,6 +188,7 @@ public class MavenShortcutsManager extends MavenSimpleProjectComponent implement
             projectToDelete = selectScheduledProjects(false);
             mySheduledProjects.clear();
           }
+
           if (!myProject.isDisposed()) {
             MavenKeymapExtension.clearActions(myProject, projectToDelete);
             MavenKeymapExtension.updateActions(myProject, projectToUpdate);

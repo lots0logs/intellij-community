@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service;
 
 import com.intellij.openapi.components.ServiceManager;
@@ -28,12 +14,13 @@ import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.OrderEnumerator;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.Version;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import org.gradle.StartParameter;
 import org.gradle.util.DistributionLocator;
 import org.gradle.util.GradleVersion;
@@ -52,6 +39,10 @@ import org.jetbrains.plugins.gradle.util.GradleUtil;
 
 import java.io.File;
 import java.net.URI;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -75,6 +66,8 @@ public class GradleInstallationManager {
 
   private static final String[] GRADLE_START_FILE_NAMES;
   @NonNls private static final String GRADLE_ENV_PROPERTY_NAME;
+  private static final Path BREW_GRADLE_LOCATION = Paths.get("/usr/local/Cellar/gradle/");
+  private static final String LIBEXEC = "libexec";
 
   static {
     // Init static data with ability to redefine it locally.
@@ -99,7 +92,7 @@ public class GradleInstallationManager {
       return null;
     }
 
-    List<File> result = ContainerUtilRt.newArrayList();
+    List<File> result = new ArrayList<>();
 
     File libs = new File(gradleHome, "lib");
     File[] files = libs.listFiles();
@@ -143,7 +136,7 @@ public class GradleInstallationManager {
     if (settings == null) {
       Pair<String, Sdk> sdkPair = ExternalSystemJdkUtil.getAvailableJdk(project);
       if (!ExternalSystemJdkUtil.USE_INTERNAL_JAVA.equals(sdkPair.first) ||
-          ExternalSystemJdkUtil.isValidJdk(sdkPair.second.getHomePath())) {
+          ExternalSystemJdkUtil.isValidJdk(sdkPair.second)) {
         return sdkPair.second;
       }
       else {
@@ -152,7 +145,7 @@ public class GradleInstallationManager {
     }
 
     final String gradleJvm = settings.getGradleJvm();
-    final Sdk sdk;
+    Sdk sdk;
     try {
       sdk = ExternalSystemJdkUtil.getJdk(project, gradleJvm);
     }
@@ -241,7 +234,63 @@ public class GradleInstallationManager {
   @Nullable
   public File getAutodetectedGradleHome() {
     File result = getGradleHomeFromPath();
-    return result == null ? getGradleHomeFromEnvProperty() : result;
+    if (result != null) return result;
+
+    result = getGradleHomeFromEnvProperty();
+    if (result != null) return result;
+
+    if (SystemInfo.isMac) {
+      return getGradleHomeFromBrew();
+    }
+    return null;
+  }
+
+  @Nullable
+  private File getGradleHomeFromBrew() {
+    try {
+      try (DirectoryStream<Path> ds = Files.newDirectoryStream(BREW_GRADLE_LOCATION)) {
+        Path bestPath = null;
+        Version highestVersion = null;
+        for (Path path : ds) {
+          String fileName = path.getFileName().toString();
+          try {
+            Version version = Version.parseVersion(fileName);
+            if (version == null) continue;
+            if (highestVersion == null || version.compareTo(highestVersion) > 0) {
+              highestVersion = version;
+              bestPath = path;
+            }
+          } catch (NumberFormatException ignored) {
+          }
+        }
+        if (bestPath != null) {
+          Path libexecPath = bestPath.resolve(LIBEXEC);
+          if (Files.exists(libexecPath)) {
+            return libexecPath.toFile();
+          }
+        }
+      }
+    }
+    catch (Exception ignored) {
+    }
+    return null;
+  }
+
+  /**
+   * Tries to suggest better path to gradle home
+   * @param homePath expected path to gradle home
+   * @return proper in terms of {@link #isGradleSdkHome(File)} path or {@code null} if it is impossible to fix path
+   */
+    public String suggestBetterGradleHomePath(@NotNull String homePath) {
+    Path path = Paths.get(homePath);
+    if (path.startsWith(BREW_GRADLE_LOCATION)) {
+      Path libexecPath = path.resolve(LIBEXEC);
+      File libexecFile = libexecPath.toFile();
+      if (isGradleSdkHome(libexecFile)) {
+        return libexecPath.toString();
+      }
+    }
+    return null;
   }
 
   /**
@@ -256,9 +305,6 @@ public class GradleInstallationManager {
       return null;
     }
     final VirtualFile[] roots = OrderEnumerator.orderEntries(module).getAllLibrariesAndSdkClassesRoots();
-    if (roots == null) {
-      return null;
-    }
     for (VirtualFile root : roots) {
       if (root != null && isGradleSdkHome(root)) {
         return root;
@@ -392,7 +438,7 @@ public class GradleInstallationManager {
    * @param files files to process
    * @return {@code true} if one of the given files is from the gradle installation; {@code false} otherwise
    */
-  public boolean isGradleSdk(@Nullable VirtualFile... files) {
+  public boolean isGradleSdk(VirtualFile @Nullable ... files) {
     if (files == null) {
       return false;
     }
@@ -403,12 +449,12 @@ public class GradleInstallationManager {
     return isGradleSdk(arg);
   }
 
-  private boolean isGradleSdk(@Nullable File... files) {
+  private boolean isGradleSdk(File @Nullable ... files) {
     return findGradleJar(files) != null;
   }
 
   @Nullable
-  private File findGradleJar(@Nullable File... files) {
+  private File findGradleJar(File @Nullable ... files) {
     if (files == null) {
       return null;
     }
@@ -533,7 +579,7 @@ public class GradleInstallationManager {
            || isGroovyJar(fileName);
   }
 
-  private void addRoots(@NotNull List<File> result, @Nullable File... files) {
+  private void addRoots(@NotNull List<? super File> result, File @Nullable ... files) {
     if (files == null) return;
     for (File file : files) {
       if (file == null || !file.isDirectory()) continue;
@@ -583,7 +629,7 @@ public class GradleInstallationManager {
     if (distributionType == DistributionType.LOCAL) {
       String gradleVersion = getGradleVersion(settings.getGradleHome());
       if (gradleVersion != null) {
-        version = GradleVersion.version(gradleVersion);
+        version = getGradleVersionSafe(gradleVersion);
       }
     }
     else if (distributionType == DistributionType.BUNDLED) {
@@ -594,25 +640,47 @@ public class GradleInstallationManager {
       GradleInstallationManager installationManager = ServiceManager.getService(GradleInstallationManager.class);
       File gradleHome = installationManager.getWrappedGradleHome(settings.getExternalProjectPath(), wrapperConfiguration);
       if (gradleHome != null) {
-        String gradleVersion = getGradleVersion(settings.getGradleHome());
+        String gradleVersion = getGradleVersion(gradleHome.getPath());
         if (gradleVersion != null) {
-          version = GradleVersion.version(gradleVersion);
+          version = getGradleVersionSafe(gradleVersion);
         }
       }
       if (version == null && wrapperConfiguration != null) {
         URI uri = wrapperConfiguration.getDistribution();
-        if (uri != null && uri.getRawPath() != null) {
-          String s = StringUtil.substringAfterLast(uri.getRawPath(), "/gradle-");
-          if (s != null) {
-            int i = s.lastIndexOf('-');
-            if (i > 0) {
-              String gradleVersion = s.substring(0, i);
-              version = GradleVersion.version(gradleVersion);
-            }
+        if (uri != null) {
+          String path = uri.getRawPath();
+          if (path != null) {
+            version = parseDistributionVersion(path);
           }
         }
       }
     }
     return version;
+  }
+
+  @Nullable
+  public static GradleVersion parseDistributionVersion(@NotNull String path) {
+    path = StringUtil.substringAfterLast(path, "/");
+    if (path == null) return null;
+
+    path = StringUtil.substringAfterLast(path, "gradle-");
+    if (path == null) return null;
+
+    int i = path.lastIndexOf('-');
+    if (i <= 0) return null;
+
+    return  getGradleVersionSafe(path.substring(0, i));
+  }
+
+  @Nullable
+  private static GradleVersion getGradleVersionSafe(String gradleVersion) {
+    try {
+      return GradleVersion.version(gradleVersion);
+    }
+    catch (IllegalArgumentException e) {
+      // GradleVersion.version(gradleVersion) might throw exception for custom Gradle versions
+      // https://youtrack.jetbrains.com/issue/IDEA-216892
+      return null;
+    }
   }
 }

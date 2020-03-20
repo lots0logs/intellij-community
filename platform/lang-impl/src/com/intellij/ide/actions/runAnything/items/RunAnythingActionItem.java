@@ -2,16 +2,17 @@
 package com.intellij.ide.actions.runAnything.items;
 
 import com.intellij.openapi.actionSystem.AnAction;
-import com.intellij.ui.SimpleColoredComponent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import java.awt.*;
 
 public class RunAnythingActionItem<T extends AnAction> extends RunAnythingItemBase {
+  @NotNull private final T myAction;
+
   public RunAnythingActionItem(@NotNull T action, @NotNull String fullCommand, @Nullable Icon icon) {
     super(fullCommand, icon);
+    myAction = action;
   }
 
   @NotNull
@@ -19,13 +20,9 @@ public class RunAnythingActionItem<T extends AnAction> extends RunAnythingItemBa
     return command + " " + (action.getTemplatePresentation().getText() != null ? action.getTemplatePresentation().getText() : "undefined");
   }
 
-  @NotNull
+  @Nullable
   @Override
-  public Component createComponent(boolean isSelected) {
-    SimpleColoredComponent component = new SimpleColoredComponent();
-    component.append(getCommand());
-    setupIcon(component, myIcon);
-
-    return component;
+  public String getDescription() {
+    return myAction.getTemplatePresentation().getDescription();
   }
 }

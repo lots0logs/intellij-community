@@ -39,8 +39,7 @@ public interface PsiNewExpression extends PsiCallExpression, PsiConstructorCall 
    * @return the array of expressions for the dimensions, or an empty array if the
    *         {@code new} expression is not an array creation expression.
    */
-  @NotNull
-  PsiExpression[] getArrayDimensions();
+  PsiExpression @NotNull [] getArrayDimensions();
 
   /**
    * Returns the expression specifying the initializer for the created array in
@@ -86,4 +85,11 @@ public interface PsiNewExpression extends PsiCallExpression, PsiConstructorCall 
    */
   @Nullable
   PsiType getOwner(@NotNull PsiAnnotation annotation);
+
+  /**
+   * @return true if it's an array creation in form of {@code new T[0]} or {@code new T[] {...}}
+   */
+  default boolean isArrayCreation() {
+     return getArrayDimensions().length != 0 || getArrayInitializer() != null;
+  }
 }

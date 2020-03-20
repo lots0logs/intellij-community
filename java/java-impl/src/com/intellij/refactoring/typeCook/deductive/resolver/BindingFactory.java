@@ -32,6 +32,7 @@ import com.intellij.refactoring.typeCook.deductive.builder.Subtype;
 import com.intellij.util.IncorrectOperationException;
 import gnu.trove.TIntObjectHashMap;
 import gnu.trove.TObjectProcedure;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
@@ -42,7 +43,7 @@ import java.util.Set;
  */
 @SuppressWarnings({"SuspiciousNameCombination"})
 public class BindingFactory {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.typeCook.deductive.resolver.BindingFactory");
+  private static final Logger LOG = Logger.getInstance(BindingFactory.class);
 
   private final Set<PsiTypeVariable> myBoundVariables;
   private final Project myProject;
@@ -60,7 +61,7 @@ public class BindingFactory {
     final Set<PsiClass> descendants = new LinkedHashSet<>();
 
     new Object() {
-      public void getGreatestLowerClasses(final PsiClass aClass, final PsiClass bClass, final Set<PsiClass> descendants) {
+      public void getGreatestLowerClasses(final PsiClass aClass, final PsiClass bClass, final Set<? super PsiClass> descendants) {
         if (bClass.hasModifierProperty(PsiModifier.FINAL)) return;
         if (aClass.isInheritor(bClass, true)) {
           descendants.add(aClass);
@@ -489,7 +490,7 @@ public class BindingFactory {
           class Verifier extends PsiExtendedTypeVisitor<Void> {
             boolean myFlag;
 
-            @Override public Void visitTypeVariable(final PsiTypeVariable var) {
+            @Override public Void visitTypeVariable(@NotNull final PsiTypeVariable var) {
               if (var.getIndex() == index) {
                 myFlag = true;
               }
@@ -676,7 +677,7 @@ public class BindingFactory {
     Binding unify(PsiType x, PsiType y);
   }
 
-  public Binding balance(final PsiType x, final PsiType y, final Balancer balancer, final Set<Constraint> constraints) {
+  public Binding balance(final PsiType x, final PsiType y, final Balancer balancer, final Set<? super Constraint> constraints) {
     final int indicator = (x instanceof PsiTypeVariable ? 1 : 0) + (y instanceof PsiTypeVariable ? 2 : 0);
 
     switch (indicator) {
@@ -889,7 +890,7 @@ public class BindingFactory {
     return unifier.unify(x, y);
   }
 
-  public Binding riseWithWildcard(final PsiType x, final PsiType y, final Set<Constraint> constraints) {
+  public Binding riseWithWildcard(final PsiType x, final PsiType y, final Set<? super Constraint> constraints) {
     final Binding binding = balance(x, y, new Balancer() {
                                       @Override
                                       public Binding varType(final PsiTypeVariable x, final PsiType y) {
@@ -955,7 +956,7 @@ public class BindingFactory {
     return binding != null ? binding.reduceRecursive() : null;
   }
 
-  public Binding rise(final PsiType x, final PsiType y, final Set<Constraint> constraints) {
+  public Binding rise(final PsiType x, final PsiType y, final Set<? super Constraint> constraints) {
     final Binding binding = balance(x, y, new Balancer() {
                                       @Override
                                       public Binding varType(final PsiTypeVariable x, final PsiType y) {
@@ -994,7 +995,7 @@ public class BindingFactory {
     return binding != null ? binding.reduceRecursive() : null;
   }
 
-  public Binding sink(final PsiType x, final PsiType y, final Set<Constraint> constraints) {
+  public Binding sink(final PsiType x, final PsiType y, final Set<? super Constraint> constraints) {
     return balance(x, y, new Balancer() {
                      @Override
                      public Binding varType(final PsiTypeVariable x, final PsiType y) {
@@ -1017,7 +1018,7 @@ public class BindingFactory {
     final LinkedList<Pair<PsiType, Binding>> list = new LinkedList<>();
 
     new Object() {
-      void union(final PsiType x, final PsiType y, final LinkedList<Pair<PsiType, Binding>> list) {
+      void union(final PsiType x, final PsiType y, final LinkedList<? super Pair<PsiType, Binding>> list) {
         if (x instanceof PsiArrayType && y instanceof PsiArrayType) {
           union(((PsiArrayType)x).getComponentType(), ((PsiArrayType)y).getComponentType(), list);
         }
@@ -1068,7 +1069,7 @@ public class BindingFactory {
     final LinkedList<Pair<PsiType, Binding>> list = new LinkedList<>();
 
     new Object() {
-      void intersect(final PsiType x, final PsiType y, final LinkedList<Pair<PsiType, Binding>> list) {
+      void intersect(final PsiType x, final PsiType y, final LinkedList<? super Pair<PsiType, Binding>> list) {
         if (x instanceof PsiWildcardType || y instanceof PsiWildcardType) {
           final PsiType xType = x instanceof PsiWildcardType ? ((PsiWildcardType)x).getBound() : x;
           final PsiType yType = y instanceof PsiWildcardType ? ((PsiWildcardType)y).getBound() : y;

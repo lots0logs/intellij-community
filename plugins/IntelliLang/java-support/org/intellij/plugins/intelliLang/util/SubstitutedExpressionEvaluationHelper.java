@@ -47,7 +47,7 @@ public class SubstitutedExpressionEvaluationHelper {
     myConfiguration = Configuration.getInstance();
   }
 
-  Object computeExpression(@NotNull PsiExpression e, @NotNull List<PsiExpression> uncomputables) {
+  Object computeExpression(@NotNull PsiExpression e, @NotNull List<? super PsiExpression> uncomputables) {
     return computeExpression(
       e, myConfiguration.getAdvancedConfiguration().getDfaOption(),
       myConfiguration.getAdvancedConfiguration().isIncludeUncomputablesAsLiterals(), uncomputables);
@@ -56,7 +56,7 @@ public class SubstitutedExpressionEvaluationHelper {
   public Object computeExpression(@NotNull PsiExpression e,
                                   @NotNull Configuration.DfaOption dfaOption,
                                   boolean includeUncomputablesAsLiterals,
-                                  @NotNull List<PsiExpression> uncomputables) {
+                                  @NotNull List<? super PsiExpression> uncomputables) {
     ConcurrentMap<PsiElement, Object> map = ContainerUtil.newConcurrentMap();
     return myHelper.computeExpression(e, false, new PsiConstantEvaluationHelper.AuxEvaluator() {
       @Override
@@ -116,7 +116,7 @@ public class SubstitutedExpressionEvaluationHelper {
           StringBuilder sb = new StringBuilder();
           o.accept(new PsiRecursiveElementWalkingVisitor() {
             @Override
-            public void visitElement(PsiElement element) {
+            public void visitElement(@NotNull PsiElement element) {
               if (element instanceof PsiExpressionList) return;
               if (element instanceof PsiIdentifier) {
                 if (sb.length() > 0) sb.append(".");

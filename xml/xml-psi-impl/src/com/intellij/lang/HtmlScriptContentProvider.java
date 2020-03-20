@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2012 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ import org.jetbrains.annotations.Nullable;
 
 public interface HtmlScriptContentProvider {
   /**
-   * @return instance of the {@code com.intellij.psi.tree.IElementType} to use in html script tag
+   * @return instance of the {@link IElementType} to use in html script tag
    */
+  @Nullable
   IElementType getScriptElementType();
 
   /**
@@ -32,6 +33,7 @@ public interface HtmlScriptContentProvider {
   Lexer getHighlightingLexer();
 
   class Empty implements HtmlScriptContentProvider{
+    @Nullable
     @Override
     public IElementType getScriptElementType() {
       return null;

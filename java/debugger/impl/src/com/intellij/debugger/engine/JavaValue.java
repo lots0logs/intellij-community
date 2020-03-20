@@ -1,7 +1,7 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.engine;
 
-import com.intellij.debugger.DebuggerBundle;
+import com.intellij.debugger.JavaDebuggerBundle;
 import com.intellij.debugger.SourcePosition;
 import com.intellij.debugger.actions.JavaReferringObjectsValue;
 import com.intellij.debugger.actions.JumpToObjectAction;
@@ -28,6 +28,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.ThreeState;
 import com.intellij.xdebugger.XExpression;
 import com.intellij.xdebugger.evaluation.XDebuggerEvaluator;
@@ -38,8 +39,11 @@ import com.intellij.xdebugger.frame.presentation.XRegularValuePresentation;
 import com.intellij.xdebugger.frame.presentation.XValuePresentation;
 import com.intellij.xdebugger.impl.breakpoints.XExpressionImpl;
 import com.intellij.xdebugger.impl.frame.XValueWithInlinePresentation;
+import com.intellij.xdebugger.impl.pinned.items.PinToTopMemberValue;
+import com.intellij.xdebugger.impl.pinned.items.PinToTopParentValue;
 import com.intellij.xdebugger.impl.ui.XValueTextProvider;
 import com.intellij.xdebugger.impl.ui.tree.nodes.XValueNodeImpl;
+import com.sun.jdi.Type;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.concurrency.AsyncPromise;
@@ -50,14 +54,15 @@ import javax.swing.*;
 import java.util.List;
 import java.util.Set;
 
-/**
-* @author egor
-*/
-public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XValueTextProvider, XValueWithInlinePresentation {
+public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XValueTextProvider, XValueWithInlinePresentation,
+                                                      PinToTopParentValue, PinToTopMemberValue {
   private static final Logger LOG = Logger.getInstance(JavaValue.class);
 
+  private final boolean myCanBePinned;
   private final JavaValue myParent;
+  @NotNull
   private final ValueDescriptorImpl myValueDescriptor;
+  @NotNull
   private final EvaluationContextImpl myEvaluationContext;
   private final NodeManagerImpl myNodeManager;
   private final boolean myContextSet;
@@ -82,6 +87,24 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
     myEvaluationContext = evaluationContext;
     myNodeManager = nodeManager;
     myContextSet = contextSet;
+    myCanBePinned = doComputeCanBePinned();
+  }
+
+  @Nullable
+  @Override
+  public String getTypeName() {
+    return ObjectUtils.doIfNotNull(myValueDescriptor.getType(), Type::name);
+  }
+
+  @Override
+  public boolean canBePinned() {
+    return myCanBePinned;
+  }
+  private boolean doComputeCanBePinned() {
+    if(myValueDescriptor instanceof ArrayElementDescriptor) {
+      return false;
+    }
+    return myParent != null;
   }
 
   public static JavaValue create(JavaValue parent,
@@ -129,7 +152,7 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
   @Override
   public void computePresentation(@NotNull final XValueNode node, @NotNull XValuePlace place) {
     if (isOnDemand() && !isCalculated()) {
-      node.setFullValueEvaluator(OnDemandRenderer.createFullValueEvaluator(DebuggerBundle.message("message.node.evaluate")));
+      node.setFullValueEvaluator(OnDemandRenderer.createFullValueEvaluator(JavaDebuggerBundle.message("message.node.evaluate")));
       node.setPresentation(AllIcons.Debugger.Db_watch, new XRegularValuePresentation("", null, ""), false);
       return;
     }
@@ -141,7 +164,7 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
 
       @Override
       protected void commandCancelled() {
-        node.setPresentation(null, new XErrorValuePresentation(DebuggerBundle.message("error.context.has.changed")), false);
+        node.setPresentation(null, new XErrorValuePresentation(JavaDebuggerBundle.message("error.context.has.changed")), false);
       }
 
       @Override
@@ -155,7 +178,9 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
         myValueDescriptor.updateRepresentation(myEvaluationContext, new DescriptorLabelListener() {
           @Override
           public void labelChanged() {
-            Icon nodeIcon = DebuggerTreeRenderer.getValueIcon(myValueDescriptor, myParent != null ? myParent.getDescriptor() : null);
+            Icon nodeIcon = place == XValuePlace.TOOLTIP
+                            ? myValueDescriptor.getValueIcon()
+                            : DebuggerTreeRenderer.getValueIcon(myValueDescriptor, myParent != null ? myParent.getDescriptor() : null);
 
             XValuePresentation presentation = createPresentation(myValueDescriptor);
             Renderer lastRenderer = myValueDescriptor.getLastRenderer();
@@ -163,19 +188,30 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
             if (!fullEvaluatorSet && lastRenderer instanceof CompoundNodeRenderer) {
               fullEvaluatorSet = setFullValueEvaluator(((CompoundNodeRenderer)lastRenderer).getLabelRenderer());
             }
-            if (!fullEvaluatorSet && getValueText().length() > XValueNode.MAX_VALUE_LENGTH) {
-              node.setFullValueEvaluator(new JavaFullValueEvaluator(myEvaluationContext) {
-                @Override
-                public void evaluate(@NotNull final XFullValueEvaluationCallback callback) {
-                  final ValueDescriptorImpl fullValueDescriptor = myValueDescriptor.getFullValueDescriptor();
-                  fullValueDescriptor.updateRepresentation(myEvaluationContext, new DescriptorLabelListener() {
-                    @Override
-                    public void labelChanged() {
-                      callback.evaluated(fullValueDescriptor.getValueText());
-                    }
-                  });
-                }
-              });
+            if (!fullEvaluatorSet) {
+              String text = myValueDescriptor.getValueText();
+              if (text.length() > XValueNode.MAX_VALUE_LENGTH) {
+                node.setFullValueEvaluator(new JavaFullValueEvaluator(myEvaluationContext) {
+                  @Override
+                  public void evaluate(@NotNull final XFullValueEvaluationCallback callback) {
+                    final ValueDescriptorImpl fullValueDescriptor = myValueDescriptor.getFullValueDescriptor();
+                    fullValueDescriptor.updateRepresentation(myEvaluationContext, new DescriptorLabelListener() {
+                      @Override
+                      public void labelChanged() {
+                        callback.evaluated(fullValueDescriptor.getValueText());
+                      }
+                    });
+                  }
+                });
+              }
+              else if (StringUtil.containsLineBreak(text)) {
+                node.setFullValueEvaluator(new XFullValueEvaluator() {
+                  @Override
+                  public void startEvaluation(@NotNull XFullValueEvaluationCallback callback) {
+                    callback.evaluated(text);
+                  }
+                });
+              }
             }
             node.setPresentation(nodeIcon, presentation, myValueDescriptor.isExpandable());
           }
@@ -196,15 +232,11 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
   }
 
   public static XValuePresentation createPresentation(ValueDescriptorImpl descriptor) {
-    XValuePresentation presentation = null;
     Renderer lastLabelRenderer = descriptor.getLastLabelRenderer();
-    if (lastLabelRenderer instanceof ValueLabelRenderer) {
-      presentation = ((ValueLabelRenderer)lastLabelRenderer).getPresentation(descriptor);
+    if (lastLabelRenderer instanceof XValuePresentationProvider) {
+      return ((XValuePresentationProvider)lastLabelRenderer).getPresentation(descriptor);
     }
-    if (presentation == null) {
-      presentation = new JavaValuePresentation(descriptor);
-    }
-    return presentation;
+    return new JavaValuePresentation(descriptor);
   }
 
   public abstract static class JavaFullValueEvaluator extends XFullValueEvaluator {
@@ -236,7 +268,7 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
 
         @Override
         protected void commandCancelled() {
-          callback.errorOccurred(DebuggerBundle.message("error.context.has.changed"));
+          callback.errorOccurred(JavaDebuggerBundle.message("error.context.has.changed"));
         }
 
         @Override
@@ -286,7 +318,7 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
           }
 
           @Override
-          public void addChildren(List<DebuggerTreeNode> nodes, boolean last) {
+          public void addChildren(List<? extends DebuggerTreeNode> nodes, boolean last) {
             XValueChildrenList childrenList = XValueChildrenList.EMPTY;
             if (!nodes.isEmpty()) {
               childrenList = new XValueChildrenList(nodes.size());
@@ -306,7 +338,7 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
           }
 
           @Override
-          public void setChildren(List<DebuggerTreeNode> nodes) {
+          public void setChildren(List<? extends DebuggerTreeNode> nodes) {
             addChildren(nodes, true);
           }
 
@@ -370,7 +402,7 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
 
       @Override
       protected void commandCancelled() {
-        node.setErrorMessage(DebuggerBundle.message("error.context.has.changed"));
+        node.setErrorMessage(JavaDebuggerBundle.message("error.context.has.changed"));
       }
     });
     return true;
@@ -503,8 +535,11 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
   }
 
   @Override
-  @NotNull
+  @Nullable
   public String getValueText() {
+    if (myValueDescriptor.getLastLabelRenderer() instanceof XValuePresentationProvider) {
+      return null;
+    }
     return myValueDescriptor.getValueText();
   }
 
@@ -533,7 +568,7 @@ public class JavaValue extends XNamedValue implements NodeDescriptorProvider, XV
         myEvaluationContext.getManagerThread().schedule(new DebuggerCommandImpl() {
           @Override
           protected void commandCancelled() {
-            callback.errorOccurred(DebuggerBundle.message("error.context.has.changed"));
+            callback.errorOccurred(JavaDebuggerBundle.message("error.context.has.changed"));
           }
 
           @Override

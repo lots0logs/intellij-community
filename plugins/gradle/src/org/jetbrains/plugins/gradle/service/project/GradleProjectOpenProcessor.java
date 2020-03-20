@@ -44,7 +44,6 @@ import com.intellij.projectImport.ProjectOpenProcessor;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.ThreeState;
 import com.intellij.util.containers.ContainerUtil;
 import icons.GradleIcons;
 import org.jetbrains.annotations.NotNull;
@@ -64,12 +63,16 @@ import java.util.Arrays;
 import java.util.Collection;
 
 /**
+ * @deprecated Use {@link org.jetbrains.plugins.gradle.service.project.open.GradleProjectOpenProcessor} instead
+ *
  * @author Vladislav.Soroka
  */
+@Deprecated
 public class GradleProjectOpenProcessor extends ProjectOpenProcessor {
 
-  @NotNull public static final String[] BUILD_FILE_EXTENSIONS = {GradleConstants.EXTENSION, GradleConstants.KOTLIN_DSL_SCRIPT_EXTENSION};
+  public static final String @NotNull [] BUILD_FILE_EXTENSIONS = {GradleConstants.EXTENSION, GradleConstants.KOTLIN_DSL_SCRIPT_EXTENSION};
 
+  @NotNull
   @Override
   public String getName() {
     return GradleBundle.message("gradle.name");
@@ -175,9 +178,8 @@ public class GradleProjectOpenProcessor extends ProjectOpenProcessor {
   @NotNull
   private static GradleProjectSettings createDefaultProjectSettings() {
     GradleProjectSettings settings = new GradleProjectSettings();
+    settings.setupNewProjectDefault();
     settings.setDistributionType(DistributionType.DEFAULT_WRAPPED);
-    settings.setStoreProjectFilesExternally(ThreeState.YES);
-    settings.setUseQualifiedModuleNames(true);
     return settings;
   }
 
@@ -187,7 +189,8 @@ public class GradleProjectOpenProcessor extends ProjectOpenProcessor {
     if (openProjects.length > 0) {
       int exitCode = ProjectUtil.confirmOpenNewProject(true);
       if (exitCode == GeneralSettings.OPEN_PROJECT_SAME_WINDOW) {
-        ProjectUtil.closeAndDispose(projectToClose != null ? projectToClose : openProjects[openProjects.length - 1]);
+        Project project = projectToClose != null ? projectToClose : openProjects[openProjects.length - 1];
+        ProjectManagerEx.getInstanceEx().closeAndDispose(project);
       }
     }
   }
@@ -267,11 +270,8 @@ public class GradleProjectOpenProcessor extends ProjectOpenProcessor {
       //noinspection unchecked
       settings.linkProject(gradleProjectSettings);
 
-      ImportSpec importSpec = new ImportSpecBuilder(project, GradleConstants.SYSTEM_ID)
-        .use(ProgressExecutionMode.IN_BACKGROUND_ASYNC)
-        .useDefaultCallback()
-        .build();
-      ExternalSystemUtil.refreshProject(gradleProjectSettings.getExternalProjectPath(), importSpec);
+      ExternalSystemUtil.refreshProject(gradleProjectSettings.getExternalProjectPath(),
+                                        new ImportSpecBuilder(project, GradleConstants.SYSTEM_ID));
     };
     ExternalProjectsManagerImpl.getInstance(project)
       .runWhenInitialized(
@@ -285,7 +285,7 @@ public class GradleProjectOpenProcessor extends ProjectOpenProcessor {
   private static boolean setupGradleJvm(@Nullable Project project, @NotNull GradleProjectSettings projectSettings) {
     final Pair<String, Sdk> sdkPair = ExternalSystemJdkUtil.getAvailableJdk(project);
     if (!ExternalSystemJdkUtil.USE_INTERNAL_JAVA.equals(sdkPair.first) ||
-        ExternalSystemJdkUtil.isValidJdk(sdkPair.second.getHomePath())) {
+        ExternalSystemJdkUtil.isValidJdk(sdkPair.second)) {
       projectSettings.setGradleJvm(sdkPair.first);
       return true;
     }
@@ -300,7 +300,10 @@ public class GradleProjectOpenProcessor extends ProjectOpenProcessor {
   }
 
   private static void createProjectPreview(@NotNull Project project, @NotNull String rootProjectPath, @Nullable VirtualFile virtualFile) {
-    ExternalSystemUtil.refreshProject(project, GradleConstants.SYSTEM_ID, rootProjectPath, true, ProgressExecutionMode.MODAL_SYNC);
+    ExternalSystemUtil.refreshProject(rootProjectPath,
+                                      new ImportSpecBuilder(project, GradleConstants.SYSTEM_ID)
+                                        .usePreviewMode()
+                                        .use(ProgressExecutionMode.MODAL_SYNC));
     ExternalProjectsManagerImpl.getInstance(project).runWhenInitialized(() -> DumbService.getInstance(project).runWhenSmart(() -> {
       ExternalSystemUtil.ensureToolWindowInitialized(project, GradleConstants.SYSTEM_ID);
       if (virtualFile == null) return;

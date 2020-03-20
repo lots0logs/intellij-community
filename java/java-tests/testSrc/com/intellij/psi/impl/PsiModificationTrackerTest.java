@@ -1,9 +1,10 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl;
 
-import com.intellij.codeInsight.CodeInsightTestCase;
+import com.intellij.codeInsight.JavaCodeInsightTestCase;
 import com.intellij.configurationStore.StateStorageManagerKt;
 import com.intellij.ide.highlighter.JavaFileType;
+import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.command.WriteCommandAction;
@@ -13,9 +14,13 @@ import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
 import com.intellij.openapi.util.EmptyRunnable;
+import com.intellij.openapi.util.ModificationTracker;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.vfs.*;
+import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VfsUtil;
+import com.intellij.openapi.vfs.VfsUtilCore;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.file.impl.FileManagerImpl;
@@ -35,6 +40,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
@@ -42,7 +48,7 @@ import java.util.concurrent.TimeUnit;
  * @author Dmitry Avdeev
  */
 @SkipSlowTestLocally
-public class PsiModificationTrackerTest extends CodeInsightTestCase {
+public class PsiModificationTrackerTest extends JavaCodeInsightTestCase {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
@@ -131,13 +137,15 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     });
   }
 
-  private void doTest(@NonNls String text, Processor<PsiFile> run) {
+  private void doTest(@NonNls String text, Processor<? super PsiFile> run) {
     PsiFile file = configureByText(JavaFileType.INSTANCE, text);
-    PsiModificationTracker modificationTracker = getTracker();
-    long count = modificationTracker.getModificationCount();
-    WriteCommandAction.runWriteCommandAction(getProject(), ()->{run.process(file);});
+    PsiModificationTracker tracker = PsiModificationTracker.SERVICE.getInstance(getProject());
+    long count = tracker.getModificationCount();
+    WriteCommandAction.runWriteCommandAction(getProject(), () -> {
+      run.process(file);
+    });
 
-    assertFalse(modificationTracker.getModificationCount() == count);
+    assertFalse(tracker.getModificationCount() == count);
   }
 
   private void replaceSelection(final String with) {
@@ -152,28 +160,26 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     setFileText(virtualFile, "text");
     configureByFile(virtualFile);
     PsiFile file = getFile();
-    PsiModificationTracker modificationTracker = getTracker();
-    long count = modificationTracker.getJavaStructureModificationCount();
+    long count = getJavaTracker().getModificationCount();
 
     ApplicationManager.getApplication().runWriteAction(() -> file.getContainingDirectory().delete());
 
-    assertTrue(count+":"+modificationTracker.getJavaStructureModificationCount(), modificationTracker.getJavaStructureModificationCount() > count);
+    assertTrue(count + ":" + getJavaTracker().getModificationCount(), getJavaTracker().getModificationCount() > count);
   }
 
   public void testClassShouldNotAppearWithoutEvents_WithPsi() throws IOException {
-    final VirtualFile file = createTempFile("java", null, "", CharsetToolkit.UTF8_CHARSET);
+    final VirtualFile file = createTempFile("java", null, "", StandardCharsets.UTF_8);
     final Document document = FileDocumentManager.getInstance().getDocument(file);
     assertNotNull(document);
     assertNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
     PsiManager psiManager = PsiManager.getInstance(getProject());
-    PsiModificationTracker tracker = psiManager.getModificationTracker();
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
     PsiJavaFile psiFile = (PsiJavaFile)psiManager.findFile(file);
 
     WriteCommandAction.runWriteCommandAction(getProject(), () -> document.insertString(0, "class Foo {}"));
 
 
-    assertEquals(count1, tracker.getJavaStructureModificationCount()); // no PSI changes yet
+    assertEquals(count1, getJavaTracker().getModificationCount()); // no PSI changes yet
     //so the class should not exist
     assertNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
     assertSize(0, psiFile.getClasses());
@@ -181,7 +187,7 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
 
     PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
 
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
     assertEquals("class Foo {}", psiManager.findFile(file).getText());
     assertEquals("class Foo {}", psiManager.findFile(file).getNode().getText());
@@ -192,21 +198,20 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     final GlobalSearchScope allScope = GlobalSearchScope.allScope(getProject());
     final JavaPsiFacade facade = JavaPsiFacade.getInstance(getProject());
     final PsiManager psiManager = PsiManager.getInstance(getProject());
-    final PsiModificationTracker tracker = psiManager.getModificationTracker();
 
-    final VirtualFile file = createTempFile("java", null, "", CharsetToolkit.UTF8_CHARSET);
+    final VirtualFile file = createTempFile("java", null, "", StandardCharsets.UTF_8);
     final Document document = FileDocumentManager.getInstance().getDocument(file);
     assertNotNull(document);
     assertNull(facade.findClass("Foo", allScope));
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
 
-    GCWatcher.tracking(PsiDocumentManager.getInstance(getProject()).getCachedPsiFile(document)).tryGc();
+    GCWatcher.tracking(PsiDocumentManager.getInstance(getProject()).getCachedPsiFile(document)).ensureCollected();
     assertNull(PsiDocumentManager.getInstance(getProject()).getCachedPsiFile(document));
 
     WriteCommandAction.runWriteCommandAction(getProject(), () -> document.insertString(0, "class Foo {}"));
     DocumentCommitThread.getInstance().waitForAllCommits(100, TimeUnit.SECONDS);
 
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
     assertTrue(PsiDocumentManager.getInstance(getProject()).isCommitted(document));
     assertNotNull(facade.findClass("Foo", allScope));
 
@@ -217,37 +222,34 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
   }
 
   public void testClassShouldNotDisappearWithoutEvents() throws Exception {
-    PsiModificationTracker tracker = getTracker();
-    long count0 = tracker.getJavaStructureModificationCount();
+    long count0 = getJavaTracker().getModificationCount();
 
     final VirtualFile file = addFileToProject("Foo.java", "class Foo {}").getVirtualFile();
     final Document document = FileDocumentManager.getInstance().getDocument(file);
     assertNotNull(document);
 
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
     assertFalse(count1 == count0);
 
     WriteCommandAction.runWriteCommandAction(getProject(), () -> document.deleteString(0, document.getTextLength()));
     DocumentCommitThread.getInstance().waitForAllCommits(100, TimeUnit.SECONDS);
     gcPsi(file);
 
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
     assertNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
   }
 
   private void gcPsi(VirtualFile file) {
     PsiManagerEx psiManager = PsiManagerEx.getInstanceEx(getProject());
-    GCWatcher.tracking(psiManager.getFileManager().getCachedPsiFile(file)).tryGc();
+    GCWatcher.tracking(psiManager.getFileManager().getCachedPsiFile(file)).ensureCollected();
     assertNull(psiManager.getFileManager().getCachedPsiFile(file));
   }
 
   public void testClassShouldNotDisappearWithoutEvents_NoDocument() throws IOException {
-    PsiModificationTracker tracker = getTracker();
-
     final VirtualFile file = addFileToProject("Foo.java", "class Foo {}").getVirtualFile();
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
 
     gcPsiAndDocument(file);
 
@@ -255,19 +257,18 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     assertNull(FileDocumentManager.getInstance().getCachedDocument(file));
 
     assertNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
   }
 
   private void gcPsiAndDocument(VirtualFile file) {
     PsiManagerEx psiManager = PsiManagerEx.getInstanceEx(getProject());
-    GCWatcher.tracking(FileDocumentManager.getInstance().getCachedDocument(file), psiManager.getFileManager().getCachedPsiFile(file)).tryGc();
+    GCWatcher.tracking(FileDocumentManager.getInstance().getCachedDocument(file), psiManager.getFileManager().getCachedPsiFile(file)).ensureCollected();
     assertNull(FileDocumentManager.getInstance().getCachedDocument(file));
     assertNull(psiManager.getFileManager().getCachedPsiFile(file));
   }
 
   public void testClassShouldNotAppearWithoutEvents_NoPsiDirectory() throws IOException {
-    PsiModificationTracker tracker = getTracker();
-    long count0 = tracker.getJavaStructureModificationCount();
+    long count0 = getJavaTracker().getModificationCount();
 
     final PsiManagerEx psiManager = PsiManagerEx.getInstanceEx(getProject());
     VirtualFile parentDir = createChildDirectory(getProject().getBaseDir(), "tmp");
@@ -279,12 +280,11 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     assertNotNull(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file));
 
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
-    assertFalse(count0 == tracker.getJavaStructureModificationCount());
+    assertFalse(count0 == getJavaTracker().getModificationCount());
   }
 
   public void testClassShouldNotAppearWithoutEvents_NoPsiGrandParentDirectory() throws IOException {
-    PsiModificationTracker tracker = getTracker();
-    long count0 = tracker.getJavaStructureModificationCount();
+    long count0 = getJavaTracker().getModificationCount();
 
     final PsiManagerEx psiManager = PsiManagerEx.getInstanceEx(getProject());
     VirtualFile parentDir = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(createTempDirectory());
@@ -295,88 +295,79 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     assertNotNull(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file));
 
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("foo.Foo", GlobalSearchScope.allScope(getProject())));
-    assertFalse(count0 == tracker.getJavaStructureModificationCount());
+    assertFalse(count0 == getJavaTracker().getModificationCount());
   }
 
   public void testClassShouldNotDisappearWithoutEvents_VirtualFileDeleted() throws IOException {
-    PsiModificationTracker tracker = getTracker();
-
     final VirtualFile file = addFileToProject("Foo.java", "class Foo {}").getVirtualFile();
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
 
     gcPsiAndDocument(file);
     delete(file);
 
     assertNull(JavaPsiFacade.getInstance(getProject()).findClass("Foo", GlobalSearchScope.allScope(getProject())));
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
   }
 
   public void testClassShouldNotDisappearWithoutEvents_ParentVirtualDirectoryDeleted() throws Exception {
-    PsiModificationTracker tracker = getTracker();
-
     final VirtualFile file = addFileToProject("foo/Foo.java", "package foo; class Foo {}").getVirtualFile();
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("foo.Foo", GlobalSearchScope.allScope(getProject())));
 
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
 
     gcPsiAndDocument(file);
     delete(file.getParent());
 
     assertNull(JavaPsiFacade.getInstance(getProject()).findClass("foo.Foo", GlobalSearchScope.allScope(getProject())));
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
   }
 
   public void testClassShouldNotDisappearWithoutEvents_InCodeBlock() throws Exception {
-    PsiModificationTracker tracker = getTracker();
-
     String barStr = "class Bar {}";
     PsiFile file = addFileToProject("Foo.java", "class Foo {{" + barStr + "}}");
     JBIterable<PsiClass> barQuery = SyntaxTraverser.psiTraverser(file).filter(PsiClass.class).filter(o -> "Bar".equals(o.getName()));
     assertNotNull(barQuery.first());
     Document document = PsiDocumentManager.getInstance(getProject()).getDocument(file);
     int index = document.getText().indexOf(barStr);
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
     //WriteCommandAction.runWriteCommandAction(getProject(), () -> bar.delete());
     WriteCommandAction.runWriteCommandAction(getProject(), () -> document.replaceString(index, index + barStr.length(), ""));
     PsiDocumentManager.getInstance(getProject()).commitDocument(document);
 
     assertNull(barQuery.first());
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
   }
 
   public void testClassShouldNotAppearWithoutEvents_InCodeBlock() throws Exception {
-    PsiModificationTracker tracker = getTracker();
-
     String barStr = "class Bar {}";
     PsiFile file = addFileToProject("Foo.java", "class Foo {{" + "}}");
     JBIterable<PsiClass> barQuery = SyntaxTraverser.psiTraverser(file).filter(PsiClass.class).filter(o -> "Bar".equals(o.getName()));
     assertNull(barQuery.first());
     Document document = PsiDocumentManager.getInstance(getProject()).getDocument(file);
     int index = document.getText().indexOf("}}");
-    long count1 = tracker.getJavaStructureModificationCount();
+    long count1 = getJavaTracker().getModificationCount();
     WriteCommandAction.runWriteCommandAction(getProject(), () -> document.insertString(index, barStr));
     PsiDocumentManager.getInstance(getProject()).commitDocument(document);
 
     assertNotNull(barQuery.first());
-    assertFalse(count1 == tracker.getJavaStructureModificationCount());
+    assertFalse(count1 == getJavaTracker().getModificationCount());
   }
 
   public void testVirtualFileRename_WithPsi() throws IOException {
-    PsiModificationTracker tracker = getTracker();
     final PsiManagerEx psiManager = PsiManagerEx.getInstanceEx(getProject());
     GlobalSearchScope scope = GlobalSearchScope.allScope(getProject());
 
     final VirtualFile file = addFileToProject("foo/Foo.java", "package foo; class Foo {}").getVirtualFile();
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("foo.Foo", scope));
-    long count1 = tracker.getModificationCount();
+    long count1 = getTracker().getModificationCount();
     long hc = psiManager.findFile(file).hashCode();
     long stamp1 = psiManager.findFile(file).getModificationStamp();
 
     rename(file, "Bar.java");
 
     assertNotNull(JavaPsiFacade.getInstance(getProject()).findClass("foo.Foo", scope));
-    assertTrue(count1 != tracker.getModificationCount());
+    assertTrue(count1 != getTracker().getModificationCount());
     assertTrue(stamp1 != psiManager.findFile(file).getModificationStamp());
     assertEquals(hc, psiManager.findFile(file).hashCode());
   }
@@ -391,11 +382,11 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     PsiClass psiClass = JavaPsiFacade.getInstance(getProject()).findClass("Foo", scope);
     assertNotNull(psiClass);
 
-    long count = getTracker().getJavaStructureModificationCount();
+    long count = getJavaTracker().getModificationCount();
 
     IdeaTestUtil.setModuleLanguageLevel(getModule(), LanguageLevel.JDK_1_3);
 
-    assertTrue(count != getTracker().getJavaStructureModificationCount());
+    assertTrue(count != getJavaTracker().getModificationCount());
 
     psiClass = JavaPsiFacade.getInstance(getProject()).findClass("Foo", scope);
     assertNotNull(psiClass);
@@ -405,21 +396,21 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
   private PsiFile addFileToProject(String fileName, String text) throws IOException {
     File file = new File(getProject().getBasePath(), fileName);
     file.getParentFile().mkdirs();
-    setContentOnDisk(file, null, text, CharsetToolkit.UTF8_CHARSET);
+    setContentOnDisk(file, null, text, StandardCharsets.UTF_8);
     VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
     return PsiManager.getInstance(getProject()).findFile(virtualFile);
   }
 
   public void testRootsChangeIncreasesCounts() {
-    PsiModificationTracker tracker = getTracker();
+    PsiModificationTracker tracker = (PsiModificationTracker)getTracker();
     long mc = tracker.getModificationCount();
-    long js = tracker.getJavaStructureModificationCount();
+    long js = getJavaTracker().getModificationCount();
     long ocb = tracker.getOutOfCodeBlockModificationCount();
 
     WriteAction.run(() -> ProjectRootManagerEx.getInstanceEx(getProject()).makeRootsChange(EmptyRunnable.INSTANCE, false, true));
 
     assertTrue(mc != tracker.getModificationCount());
-    assertTrue(js != tracker.getJavaStructureModificationCount());
+    assertTrue(js != getJavaTracker().getModificationCount());
     assertTrue(ocb != tracker.getOutOfCodeBlockModificationCount());
   }
 
@@ -427,7 +418,7 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     FixtureRuleKt.runInLoadComponentStateMode(myProject, () -> {
       StateStorageManagerKt.saveComponentManager(getProject(), true);
 
-      PsiModificationTracker tracker = getTracker();
+      ModificationTracker tracker = getTracker();
       long mc = tracker.getModificationCount();
 
       VirtualFile ws = myProject.getWorkspaceFile();
@@ -447,7 +438,7 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
   public void testNoIncrementOnReadOnlyStatusChange() throws IOException {
     VirtualFile file = addFileToProject("Foo.java", "class Foo {}").getVirtualFile();
 
-    PsiModificationTracker tracker = getTracker();
+    ModificationTracker tracker = getTracker();
     long mc = tracker.getModificationCount();
 
     WriteAction.run(() -> file.setWritable(false));
@@ -462,26 +453,26 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
   public void testJavaStructureModCountMustNotBeAdvancedOnJavadocChange() {
     configureByText(JavaFileType.INSTANCE, "/* <selection>abc</selection> */ class A{}");
 
-    PsiModificationTracker tracker = getTracker();
-    long javaCount = tracker.getJavaStructureModificationCount();
+    PsiModificationTracker tracker = (PsiModificationTracker)getTracker();
+    long javaCount = getJavaTracker().getModificationCount();
     long codeBlockCount = tracker.getOutOfCodeBlockModificationCount();
 
     WriteCommandAction.runWriteCommandAction(getProject(), () -> replaceSelection("cde"));
 
-    assertEquals(javaCount, tracker.getJavaStructureModificationCount());
+    assertEquals(javaCount, getJavaTracker().getModificationCount());
     assertFalse(codeBlockCount == tracker.getOutOfCodeBlockModificationCount());
   }
 
   public void testJavaStructureModCountMustNotBeAdvancedOnAddingSpace() {
     configureByText(JavaFileType.INSTANCE, "class A{ <selection></selection> }");
 
-    PsiModificationTracker tracker = getTracker();
-    long javaCount = tracker.getJavaStructureModificationCount();
+    PsiModificationTracker tracker = (PsiModificationTracker)getTracker();
+    long javaCount = getJavaTracker().getModificationCount();
     long codeBlockCount = tracker.getOutOfCodeBlockModificationCount();
 
     WriteCommandAction.runWriteCommandAction(getProject(), () -> replaceSelection(" "));
 
-    assertEquals(javaCount, tracker.getJavaStructureModificationCount());
+    assertEquals(javaCount, getJavaTracker().getModificationCount());
     assertFalse(codeBlockCount == tracker.getOutOfCodeBlockModificationCount());
   }
 
@@ -496,8 +487,7 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     PsiAnonymousClass anon = SyntaxTraverser.psiTraverser(file).filter(PsiAnonymousClass.class).first();
     Arrays.stream(anon.getAllMethods()).forEach(PsiUtilCore::ensureValid);
 
-    PsiModificationTracker tracker = getTracker();
-    long javaCount = tracker.getJavaStructureModificationCount();
+    long javaCount = getJavaTracker().getModificationCount();
 
     WriteCommandAction.runWriteCommandAction(getProject(), () -> {
       TextRange methodRange = anon.getMethods()[0].getTextRange();
@@ -510,7 +500,7 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     });
 
     Arrays.stream(anon.getAllMethods()).forEach(PsiUtilCore::ensureValid);
-    assertFalse(javaCount == tracker.getJavaStructureModificationCount());
+    assertFalse(javaCount == getJavaTracker().getModificationCount());
   }
 
   public void testDeleteLocalClass() {
@@ -530,7 +520,7 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     PsiUtilCore.ensureValid(method);
     Arrays.stream(method.findSuperMethods()).forEach(PsiUtilCore::ensureValid);
 
-    long javaCount = getTracker().getJavaStructureModificationCount();
+    long javaCount = getJavaTracker().getModificationCount();
 
     WriteCommandAction.runWriteCommandAction(getProject(), () -> {
       TextRange localRange = anon.getSuperClass().getTextRange();
@@ -542,11 +532,28 @@ public class PsiModificationTrackerTest extends CodeInsightTestCase {
     PsiUtilCore.ensureValid(method);
     Arrays.stream(method.findSuperMethods()).forEach(PsiUtilCore::ensureValid);
 
-    assertFalse(javaCount == getTracker().getJavaStructureModificationCount());
+    assertFalse(javaCount == getJavaTracker().getModificationCount());
   }
 
   @NotNull
-  private PsiModificationTracker getTracker() {
-    return PsiManager.getInstance(getProject()).getModificationTracker();
+  private ModificationTracker getTracker() {
+    return PsiModificationTracker.SERVICE.getInstance(getProject());
+  }
+
+  @NotNull
+  ModificationTracker getJavaTracker() {
+    return PsiModificationTracker.SERVICE.getInstance(getProject()).getJavaStructureModificationTracker();
+  }
+
+  public static class JavaLanguageTrackerTest extends PsiModificationTrackerTest {
+    @Override
+    @NotNull
+    ModificationTracker getJavaTracker() {
+      return ((PsiModificationTrackerImpl)PsiModificationTracker.SERVICE.getInstance(getProject()))
+        .forLanguage(JavaLanguage.INSTANCE);
+    }
+
+    public void testJavaStructureModCountMustNotBeAdvancedOnJavadocChange() {}
+    public void testJavaStructureModCountMustNotBeAdvancedOnAddingSpace() {}
   }
 }

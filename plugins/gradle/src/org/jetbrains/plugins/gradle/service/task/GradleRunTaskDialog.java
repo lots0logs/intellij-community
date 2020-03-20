@@ -21,12 +21,15 @@ import com.intellij.util.ArrayUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.service.execution.GradleArgumentsCompletionProvider;
+import org.jetbrains.plugins.gradle.util.GradleBundle;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.Collection;
 
+@Deprecated
+@SuppressWarnings("DeprecatedIsStillUsed")
 public class GradleRunTaskDialog extends DialogWrapper {
 
   private final Project myProject;
@@ -52,7 +55,7 @@ public class GradleRunTaskDialog extends DialogWrapper {
     myProject = project;
     myHistory = history;
 
-    setTitle("Run Gradle Task");
+    setTitle(GradleBundle.message("gradle.tasks.runner.run.title"));
     setUpDialog();
     setModal(true);
     init();
@@ -75,7 +78,6 @@ public class GradleRunTaskDialog extends DialogWrapper {
       commandLineComboBox.setLightWeightPopupEnabled(false);
 
       EditorComboBoxEditor editor = new StringComboboxEditor(myProject, PlainTextFileType.INSTANCE, commandLineComboBox);
-      //noinspection GtkPreferredJComboBoxRenderer
       commandLineComboBox.setRenderer(new EditorComboBoxRenderer(editor));
 
       commandLineComboBox.setEditable(true);
@@ -113,7 +115,7 @@ public class GradleRunTaskDialog extends DialogWrapper {
   @Override
   protected ValidationInfo doValidate() {
     if (myProjectPathField.getText().trim().isEmpty()) {
-      return new ValidationInfo("Working directory is empty", myProjectPathField);
+      return new ValidationInfo(GradleBundle.message("gradle.tasks.runner.notification.working.dir.empty"), myProjectPathField);
     }
 
     return null;

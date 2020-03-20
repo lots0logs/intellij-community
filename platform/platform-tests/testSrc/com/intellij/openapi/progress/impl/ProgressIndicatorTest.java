@@ -33,10 +33,7 @@ import com.intellij.openapi.wm.ex.ProgressIndicatorEx;
 import com.intellij.testFramework.BombedProgressIndicator;
 import com.intellij.testFramework.LightPlatformTestCase;
 import com.intellij.testFramework.PlatformTestUtil;
-import com.intellij.util.Alarm;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.ConcurrencyUtil;
-import com.intellij.util.TimeoutUtil;
+import com.intellij.util.*;
 import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.concurrency.Semaphore;
 import com.intellij.util.containers.ContainerUtil;
@@ -52,9 +49,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * @author yole
- */
 public class ProgressIndicatorTest extends LightPlatformTestCase {
   public void testCheckCanceledHasStackFrame() {
     ProgressIndicator pib = new ProgressIndicatorBase();
@@ -186,25 +180,24 @@ public class ProgressIndicatorTest extends LightPlatformTestCase {
       int N = 10;
       Semaphore started = new Semaphore(N);
       Semaphore others = new Semaphore(1);
-      List<Thread> threads = ContainerUtil.map(Collections.nCopies(N, ""),
-                                               __ -> new Thread(() -> ProgressManager.getInstance().executeProcessUnderProgress(() -> {
-                                                 try {
-                                                   started.up();
-                                                   others.waitFor();
-                                                   indicator.cancel();
-                                                   ProgressManager.checkCanceled();
-                                                   fail("checkCanceled() must know about canceled indicator even from different thread");
-                                                 }
-                                                 catch (ProcessCanceledException ignored) {
-                                                 }
-                                                 catch (Throwable e) {
-                                                   exception = e;
-                                                 }
-                                               }, indicator), "indicator test"));
-      threads.forEach(Thread::start);
+      List<Future<?>> threads = ContainerUtil.map(Collections.nCopies(N, ""),
+          __ -> ApplicationManager.getApplication().executeOnPooledThread(() -> ProgressManager.getInstance().executeProcessUnderProgress(() -> {
+            try {
+              started.up();
+              others.waitFor();
+              indicator.cancel();
+              ProgressManager.checkCanceled();
+              fail("checkCanceled() must know about canceled indicator even from different thread");
+            }
+            catch (ProcessCanceledException ignored) {
+            }
+            catch (Throwable e) {
+              exception = e;
+            }
+          }, indicator)));
       started.waitFor();
       others.up();
-      ConcurrencyUtil.joinAll(threads);
+      ConcurrencyUtil.getAll(threads);
     }
     if (exception != null) throw exception;
   }
@@ -288,10 +281,10 @@ public class ProgressIndicatorTest extends LightPlatformTestCase {
   private void ensureCheckCanceledCalled(@NotNull ProgressIndicator indicator) {
     myFlag = false;
     JobScheduler.getScheduler().schedule(() -> myFlag = true, 100, TimeUnit.MILLISECONDS);
-    final long start = System.currentTimeMillis();
+    TestTimeOut t = TestTimeOut.setTimeout(10, TimeUnit.SECONDS);
     try {
       ProgressManager.getInstance().executeProcessUnderProgress(() -> {
-        while (System.currentTimeMillis() - start < 10000) {
+        while (!t.timedOut()) {
           ProgressManager.checkCanceled();
         }
       }, indicator);
@@ -728,13 +721,30 @@ public class ProgressIndicatorTest extends LightPlatformTestCase {
     }
   }
 
-  public void test_runInReadActionWithWriteActionPriority_DoesNotHang() throws Exception {
+  public void test_runUnderDisposeAwareIndicator_DoesNotHang_ByCancelThreadProgress() {
+    final EmptyProgressIndicator threadIndicator = new EmptyProgressIndicator(ModalityState.defaultModalityState());
+    ProgressIndicatorUtils.awaitWithCheckCanceled(
+      ApplicationManager.getApplication().executeOnPooledThread(
+        () -> ProgressManager.getInstance().executeProcessUnderProgress(
+          () -> BackgroundTaskUtil.runUnderDisposeAwareIndicator(
+            getTestRootDisposable(),
+            () -> {
+              threadIndicator.cancel();
+              ProgressManager.checkCanceled();
+              fail();
+            }),
+          threadIndicator
+        )
+      ));
+  }
+
+  public void test_runInReadActionWithWriteActionPriority_DoesNotHang() {
     AtomicBoolean finished = new AtomicBoolean();
     Runnable action = () -> {
-      long start = System.currentTimeMillis();
+      TestTimeOut t = TestTimeOut.setTimeout(10, TimeUnit.SECONDS);
       while (!finished.get()) {
         ProgressManager.checkCanceled();
-        if (System.currentTimeMillis() - start > 10_000) {
+        if (t.timedOut()) {
           finished.set(true);
           throw new AssertionError("Too long without cancellation");
         }
@@ -766,23 +776,16 @@ public class ProgressIndicatorTest extends LightPlatformTestCase {
     waitForFutures(futures);
   }
 
-  private static void waitForFutures(List<Future<?>> futures)
-    throws InterruptedException, ExecutionException, TimeoutException {
-    long start = System.currentTimeMillis();
-    while (System.currentTimeMillis() - start < 10_000 && !futures.stream().allMatch(Future::isDone)) {
-      UIUtil.dispatchAllInvocationEvents();
-      TimeoutUtil.sleep(10);
-    }
-
+  private static void waitForFutures(List<? extends Future<?>> futures) {
     for (Future<?> future : futures) {
-      future.get(1, TimeUnit.SECONDS);
+      PlatformTestUtil.waitForFuture(future, 10_000);
     }
   }
 
   public void testDuringProgressManagerExecuteNonCancelableSectionTheIndicatorIsCancelableShouldReturnFalse() {
     MyAbstractProgressIndicator progress = new MyAbstractProgressIndicator();
     ProgressManager.getInstance().executeProcessUnderProgress(() -> {
-      assertTrue(!progress.isCanceled());
+      assertFalse(progress.isCanceled());
       assertTrue(progress.isCancelable());
       try {
         ProgressManager.getInstance().executeNonCancelableSection(()->{
@@ -805,6 +808,33 @@ public class ProgressIndicatorTest extends LightPlatformTestCase {
 
       }
     }, progress);
+  }
+
+  public void testWithTimeout() {
+    assertEquals("a", ProgressIndicatorUtils.withTimeout(1000, () -> "a"));
+
+    assertNull(ProgressIndicatorUtils.withTimeout(1, () -> {
+      TimeoutUtil.sleep(10);
+      ProgressManager.checkCanceled();
+      return "a";
+    }));
+
+    assertThrows(ProcessCanceledException.class, () -> {
+      ProgressIndicatorUtils.withTimeout(1, () -> {
+        throw new ProcessCanceledException();
+      });
+    });
+
+    ProgressIndicatorBase outer = new ProgressIndicatorBase();
+    ProgressManager.getInstance().runProcess(() -> {
+      assertThrows(ProcessCanceledException.class, () -> {
+        ProgressIndicatorUtils.withTimeout(1, () -> {
+          outer.cancel();
+          ProgressManager.checkCanceled();
+          return null;
+        });
+      });
+    }, outer);
   }
 
   private static class MyAbstractProgressIndicator extends AbstractProgressIndicatorBase {
@@ -831,6 +861,17 @@ public class ProgressIndicatorTest extends LightPlatformTestCase {
       fail("Must throw");
     }
     catch (ProcessCanceledException ignored) {
+    }
+  }
+
+  public void testEmptyIndicatorMustConformToAtLeastSomeSimpleLifecycleConstrains() {
+    ProgressIndicator indicator = new EmptyProgressIndicator();
+    for (int i=0; i<2; i++) {
+      assertThrows(IllegalStateException.class, indicator::stop);
+      indicator.start();
+      assertThrows(IllegalStateException.class, indicator::start);
+      indicator.stop();
+      assertThrows(IllegalStateException.class, indicator::stop);
     }
   }
 }

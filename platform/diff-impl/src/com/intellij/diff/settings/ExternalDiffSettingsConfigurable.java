@@ -15,6 +15,7 @@
  */
 package com.intellij.diff.settings;
 
+import com.intellij.openapi.diff.DiffBundle;
 import com.intellij.openapi.options.SearchableConfigurable;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -34,7 +35,7 @@ public class ExternalDiffSettingsConfigurable implements SearchableConfigurable 
   @Nls
   @Override
   public String getDisplayName() {
-    return "External Diff Tools";
+    return DiffBundle.message("configurable.ExternalDiffSettingsConfigurable.display.name");
   }
 
   @NotNull
@@ -49,7 +50,7 @@ public class ExternalDiffSettingsConfigurable implements SearchableConfigurable 
     if (mySettingsPane == null) {
       mySettingsPane = new ExternalDiffSettingsPanel();
     }
-    return mySettingsPane.getPanel();
+    return mySettingsPane.createComponent();
   }
 
   @Override

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml.impl.schema;
 
 import com.intellij.codeInsight.daemon.Validator;
@@ -37,9 +23,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * @author Mike
- */
 public class XmlElementDescriptorImpl extends XsdEnumerationDescriptor<XmlTag>
   implements XmlElementDescriptor, PsiWritableMetaData, Validator<XmlTag>,
                                                  XmlElementDescriptorAwareAboutChildren {
@@ -78,13 +61,8 @@ public class XmlElementDescriptorImpl extends XsdEnumerationDescriptor<XmlTag>
 
         if (namespacePrefix != null && namespacePrefix.length() > 0) {
           final XmlTag rootTag = ((XmlFile)myDescriptorTag.getContainingFile()).getRootTag();
-          String elementFormDefault;
-
-          if (rootTag != null && 
-              ( NONQUALIFIED_ATTR_VALUE.equals(elementFormDefault = rootTag.getAttributeValue(ELEMENT_FORM_DEFAULT)) || elementFormDefault == null /*unqualified is default*/) &&
-              tag.getNamespaceByPrefix("").isEmpty()
-            && myDescriptorTag.getParentTag() != rootTag
-             ) {
+          if (!isQualifiedForm() && tag.getNamespaceByPrefix("").isEmpty()
+            && myDescriptorTag.getParentTag() != rootTag) {
             value = XmlUtil.findLocalNameByQualifiedName(value);
           } else {
             value = namespacePrefix + ":" + XmlUtil.findLocalNameByQualifiedName(value);
@@ -133,9 +111,8 @@ public class XmlElementDescriptorImpl extends XsdEnumerationDescriptor<XmlTag>
     myDescriptorTag = (XmlTag) element;
   }
 
-  @NotNull
   @Override
-  public Object[] getDependencies(){
+  public Object @NotNull [] getDependencies(){
     return new Object[]{myDescriptorTag};
   }
 
@@ -153,7 +130,7 @@ public class XmlElementDescriptorImpl extends XsdEnumerationDescriptor<XmlTag>
         if (nsDescriptor == null) nsDescriptor = previousDescriptor;
       }
     }
-    
+
     return nsDescriptor;
   }
 
@@ -354,7 +331,7 @@ public class XmlElementDescriptorImpl extends XsdEnumerationDescriptor<XmlTag>
                              context.getNamespaceByPrefix(namespacePrefix);
 
     XmlAttributeDescriptor attribute = getAttribute(localName, namespace, context, attributeName);
-    
+
     if (attribute instanceof AnyXmlAttributeDescriptor) {
       final ComplexTypeDescriptor.CanContainAttributeType containAttributeType =
         ((AnyXmlAttributeDescriptor)attribute).getCanContainAttributeType();
@@ -522,14 +499,19 @@ public class XmlElementDescriptorImpl extends XsdEnumerationDescriptor<XmlTag>
 
   @Override
   public String getDefaultName() {
-    final PsiFile psiFile = myDescriptorTag.getContainingFile();
-    XmlTag rootTag = psiFile instanceof XmlFile ?((XmlFile)psiFile).getRootTag():null;
+    return isQualifiedForm() ? getQualifiedName() : getName();
+  }
 
-    if (rootTag != null && QUALIFIED_ATTR_VALUE.equals(rootTag.getAttributeValue(ELEMENT_FORM_DEFAULT))) {
-      return getQualifiedName();
+  private boolean isQualifiedForm() {
+    String value = myDescriptorTag.getAttributeValue("form");
+    if (value == null) {
+      final PsiFile psiFile = myDescriptorTag.getContainingFile();
+      XmlTag rootTag = psiFile instanceof XmlFile ?((XmlFile)psiFile).getRootTag():null;
+      if (rootTag != null) {
+        value = rootTag.getAttributeValue(ELEMENT_FORM_DEFAULT);
+      }
     }
-
-    return getName();
+    return QUALIFIED_ATTR_VALUE.equals(value);
   }
 
   public boolean isAbstract() {
@@ -568,7 +550,7 @@ public class XmlElementDescriptorImpl extends XsdEnumerationDescriptor<XmlTag>
   @Override
   public boolean allowElementsFromNamespace(final String namespace, final XmlTag context) {
     final TypeDescriptor type = getType(context);
-    
+
     if (type instanceof ComplexTypeDescriptor) {
       final ComplexTypeDescriptor typeDescriptor = (ComplexTypeDescriptor)type;
       return typeDescriptor.canContainTag("a", namespace, context) ||

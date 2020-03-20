@@ -1,7 +1,9 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.tabs;
 
+import com.intellij.util.nls.NlsContexts;
 import com.intellij.util.ui.TimedDeadzone;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,21 +16,17 @@ public interface JBTabsPresentation {
   void setHideTabs(boolean hideTabs);
 
   /**
-   * @deprecated You should implement {@link JBTabsBackgroundAndBorder} abstract class
+   * @deprecated You should implement {@link JBTabsBorder} abstract class
    */
   @Deprecated
   JBTabsPresentation setPaintBorder(int top, int left, int right, int bottom);
   /**
-   * @deprecated You should implement {@link JBTabsBackgroundAndBorder} abstract class
+   * @deprecated You should implement {@link JBTabsBorder} abstract class
    */
   @Deprecated
   JBTabsPresentation setTabSidePaintBorder(int size);
 
   JBTabsPresentation setPaintFocus(boolean paintFocus);
-
-  JBTabsPresentation setAlwaysPaintSelectedTab(final boolean paintSelected);
-
-  JBTabsPresentation setStealthTabMode(boolean stealthTabMode);
 
   JBTabsPresentation setSideComponentVertical(boolean vertical);
 
@@ -48,7 +46,13 @@ public interface JBTabsPresentation {
 
   JBTabsPresentation setInnerInsets(Insets innerInsets);
 
-  JBTabsPresentation setGhostsAlwaysVisible(boolean visible);
+  /**
+   * @deprecated This logic is no longer supported, please remove calls of this method
+   */
+  @Deprecated
+  default JBTabsPresentation setGhostsAlwaysVisible(boolean visible) {
+    return this;
+  }
 
   JBTabsPresentation setFocusCycle(final boolean root);
 
@@ -80,5 +84,5 @@ public interface JBTabsPresentation {
 
   void setFirstTabOffset(int offset);
 
-  JBTabsPresentation setEmptyText(@Nullable String text);
+  JBTabsPresentation setEmptyText(@Nullable @Nls @NlsContexts.StatusText String text);
 }

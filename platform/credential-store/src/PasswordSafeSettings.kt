@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.credentialStore
 
 import com.intellij.ide.passwordSafe.impl.getDefaultKeePassDbFile
@@ -9,6 +9,7 @@ import com.intellij.util.messages.Topic
 import com.intellij.util.text.nullize
 import com.intellij.util.xmlb.annotations.OptionTag
 
+@Service
 @State(name = "PasswordSafe", storages = [Storage(value = "security.xml", roamingType = RoamingType.DISABLED)])
 class PasswordSafeSettings : PersistentStateComponentWithModificationTracker<PasswordSafeSettings.PasswordSafeOptions> {
   companion object {
@@ -38,7 +39,7 @@ class PasswordSafeSettings : PersistentStateComponentWithModificationTracker<Pas
     }
 
   var providerType: ProviderType
-    get() = if (SystemInfo.isWindows && state.provider === ProviderType.KEYCHAIN) ProviderType.KEEPASS else state.provider!!
+    get() = if (SystemInfo.isWindows && state.provider === ProviderType.KEYCHAIN) ProviderType.KEEPASS else state.provider
     set(value) {
       var newValue = value
       @Suppress("DEPRECATION")
@@ -46,7 +47,7 @@ class PasswordSafeSettings : PersistentStateComponentWithModificationTracker<Pas
         newValue = ProviderType.MEMORY_ONLY
       }
 
-      val oldValue = state.provider!!
+      val oldValue = state.provider
       if (newValue !== oldValue) {
         state.provider = newValue
         ApplicationManager.getApplication()?.messageBus?.syncPublisher(TOPIC)?.typeChanged(oldValue, newValue)
@@ -57,7 +58,7 @@ class PasswordSafeSettings : PersistentStateComponentWithModificationTracker<Pas
 
   override fun loadState(state: PasswordSafeOptions) {
     this.state = state
-    providerType = state.provider ?: defaultProviderType
+    providerType = state.provider
     state.keepassDb = state.keepassDb.nullize(nullizeSpaces = true)
   }
 

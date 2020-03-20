@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.psi.impl.statements.blocks;
 
 import com.intellij.lang.ASTNode;
@@ -9,9 +9,7 @@ import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
-import com.intellij.util.Function;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.NullableFunction;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.lang.lexer.GroovyTokenTypes;
@@ -22,13 +20,13 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.literals
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameter;
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.params.GrParameterList;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.types.TypeInferenceHelper;
-import org.jetbrains.plugins.groovy.lang.psi.impl.GrClosureType;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiElementImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager;
 import org.jetbrains.plugins.groovy.lang.psi.impl.PsiImplUtil;
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.params.GrParameterListImpl;
 import org.jetbrains.plugins.groovy.lang.psi.impl.synthetic.ClosureSyntheticParameter;
 import org.jetbrains.plugins.groovy.lang.resolve.MethodTypeInferencer;
+import org.jetbrains.plugins.groovy.lang.typing.GroovyPsiClosureType;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -59,14 +57,6 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
   }
 
   @Override
-  public boolean processClosureDeclarations(@NotNull final PsiScopeProcessor plainProcessor,
-                                            @NotNull final ResolveState state,
-                                            @Nullable final PsiElement lastParent,
-                                            @NotNull final PsiElement place) {
-    return processDeclarationsWithCallsite(this, plainProcessor, state, lastParent, place);
-  }
-
-  @Override
   public boolean processDeclarations(@NotNull final PsiScopeProcessor processor,
                                      @NotNull final ResolveState state,
                                      @Nullable final PsiElement lastParent,
@@ -85,9 +75,8 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
     return "Closable block";
   }
 
-  @NotNull
   @Override
-  public GrParameter[] getParameters() {
+  public GrParameter @NotNull [] getParameters() {
     if (hasParametersSection()) {
       GrParameterListImpl parameterList = getParameterList();
       return parameterList.getParameters();
@@ -96,9 +85,8 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
     return GrParameter.EMPTY_ARRAY;
   }
 
-  @NotNull
   @Override
-  public GrParameter[] getAllParameters() {
+  public GrParameter @NotNull [] getAllParameters() {
     if (hasParametersSection()) return getParameters();
     return getSyntheticItParameter();
   }
@@ -144,7 +132,7 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
 
   @Override
   public PsiType getType() {
-    return GrClosureType.create(this, true);
+    return TypeInferenceHelper.getCurrentContext().getExpressionType(this, GroovyPsiClosureType::new);
   }
 
   @Override
@@ -173,13 +161,15 @@ public class GrClosableBlockImpl extends GrBlockImpl implements GrClosableBlock 
     return PsiImplUtil.replaceExpression(this, newExpr, removeUnnecessaryParentheses);
   }
 
-  private static final Function<GrClosableBlock, PsiType> ourTypesCalculator =
-    (NullableFunction<GrClosableBlock, PsiType>)block -> GroovyPsiManager.inferType(block, new MethodTypeInferencer(block));
-
   @Override
   @Nullable
   public PsiType getReturnType() {
-    return TypeInferenceHelper.getCurrentContext().getExpressionType(this, ourTypesCalculator);
+    return TypeInferenceHelper.getCurrentContext().getCachedValue(this, this::doGetReturnType);
+  }
+
+  @Nullable
+  private PsiType doGetReturnType() {
+    return GroovyPsiManager.inferType(this, new MethodTypeInferencer(this));
   }
 
   @Override

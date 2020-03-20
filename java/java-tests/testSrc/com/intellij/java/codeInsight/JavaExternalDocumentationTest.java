@@ -4,7 +4,6 @@ package com.intellij.java.codeInsight;
 import com.intellij.JavaTestUtil;
 import com.intellij.codeInsight.documentation.DocumentationComponent;
 import com.intellij.codeInsight.documentation.DocumentationManager;
-import com.intellij.lang.documentation.DocumentationProvider;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
@@ -22,7 +21,6 @@ import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
-import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiFileFactory;
 import com.intellij.testFramework.EditorTestUtil;
@@ -30,11 +28,13 @@ import com.intellij.testFramework.LightPlatformTestCase;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.PsiTestUtil;
 import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor;
+import com.intellij.util.Function;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.ide.BuiltInServerManager;
 
+import java.awt.*;
 import java.io.File;
 import java.io.InputStream;
 import java.net.URL;
@@ -53,7 +53,8 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
     }
   };
 
-  public static final Pattern BASE_URL_PATTERN = Pattern.compile("(<base href=\")([^\"]*)");
+  public static final Pattern BASE_URL_PATTERN = Pattern.compile("<base href=\"([^\"]*)");
+  public static final Pattern LOCALHOST_URL_PATTERN = Pattern.compile("https?://localhost:\\d+/([^\"']*)");
   public static final Pattern IMG_URL_PATTERN = Pattern.compile("<img src=\"([^\"]*)");
 
   @Override
@@ -73,7 +74,7 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
     String text = getDocumentationText("class Foo { com.jetbrains.<caret>Test field; }");
     Matcher baseUrlMatcher = BASE_URL_PATTERN.matcher(text);
     assertTrue(baseUrlMatcher.find());
-    String baseUrl = baseUrlMatcher.group(2);
+    String baseUrl = baseUrlMatcher.group(1);
     Matcher imgMatcher = IMG_URL_PATTERN.matcher(text);
     assertTrue(imgMatcher.find());
     String relativeUrl = imgMatcher.group(1);
@@ -104,17 +105,21 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
     doTest("class Foo {{ new com.jetbrains.LinkBetweenMethods().<caret>m1(); }}");
   }
 
+  public void testEscapingLink() throws Exception {
+    doTest("class Foo {{ new com.jetbrains.GenericClass().<caret>genericMethod(null); }}");
+  }
+
   private void doTest(String text) throws Exception {
     String actualText = getDocumentationText(text);
     String expectedText = StringUtil.convertLineSeparators(FileUtil.loadFile(getDataFile(getTestName(false) + ".html")));
-    assertEquals(expectedText, replaceBaseUrlWithPlaceholder(actualText));
+    assertEquals(expectedText, replaceLocalHostUrlsWithPlaceholder(actualText));
   }
 
-  private static String replaceBaseUrlWithPlaceholder(String actualText) {
-    return BASE_URL_PATTERN.matcher(actualText).replaceAll("$1placeholder");
+  private static String replaceLocalHostUrlsWithPlaceholder(String actualText) {
+    return LOCALHOST_URL_PATTERN.matcher(actualText).replaceAll("placeholder");
   }
 
-  private static void waitTillDone(ActionCallback actionCallback) throws InterruptedException {
+  static void waitTillDone(ActionCallback actionCallback) throws InterruptedException {
     if (actionCallback == null) return;
     long start = System.currentTimeMillis();
     while (System.currentTimeMillis() - start < 300000) {
@@ -139,21 +144,34 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
     return jarFile;
   }
 
-  private static String getDocumentationText(String sourceEditorText) {
+  private String getDocumentationText(String sourceEditorText) {
     return getDocumentationText(getProject(), sourceEditorText);
   }
 
-  public static String getDocumentationText(Project project, String sourceEditorText) {
+  public static String getDocumentationText(Project project,
+                                          String sourceEditorText) {
+    return getDocumentationText(project, sourceEditorText, DocumentationComponent::getDecoratedText);
+  }
+
+  public static String getDocumentationText(Project project,
+                                            String sourceEditorText,
+                                            @NotNull Function<? super DocumentationComponent, String> componentEvaluator) {
     int caretPosition = sourceEditorText.indexOf(EditorTestUtil.CARET_TAG);
     if (caretPosition >= 0) {
       sourceEditorText = sourceEditorText.substring(0, caretPosition) +
                          sourceEditorText.substring(caretPosition + EditorTestUtil.CARET_TAG.length());
     }
     PsiFile psiFile = PsiFileFactory.getInstance(project).createFileFromText(JavaLanguage.INSTANCE, sourceEditorText);
-    return getDocumentationText(psiFile, caretPosition);
+    return getDocumentationText(psiFile, caretPosition, componentEvaluator);
   }
 
   public static String getDocumentationText(@NotNull PsiFile psiFile, int caretPosition) {
+    return getDocumentationText(psiFile, caretPosition, DocumentationComponent::getDecoratedText);
+  }
+
+  public static String getDocumentationText(@NotNull PsiFile psiFile,
+                                            int caretPosition,
+                                            @NotNull Function<? super DocumentationComponent, String> componentEvaluator) {
     Project project = psiFile.getProject();
     Document document = PsiDocumentManager.getInstance(project).getDocument(psiFile);
     assertNotNull(document);
@@ -162,7 +180,7 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
       if (caretPosition >= 0) {
         editor.getCaretModel().moveToOffset(caretPosition);
       }
-      return getDocumentationText(editor);
+      return getDocumentationText(editor, componentEvaluator);
     }
     finally {
       EditorFactory.getInstance().releaseEditor(editor);
@@ -170,6 +188,11 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
   }
 
   public static String getDocumentationText(@NotNull Editor editor) {
+    return getDocumentationText(editor, DocumentationComponent::getDecoratedText);
+  }
+
+  public static String getDocumentationText(@NotNull Editor editor,
+                                            @NotNull Function<? super DocumentationComponent, String> componentEvaluator) {
     Project project = editor.getProject();
     PsiFile psiFile = PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
     DocumentationManager documentationManager = DocumentationManager.getInstance(project);
@@ -183,7 +206,7 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
       catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
-      return documentationComponent.getText();
+      return componentEvaluator.fun(documentationComponent);
     }
     finally {
       JBPopup hint = documentationComponent.getHint();
@@ -193,24 +216,11 @@ public class JavaExternalDocumentationTest extends LightPlatformTestCase {
   }
 
   private static class MockDocumentationComponent extends DocumentationComponent {
-    private String myText;
-
     MockDocumentationComponent(DocumentationManager manager) {
       super(manager);
     }
 
     @Override
-    public void setData(@Nullable PsiElement element,
-                        @NotNull String text,
-                        @Nullable String effectiveExternalUrl,
-                        @Nullable String ref,
-                        @Nullable DocumentationProvider provider) {
-      myText = text;
-    }
-
-    @Override
-    public String getText() {
-      return myText;
-    }
+    protected void showHint(@NotNull Rectangle viewRect, @Nullable String ref) {}
   }
 }

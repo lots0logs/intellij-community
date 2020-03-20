@@ -27,9 +27,15 @@ final class CoverageProjectViewDirectoryNodeDecorator extends AbstractCoveragePr
       return;
     }
 
-    final CoverageDataManager manager = getCoverageDataManager();
+    Project project = element.getProject();
+
+    final CoverageDataManager manager = getCoverageDataManager(project);
+    if (manager == null) {
+      return;
+    }
+
     final CoverageSuitesBundle currentSuite = manager.getCurrentSuitesBundle();
-    final CoverageAnnotator coverageAnnotator = currentSuite != null ? currentSuite.getAnnotator(element.getProject()) : null;
+    final CoverageAnnotator coverageAnnotator = currentSuite != null ? currentSuite.getAnnotator(project) : null;
     if (coverageAnnotator == null) {
       // N/A
       return;
@@ -49,10 +55,16 @@ final class CoverageProjectViewDirectoryNodeDecorator extends AbstractCoveragePr
 
   @Override
   public void decorate(ProjectViewNode node, PresentationData data) {
-    final CoverageDataManager manager = getCoverageDataManager();
+    Project project = node.getProject();
+    if (project == null) {
+      return;
+    }
+
+    final CoverageDataManager manager = getCoverageDataManager(project);
+    if (manager == null) return;
     final CoverageSuitesBundle currentSuite = manager.getCurrentSuitesBundle();
-    final CoverageAnnotator coverageAnnotator = currentSuite != null ? currentSuite.getAnnotator(node.getProject())
-                                                                     : null;
+
+    final CoverageAnnotator coverageAnnotator = currentSuite == null ? null : currentSuite.getAnnotator(project);
     if (coverageAnnotator == null) {
       // N/A
       return;

@@ -16,6 +16,9 @@
 package com.intellij.refactoring.move.moveInner;
 
 import com.intellij.featureStatistics.FeatureUsageTracker;
+import com.intellij.java.refactoring.JavaRefactoringBundle;
+import com.intellij.lang.Language;
+import com.intellij.lang.jvm.JvmLanguage;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.editor.Editor;
@@ -31,6 +34,7 @@ import com.intellij.refactoring.move.MoveHandlerDelegate;
 import com.intellij.refactoring.move.moveClassesOrPackages.JavaMoveClassesOrPackagesHandler;
 import com.intellij.refactoring.move.moveMembers.MoveMembersHandler;
 import com.intellij.refactoring.util.RadioUpDownListener;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -38,7 +42,7 @@ import java.awt.*;
 
 public class MoveInnerToUpperOrMembersHandler extends MoveHandlerDelegate {
   @Override
-  public boolean canMove(final PsiElement[] elements, @Nullable final PsiElement targetContainer) {
+  public boolean canMove(final PsiElement[] elements, @Nullable final PsiElement targetContainer, @Nullable PsiReference reference) {
     if (elements.length != 1) return false;
     PsiElement element = elements [0];
     return isStaticInnerClass(element);
@@ -80,6 +84,17 @@ public class MoveInnerToUpperOrMembersHandler extends MoveHandlerDelegate {
     return false;
   }
 
+  @Override
+  public boolean supportsLanguage(@NotNull Language language) {
+    return language instanceof JvmLanguage;
+  }
+
+  @Nullable
+  @Override
+  public String getActionName(PsiElement @NotNull [] elements) {
+    return JavaRefactoringBundle.message("move.inner.class.action.name");
+  }
+
   private static class SelectInnerOrMembersRefactoringDialog extends DialogWrapper {
     private JRadioButton myRbMoveInner;
     private JRadioButton myRbMoveMembers;
@@ -111,10 +126,10 @@ public class MoveInnerToUpperOrMembersHandler extends MoveHandlerDelegate {
     protected JComponent createCenterPanel() {
       JPanel panel = new JPanel(new BorderLayout());
       myRbMoveInner = new JRadioButton();
-      myRbMoveInner.setText(RefactoringBundle.message("move.inner.class.to.upper.level", myClassName));
+      myRbMoveInner.setText(JavaRefactoringBundle.message("move.inner.class.to.upper.level", myClassName));
       myRbMoveInner.setSelected(true);
       myRbMoveMembers = new JRadioButton();
-      myRbMoveMembers.setText(RefactoringBundle.message("move.inner.class.to.another.class", myClassName));
+      myRbMoveMembers.setText(JavaRefactoringBundle.message("move.inner.class.to.another.class", myClassName));
 
 
       ButtonGroup gr = new ButtonGroup();

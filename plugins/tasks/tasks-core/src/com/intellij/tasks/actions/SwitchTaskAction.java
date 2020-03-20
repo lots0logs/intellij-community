@@ -65,7 +65,7 @@ public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
     Presentation presentation = e.getPresentation();
     Project project = e.getData(CommonDataKeys.PROJECT);
     if (project == null || project.isDefault() || project.isDisposed()) {
-      presentation.setEnabled(false);
+      presentation.setEnabledAndVisible(false);
       presentation.setText("");
       presentation.setIcon(null);
     }
@@ -150,7 +150,7 @@ public class SwitchTaskAction extends ComboBoxAction implements DumbAware {
       }
 
       @Override
-      public boolean hasSubstep(List<TaskListItem> selectedValues) {
+      public boolean hasSubstep(List<? extends TaskListItem> selectedValues) {
         return selectedValues.size() > 1 || selectedValues.get(0).getTask() != null;
       }
 

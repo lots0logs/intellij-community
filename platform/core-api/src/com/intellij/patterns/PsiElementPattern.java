@@ -71,13 +71,18 @@ public abstract class PsiElementPattern<T extends PsiElement,Self extends PsiEle
   }
 
   @NotNull
-  public Self afterLeaf(@NotNull final String... withText) {
+  public Self afterLeaf(final String @NotNull ... withText) {
     return afterLeaf(psiElement().withText(StandardPatterns.string().oneOf(withText)));
   }
 
   @NotNull
   public Self afterLeaf(@NotNull final ElementPattern<? extends PsiElement> pattern) {
     return afterLeafSkipping(psiElement().whitespaceCommentEmptyOrError(), pattern);
+  }
+
+  @NotNull
+  public Self beforeLeaf(final String @NotNull ... withText) {
+    return beforeLeaf(psiElement().withText(StandardPatterns.string().oneOf(withText)));
   }
 
   @NotNull
@@ -180,7 +185,7 @@ public abstract class PsiElementPattern<T extends PsiElement,Self extends PsiEle
   }
 
   @NotNull
-  public Self withName(@NotNull @NonNls final String... names) {
+  public Self withName(@NonNls final String @NotNull ... names) {
     return withName(StandardPatterns.string().oneOf(names));
   }
 

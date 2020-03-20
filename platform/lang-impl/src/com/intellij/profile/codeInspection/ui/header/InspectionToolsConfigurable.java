@@ -1,9 +1,11 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.profile.codeInspection.ui.header;
 
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInspection.ex.InspectionProfileImpl;
 import com.intellij.codeInspection.ex.InspectionProfileModifiableModel;
 import com.intellij.codeInspection.ex.InspectionToolWrapper;
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.project.Project;
@@ -15,16 +17,16 @@ import com.intellij.profile.codeInspection.ProjectInspectionProfileManager;
 import com.intellij.profile.codeInspection.ui.ErrorsConfigurable;
 import com.intellij.profile.codeInspection.ui.SingleInspectionProfilePanel;
 import com.intellij.util.Alarm;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.ui.JBInsets;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Arrays;
 
 public abstract class InspectionToolsConfigurable implements ErrorsConfigurable, SearchableConfigurable, Configurable.NoScroll {
+  private static final Logger LOG = Logger.getInstance(InspectionToolsConfigurable.class);
   public static final String ID = "Errors";
-  public static final String DISPLAY_NAME = "Inspections";
 
   protected final BaseInspectionProfileManager myApplicationProfileManager;
   protected final ProjectInspectionProfileManager myProjectProfileManager;
@@ -47,7 +49,7 @@ public abstract class InspectionToolsConfigurable implements ErrorsConfigurable,
 
   @Override
   public String getDisplayName() {
-    return DISPLAY_NAME;
+    return getInspectionsDisplayName();
   }
 
   @Override
@@ -157,6 +159,12 @@ public abstract class InspectionToolsConfigurable implements ErrorsConfigurable,
     myAbstractSchemesPanel.reset();
     final InspectionProfileModifiableModel currentModifiableModel = myAbstractSchemesPanel.getModel().getModifiableModelFor(getCurrentProfile());
     myAbstractSchemesPanel.selectScheme(currentModifiableModel);
+    InspectionProfileModifiableModel selected = myAbstractSchemesPanel.getSelectedScheme();
+    if (selected == null) {
+      LOG.error("No profile is selected. Current profile: " + getCurrentProfile().getName() + " . Existing profiles: " +
+                Arrays.toString(InspectionProfileSchemesModel.getSortedProfiles(myApplicationProfileManager, myProjectProfileManager).stream().map(p -> p.getName()).toArray()));
+      myAbstractSchemesPanel.selectAnyProfile();
+    }
     showProfile(currentModifiableModel);
 
     final SingleInspectionProfilePanel panel = getSelectedPanel();
@@ -239,11 +247,16 @@ public abstract class InspectionToolsConfigurable implements ErrorsConfigurable,
 
   private void showProfile(InspectionProfileModifiableModel profile) {
     final SingleInspectionProfilePanel panel = myAbstractSchemesPanel.getModel().getProfilePanel(profile);
-    if (!ArrayUtil.contains(panel, myAbstractSchemesPanel.getModel().getProfilePanels())) {
+    if (myAbstractSchemesPanel.getModel().getProfilePanels().contains(panel)) {
       myProfilePanelHolder.add(panel);
     }
     for (Component component : myProfilePanelHolder.getComponents()) {
       component.setVisible(component == panel);
     }
+  }
+
+  @NotNull
+  public static String getInspectionsDisplayName() {
+    return CodeInsightBundle.message("configurable.InspectionToolsConfigurable.display.name");
   }
 }

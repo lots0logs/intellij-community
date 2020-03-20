@@ -22,6 +22,7 @@ import com.intellij.codeInsight.daemon.LightDaemonAnalyzerTestCase;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.codeInspection.deadCode.UnusedDeclarationInspection;
+import com.intellij.codeInspection.ex.EntryPointsManagerBase;
 import com.intellij.codeInspection.ex.InspectionToolRegistrar;
 import com.intellij.codeInspection.ex.InspectionToolWrapper;
 import com.intellij.codeInspection.ex.LocalInspectionToolWrapper;
@@ -53,11 +54,12 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
       enableInspectionTool(new UnusedDeclarationInspection());
       enableInspectionTool(new UnusedImportInspection());
     }
+    // pre-load extensions to avoid "PSI/document/model changes are not allowed during highlighting"
+    EntryPointsManagerBase.getInstance(getProject()).getAdditionalAnnotations();
   }
 
-  @NotNull
   @Override
-  protected LocalInspectionTool[] configureLocalInspectionTools() {
+  protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
     if ("RandomEditingForUnused".equals(getTestName(false))) {
       return LocalInspectionTool.EMPTY_ARRAY;
     }
@@ -168,13 +170,13 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
       long start = System.currentTimeMillis();
 
       LOG.debug("i = " + i);
-      String s = myFile.getText();
+      String s = getFile().getText();
       int offset;
       while (true) {
         offset = random.nextInt(s.length());
         if (s.charAt(offset) == ' ') break;
       }
-      myEditor.getCaretModel().moveToOffset(offset);
+      getEditor().getCaretModel().moveToOffset(offset);
       type("/*--*/");
       List<HighlightInfo> infos = doHighlighting();
       if (oldWarningSize != infos.size()) {
@@ -253,7 +255,7 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
     Random random = new Random();
     int unused = 0;
     for (int i = 0; i < 100; i++) {
-      String s = myFile.getText();
+      String s = getFile().getText();
 
       int offset;
       while (true) {
@@ -263,12 +265,12 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
 
       char next = offset < s.length()-1 ? s.charAt(offset+1) : 0;
       if (next == '/') {
-        myEditor.getCaretModel().moveToOffset(offset + 1);
+        getEditor().getCaretModel().moveToOffset(offset + 1);
         type("**");
         unused--;
       }
       else if (next == '*') {
-        myEditor.getCaretModel().moveToOffset(offset + 1);
+        getEditor().getCaretModel().moveToOffset(offset + 1);
         delete();
         delete();
         unused++;
@@ -279,7 +281,7 @@ public class HighlightStressTest extends LightDaemonAnalyzerTestCase {
       PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
       getFile().accept(new PsiRecursiveElementVisitor() {
         @Override
-        public void visitElement(PsiElement element) {
+        public void visitElement(@NotNull PsiElement element) {
           assertTrue(element.toString(), element.isValid());
           super.visitElement(element);
         }

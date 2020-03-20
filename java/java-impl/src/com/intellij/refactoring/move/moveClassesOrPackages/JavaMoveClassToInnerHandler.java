@@ -68,7 +68,7 @@ public class JavaMoveClassToInnerHandler implements MoveClassToInnerHandler {
     return importStatements;
   }
 
-  private static void filterUsagesInImportStatements(final List<UsageInfo> usages, final List<PsiElement> importStatements) {
+  private static void filterUsagesInImportStatements(final List<UsageInfo> usages, final List<? super PsiElement> importStatements) {
     for (Iterator<UsageInfo> iterator = usages.iterator(); iterator.hasNext(); ) {
       UsageInfo usage = iterator.next();
       PsiElement element = usage.getElement();
@@ -123,12 +123,12 @@ public class JavaMoveClassToInnerHandler implements MoveClassToInnerHandler {
 
   @Override
   public void retargetNonCodeUsages(@NotNull final Map<PsiElement, PsiElement> oldToNewElementMap,
-                                    @NotNull final NonCodeUsageInfo[] nonCodeUsages) {
+                                    final NonCodeUsageInfo @NotNull [] nonCodeUsages) {
     for (PsiElement newClass : oldToNewElementMap.values()) {
       if (newClass.getLanguage() != JavaLanguage.INSTANCE) continue;
       newClass.accept(new PsiRecursiveElementVisitor() {
         @Override
-        public void visitElement(final PsiElement element) {
+        public void visitElement(@NotNull final PsiElement element) {
           super.visitElement(element);
           List<NonCodeUsageInfo> list = element.getCopyableUserData(MoveClassToInnerProcessor.ourNonCodeUsageKey);
           if (list != null) {

@@ -9,6 +9,7 @@ import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.executors.DefaultRunExecutor;
 import com.intellij.execution.runners.ExecutionUtil;
 import com.intellij.execution.stacktrace.StackTraceLine;
+import com.intellij.execution.testframework.sm.runner.states.TestStateInfo;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.colors.CodeInsightColors;
 import com.intellij.openapi.project.Project;
@@ -33,12 +34,14 @@ public class TestFailedLineInspection extends LocalInspectionTool {
         PsiElement nameElement = call.getMethodExpression().getReferenceNameElement();
         if (nameElement == null) return;
 
-        TestStateStorage.Record state = TestFailedLineManager.getInstance(call.getProject()).getFailedLineState(call);
+        TestStateStorage.Record state = TestFailedLineManager.getInstance(holder.getProject()).getFailedLineState(call);
         if (state == null) return;
+        if (state.magnitude <= TestStateInfo.Magnitude.IGNORED_INDEX.getValue())
+          return;
 
         LocalQuickFix[] fixes = {new DebugFailedTestFix(call, state.topStacktraceLine),
           new RunActionFix(call, DefaultRunExecutor.EXECUTOR_ID)};
-        ProblemDescriptor descriptor = InspectionManager.getInstance(call.getProject())
+        ProblemDescriptor descriptor = InspectionManager.getInstance(holder.getProject())
                                                         .createProblemDescriptor(nameElement, state.errorMessage, isOnTheFly, fixes,
                                                                                  ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
         descriptor.setTextAttributes(CodeInsightColors.RUNTIME_ERROR);

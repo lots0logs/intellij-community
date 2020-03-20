@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.codeStyle.arrangement;
 
 import com.intellij.application.options.codeStyle.arrangement.color.ArrangementColorsProvider;
@@ -7,6 +7,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.TextRange;
+import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.arrangement.match.*;
 import com.intellij.psi.codeStyle.arrangement.model.ArrangementAtomMatchCondition;
 import com.intellij.psi.codeStyle.arrangement.model.ArrangementCompositeMatchCondition;
@@ -14,7 +15,6 @@ import com.intellij.psi.codeStyle.arrangement.model.ArrangementMatchCondition;
 import com.intellij.psi.codeStyle.arrangement.model.ArrangementMatchConditionVisitor;
 import com.intellij.psi.codeStyle.arrangement.std.*;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import com.intellij.util.text.CharArrayUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
@@ -32,6 +32,20 @@ public class ArrangementUtil {
 
   private ArrangementUtil() {
   }
+
+  @Nullable
+  public static ArrangementSettings getArrangementSettings(@NotNull CodeStyleSettings settings, @NotNull Language language) {
+    ArrangementSettings arrangementSettings = settings.getCommonSettings(language).getArrangementSettings();
+    if (arrangementSettings != null) {
+      return arrangementSettings;
+    }
+    Rearranger<?> rearranger = Rearranger.EXTENSION.forLanguage(language);
+    if (rearranger instanceof ArrangementStandardSettingsAware) {
+      return ((ArrangementStandardSettingsAware)rearranger).getDefaultSettings();
+    }
+    return null;
+  }
+
 
   //region Serialization
 
@@ -65,7 +79,7 @@ public class ArrangementUtil {
   //endregion
 
   @NotNull
-  public static ArrangementMatchCondition combine(@NotNull ArrangementMatchCondition... nodes) {
+  public static ArrangementMatchCondition combine(ArrangementMatchCondition @NotNull ... nodes) {
     final ArrangementCompositeMatchCondition result = new ArrangementCompositeMatchCondition();
     final ArrangementMatchConditionVisitor visitor = new ArrangementMatchConditionVisitor() {
       @Override
@@ -174,9 +188,9 @@ public class ArrangementUtil {
     return result.get();
   }
 
-  public static <T> Set<T> flatten(@NotNull Iterable<? extends Iterable<T>> data) {
-    Set<T> result = ContainerUtilRt.newHashSet();
-    for (Iterable<T> i : data) {
+  public static <T> Set<T> flatten(@NotNull Iterable<? extends Iterable<? extends T>> data) {
+    Set<T> result = new HashSet<>();
+    for (Iterable<? extends T> i : data) {
       for (T t : i) {
         result.add(t);
       }
@@ -186,7 +200,7 @@ public class ArrangementUtil {
 
   @NotNull
   public static Map<ArrangementSettingsToken, Object> extractTokens(@NotNull ArrangementMatchCondition condition) {
-    final Map<ArrangementSettingsToken, Object> result = ContainerUtilRt.newHashMap();
+    final Map<ArrangementSettingsToken, Object> result = new HashMap<>();
     condition.invite(new ArrangementMatchConditionVisitor() {
       @Override
       public void visit(@NotNull ArrangementAtomMatchCondition condition) {
@@ -288,8 +302,8 @@ public class ArrangementUtil {
 
   @NotNull
   public static List<CompositeArrangementSettingsToken> flatten(@NotNull CompositeArrangementSettingsToken base) {
-    List<CompositeArrangementSettingsToken> result = ContainerUtilRt.newArrayList();
-    Queue<CompositeArrangementSettingsToken> toProcess = ContainerUtilRt.newLinkedList(base);
+    List<CompositeArrangementSettingsToken> result = new ArrayList<>();
+    Queue<CompositeArrangementSettingsToken> toProcess = ContainerUtil.newLinkedList(base);
     while (!toProcess.isEmpty()) {
       CompositeArrangementSettingsToken token = toProcess.remove();
       result.add(token);
@@ -301,7 +315,7 @@ public class ArrangementUtil {
   //region Arrangement Sections
   @NotNull
   public static List<StdArrangementMatchRule> collectMatchRules(@NotNull List<? extends ArrangementSectionRule> sections) {
-    final List<StdArrangementMatchRule> matchRules = ContainerUtil.newArrayList();
+    final List<StdArrangementMatchRule> matchRules = new ArrayList<>();
     for (ArrangementSectionRule section : sections) {
       matchRules.addAll(section.getMatchRules());
     }

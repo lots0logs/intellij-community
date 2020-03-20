@@ -4,11 +4,10 @@ package git4idea.util;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vcs.AbstractVcsHelper;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.VcsNotifier;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import git4idea.GitBranch;
 import git4idea.GitUtil;
 import git4idea.i18n.GitBundle;
@@ -32,8 +31,10 @@ import java.util.List;
 public class GitUIUtil {
   /**
    * Text containing in the label when there is no current branch
+   * @deprecated Use {@link #getNoCurrentBranch()} instead
    */
-  public static final String NO_CURRENT_BRANCH = GitBundle.getString("common.no.active.branch");
+  @Deprecated
+  public static final String NO_CURRENT_BRANCH = "<no active branch>";
 
   /**
    * A private constructor for utility class
@@ -110,41 +111,6 @@ public class GitUIUtil {
     notifyMessage(project, title, description, true, null);
   }
 
-  public static void notifyGitErrors(Project project, String title, String description, Collection<? extends VcsException> gitErrors) {
-    StringBuilder content = new StringBuilder();
-    if (!StringUtil.isEmptyOrSpaces(description)) {
-      content.append(description);
-    }
-    if (!gitErrors.isEmpty()) {
-      content.append("<br/>");
-    }
-    for (VcsException e : gitErrors) {
-      content.append(e.getLocalizedMessage()).append("<br/>");
-    }
-    notifyMessage(project, title, content.toString(), false, null);
-  }
-
-  /**
-   * @return a list cell renderer for virtual files (it renders presentable URL)
-   */
-  public static ListCellRendererWrapper<VirtualFile> getVirtualFileListCellRenderer() {
-    return new ListCellRendererWrapper<VirtualFile>() {
-      @Override
-      public void customize(JList list, VirtualFile file, int index, boolean selected, boolean hasFocus) {
-        setText(file == null ? "(invalid)" : file.getPresentableUrl());
-      }
-    };
-  }
-
-  public static ListCellRendererWrapper<GitRepository> getRepositoryListCellRenderer() {
-    return new ListCellRendererWrapper<GitRepository>() {
-      @Override
-      public void customize(JList list, GitRepository repository, int index, boolean selected, boolean hasFocus) {
-        setText(repository == null ? "(invalid)" : repository.getPresentableUrl());
-      }
-    };
-  }
-
   /**
    * Get text field from combobox
    *
@@ -172,7 +138,7 @@ public class GitUIUtil {
     for (VirtualFile root : roots) {
       gitRootChooser.addItem(root);
     }
-    gitRootChooser.setRenderer(getVirtualFileListCellRenderer());
+    gitRootChooser.setRenderer(SimpleListCellRenderer.create("(invalid)", VirtualFile::getPresentableUrl));
     gitRootChooser.setSelectedItem(defaultRoot != null ? defaultRoot : roots.get(0));
     if (currentBranchLabel != null) {
       final ActionListener listener = new ActionListener() {
@@ -180,11 +146,11 @@ public class GitUIUtil {
         public void actionPerformed(final ActionEvent e) {
           VirtualFile root = (VirtualFile)gitRootChooser.getSelectedItem();
           assert root != null : "The root must not be null";
-          GitRepository repo = GitUtil.getRepositoryManager(project).getRepositoryForRoot(root);
+          GitRepository repo = GitUtil.getRepositoryManager(project).getRepositoryForRootQuick(root);
           assert repo != null : "The repository must not be null";
           GitBranch current = repo.getCurrentBranch();
           if (current == null) {
-            currentBranchLabel.setText(NO_CURRENT_BRANCH);
+            currentBranchLabel.setText(getNoCurrentBranch());
           }
           else {
             currentBranchLabel.setText(current.getName());
@@ -239,17 +205,6 @@ public class GitUIUtil {
    */
   public static void showOperationError(final Project project, final String operation, final String message) {
     Messages.showErrorDialog(project, message, GitBundle.message("error.occurred.during", operation));
-  }
-
-  /**
-   * Show errors on the tab
-   *
-   * @param project the context project
-   * @param title   the operation title
-   * @param errors  the errors to display
-   */
-  public static void showTabErrors(Project project, String title, List<VcsException> errors) {
-    AbstractVcsHelper.getInstance(project).showErrors(errors, title);
   }
 
   /**
@@ -377,5 +332,9 @@ public class GitUIUtil {
 
   private static String surround(String s, String tag) {
     return String.format("<%2$s>%1$s</%2$s>", s, tag);
+  }
+
+  public static String getNoCurrentBranch() {
+    return GitBundle.getString("common.no.active.branch");
   }
 }

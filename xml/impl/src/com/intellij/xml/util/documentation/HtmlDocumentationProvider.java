@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml.util.documentation;
 
 import com.intellij.codeInsight.lookup.LookupManager;
@@ -6,23 +6,22 @@ import com.intellij.lang.Language;
 import com.intellij.lang.LanguageDocumentation;
 import com.intellij.lang.documentation.DocumentationProvider;
 import com.intellij.lang.documentation.ExternalDocumentationProvider;
-import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.FakePsiElement;
+import com.intellij.psi.impl.source.html.dtd.HtmlAttributeDescriptorImpl;
+import com.intellij.psi.impl.source.html.dtd.HtmlElementDescriptorImpl;
 import com.intellij.psi.impl.source.xml.SchemaPrefix;
 import com.intellij.psi.meta.PsiMetaData;
 import com.intellij.psi.presentation.java.SymbolPresentationUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.xml.*;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.concurrency.SynchronizedClearableLazy;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xml.XmlAttributeDescriptor;
 import com.intellij.xml.XmlElementDescriptor;
@@ -30,11 +29,9 @@ import com.intellij.xml.util.XmlUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 import static com.intellij.codeInsight.documentation.DocumentationManager.ORIGINAL_ELEMENT_KEY;
@@ -43,19 +40,14 @@ import static com.intellij.codeInsight.documentation.DocumentationManager.ORIGIN
  * @author maxim
  */
 public class HtmlDocumentationProvider implements DocumentationProvider, ExternalDocumentationProvider {
-  private static final ExtensionPointName<DocumentationProvider> SCRIPT_PROVIDER_EP_NAME = ExtensionPointName.create("com.intellij.html.scriptDocumentationProvider");
-
-  private DocumentationProvider myStyleProvider = null;
+  public static final ExtensionPointName<DocumentationProvider> SCRIPT_PROVIDER_EP_NAME = ExtensionPointName.create("com.intellij.html.scriptDocumentationProvider");
+  public static final String ATTR_PREFIX = "#attr-";
+  
   private final boolean myUseStyleProvider;
 
   @NonNls public static final String ELEMENT_ELEMENT_NAME = "element";
   @NonNls public static final String NBSP = ":&nbsp;";
   @NonNls public static final String BR = "<br>";
-
-  private static final SynchronizedClearableLazy<DocumentationProvider> ourScriptProvider = new SynchronizedClearableLazy<>(() -> {
-    //noinspection CodeBlock2Expr
-    return ContainerUtil.getFirstItem(SCRIPT_PROVIDER_EP_NAME.getExtensionList());
-  });
 
   public HtmlDocumentationProvider() {
     this(true);
@@ -91,13 +83,16 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
     final XmlTag tag = element instanceof XmlElement ?
                        ReadAction.compute(() -> PsiTreeUtil.getParentOfType(element, XmlTag.class, false)) :
                        null;
-    final SmartPsiElementPointer pointer = element.getUserData(ORIGINAL_ELEMENT_KEY);
+    final SmartPsiElementPointer<?> pointer = element.getUserData(ORIGINAL_ELEMENT_KEY);
     PsiElement originalElement = pointer != null ?
                                  ReadAction.compute((ThrowableComputable<PsiElement, RuntimeException>)pointer::getElement) :
                                  element;
+    if (originalElement != null && !(originalElement instanceof XmlElement)) {
+      return null;
+    }
     final DocEntity entity = ReadAction.compute(() -> findDocumentationEntity(element, tag));
     for (String url : docUrls) {
-      if (url.contains("#attr-")) return null;
+      if (url.contains(ATTR_PREFIX)) return null;
     }
 
     String mdnDoc = MdnDocumentationUtil.fetchExternalDocumentation(docUrls, () -> null);
@@ -129,7 +124,7 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
 
     EntityDescriptor descriptor = findDocumentationDescriptor(entity, context);
     if (descriptor instanceof HtmlAttributeDescriptor && context != null) {
-      return "https://developer.mozilla.org/docs/Web/HTML/Element/" + context.getName() + "#attr-" + descriptor.getName();
+      return "https://developer.mozilla.org/docs/Web/HTML/Element/" + context.getName() + ATTR_PREFIX + descriptor.getName();
     }
 
     return descriptor != null ? descriptor.getHelpRef() : null;
@@ -143,7 +138,8 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
 
     if (element instanceof FakePsiElement) {
       nameElement = element.getNavigationElement();
-      isTag = nameElement != null && nameElement.getParent().getText().startsWith("element");
+      PsiElement parent = nameElement == null ? null : nameElement.getParent();
+      isTag = parent != null && parent.getText().startsWith("element");
     } else if (element instanceof XmlElementDecl) {
       nameElement = ((XmlElementDecl)element).getNameElement();
     } else if (element instanceof XmlAttributeDecl) {
@@ -180,7 +176,7 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
       key = nameElement.getText();
     }
 
-    key = StringUtil.notNullize(key).toLowerCase(Locale.US);
+    key = StringUtil.toLowerCase(StringUtil.notNullize(key));
 
     int dotIndex = key.indexOf('.');
     if (dotIndex > 0) {
@@ -218,7 +214,7 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
     }
 
     if (result == null) {
-      DocumentationProvider scriptProvider = ourScriptProvider.getValue();
+      DocumentationProvider scriptProvider = getScriptDocumentationProvider();
       if (scriptProvider != null) {
         result = scriptProvider.generateDoc(element, originalElement);
       }
@@ -255,7 +251,10 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
     if (element != null && LookupManager.getInstance(element.getProject()).getActiveLookup() == null) {
       XmlAttribute attribute = ReadAction.compute(() -> PsiTreeUtil.getParentOfType(element, XmlAttribute.class, true));
       if (attribute != null) {
-        return HtmlCompatibilityData.getAttributeData(attribute.getParent(), attribute.getName());
+        XmlAttributeDescriptor descriptor = attribute.getDescriptor();
+        String name = descriptor instanceof HtmlAttributeDescriptorImpl && !((HtmlAttributeDescriptorImpl)descriptor).isCaseSensitive() ?
+                      StringUtil.toLowerCase(attribute.getName()) : attribute.getName();
+        return HtmlCompatibilityData.getAttributeData(attribute.getParent(), name);
       }
       else if (element.getParent() instanceof XmlTag) {
         return HtmlCompatibilityData.getTagData((XmlTag)element.getParent());
@@ -266,7 +265,10 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
     } else {
       XmlTag tag = ReadAction.compute(() -> PsiTreeUtil.getParentOfType(element, XmlTag.class, true));
       if (tag != null) {
-        return HtmlCompatibilityData.getAttributeData(tag, entity.name);
+        XmlElementDescriptor descriptor = tag.getDescriptor();
+        String name = descriptor instanceof HtmlElementDescriptorImpl && !((HtmlElementDescriptorImpl)descriptor).isCaseSensitive() ?
+                      StringUtil.toLowerCase(entity.name) : entity.name;
+        return HtmlCompatibilityData.getAttributeData(tag, name);
       }
     }
     return null;
@@ -281,7 +283,7 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
       result = styleProvider.getDocumentationElementForLookupItem(psiManager, object, element);
     }
     if (result == null) {
-      DocumentationProvider scriptProvider = ourScriptProvider.getValue();
+      DocumentationProvider scriptProvider = getScriptDocumentationProvider();
       if (scriptProvider != null) {
         result = scriptProvider.getDocumentationElementForLookupItem(psiManager, object, element);
       }
@@ -300,14 +302,15 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
     if (result== null && styleProvider !=null) {
       result = styleProvider.getDocumentationElementForLink(psiManager, link, context);
     }
-    if (result== null && ourScriptProvider.getValue() != null && !DumbService.isDumb(psiManager.getProject())) {
-      result = ourScriptProvider.getValue().getDocumentationElementForLink(psiManager, link, context);
+    DocumentationProvider provider = getScriptDocumentationProvider();
+    if (result == null && provider != null && !DumbService.isDumb(psiManager.getProject())) {
+      result = provider.getDocumentationElementForLink(psiManager, link, context);
     }
     return result;
   }
 
   public PsiElement createNavigationElementHTML(PsiManager psiManager, String text, PsiElement context) {
-    String key = text.toLowerCase(Locale.US);
+    String key = StringUtil.toLowerCase(text);
     final HtmlTagDescriptor descriptor = HtmlDescriptorsTable.getTagDescriptor(key);
 
     if (descriptor != null && !isAttributeContext(context) ) {
@@ -355,27 +358,19 @@ public class HtmlDocumentationProvider implements DocumentationProvider, Externa
     return PsiTreeUtil.getParentOfType(context,XmlTag.class,false);
   }
 
-  @TestOnly
-  public static void registerScriptDocumentationProvider(@NotNull DocumentationProvider provider, @NotNull Disposable parentDisposable) {
-    ourScriptProvider.setValue(provider);
-    Disposer.register(parentDisposable, new Disposable() {
-      @Override
-      public void dispose() {
-        ourScriptProvider.setValue(null);
-      }
-    });
+  @Nullable
+  private static DocumentationProvider getScriptDocumentationProvider() {
+    return ContainerUtil.getFirstItem(SCRIPT_PROVIDER_EP_NAME.getExtensionList());
   }
 
   @Nullable
   private DocumentationProvider getStyleProvider() {
     if (!myUseStyleProvider) return null;
-    if (myStyleProvider == null) {
-      Language cssLanguage = Language.findLanguageByID("CSS");
-      if (cssLanguage != null) {
-        myStyleProvider = LanguageDocumentation.INSTANCE.forLanguage(cssLanguage);
-      }
+    Language cssLanguage = Language.findLanguageByID("CSS");
+    if (cssLanguage != null) {
+      return LanguageDocumentation.INSTANCE.forLanguage(cssLanguage);
     }
-    return myStyleProvider;
+    return null;
   }
 
   private static class DocEntity {

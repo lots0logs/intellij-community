@@ -27,10 +27,9 @@ import com.intellij.remoteServer.configuration.deployment.ModuleDeploymentSource
 import com.intellij.remoteServer.impl.configuration.deployment.DeployToServerConfigurationTypesRegistrar;
 import com.intellij.remoteServer.impl.configuration.deployment.DeployToServerRunConfiguration;
 import com.intellij.remoteServer.impl.configuration.deployment.ModuleDeploymentSourceImpl;
-import com.intellij.remoteServer.util.CloudBundle;
+import com.intellij.remoteServer.CloudBundle;
 import com.intellij.remoteServer.util.CloudGitDeploymentDetector;
 import com.intellij.remoteServer.util.CloudNotifier;
-import com.intellij.util.containers.hash.HashMap;
 import com.intellij.util.messages.MessageBusConnection;
 import git4idea.repo.GitRepository;
 import git4idea.repo.GitRepositoryChangeListener;
@@ -39,6 +38,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.event.HyperlinkEvent;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -159,8 +159,7 @@ public class CloudGitRemoteDetector implements GitRepositoryChangeListener, Proj
       if (contentRoot == null) {
         return;
       }
-
-      GitRepository repository = GitRepositoryManager.getInstance(myProject).getRepositoryForRoot(contentRoot);
+      GitRepository repository = GitRepositoryManager.getInstance(myProject).getRepositoryForRootQuick(contentRoot);
       if (repository == null) {
         return;
       }
@@ -192,7 +191,7 @@ public class CloudGitRemoteDetector implements GitRepositoryChangeListener, Proj
       myRepositoryRoot = repository.getRoot();
       myCloudName = deploymentDetector.getCloudType().getPresentableName();
       String path = FileUtil.toSystemDependentName(myRepositoryRoot.getPath());
-      myNotification = myNotifier.showMessage(CloudBundle.getText("git.cloud.app.detected", myCloudName, path),
+      myNotification = myNotifier.showMessage(CloudBundle.message("git.cloud.app.detected", myCloudName, path),
                                               MessageType.INFO,
                                               new NotificationListener() {
 
@@ -231,7 +230,7 @@ public class CloudGitRemoteDetector implements GitRepositoryChangeListener, Proj
       }
       else {
         final Ref<CloudGitChooseAccountStepBase> chooseAccountStepRef = new Ref<>();
-        if (!new AbstractProjectWizard(CloudBundle.getText("choose.account.wizzard.title", myCloudName), myProject, (String)null) {
+        if (!new AbstractProjectWizard(CloudBundle.message("choose.account.wizzard.title", myCloudName), myProject, (String)null) {
 
           final StepSequence myStepSequence;
 

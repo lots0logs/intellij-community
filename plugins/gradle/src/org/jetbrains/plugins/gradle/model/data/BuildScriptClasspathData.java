@@ -1,37 +1,22 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.model.data;
 
 import com.intellij.openapi.externalSystem.model.Key;
 import com.intellij.openapi.externalSystem.model.ProjectKeys;
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.model.project.AbstractExternalEntityData;
+import com.intellij.serialization.PropertyMapping;
+import com.intellij.util.containers.Interner;
+import com.intellij.util.containers.WeakInterner;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.io.Serializable;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
-/**
- * @author Vladislav.Soroka
- */
-public class BuildScriptClasspathData extends AbstractExternalEntityData {
-  private static final long serialVersionUID = 1L;
+public final class BuildScriptClasspathData extends AbstractExternalEntityData {
   @NotNull
   public static final Key<BuildScriptClasspathData> KEY =
     Key.create(BuildScriptClasspathData.class, ProjectKeys.LIBRARY_DEPENDENCY.getProcessingWeight() + 1);
@@ -40,12 +25,13 @@ public class BuildScriptClasspathData extends AbstractExternalEntityData {
   private File gradleHomeDir;
 
   @NotNull
-  private final List<ClasspathEntry> myClasspathEntries;
+  private final List<ClasspathEntry> classpathEntries;
 
-
+  @PropertyMapping({"owner", "classpathEntries"})
   public BuildScriptClasspathData(@NotNull ProjectSystemId owner, @NotNull List<ClasspathEntry> classpathEntries) {
     super(owner);
-    myClasspathEntries = classpathEntries;
+
+    this.classpathEntries = classpathEntries;
   }
 
   @Nullable
@@ -57,43 +43,70 @@ public class BuildScriptClasspathData extends AbstractExternalEntityData {
     this.gradleHomeDir = gradleHomeDir;
   }
 
-  @NotNull
-  public List<ClasspathEntry> getClasspathEntries() {
-    return myClasspathEntries;
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    if (!super.equals(o)) return false;
+    BuildScriptClasspathData data = (BuildScriptClasspathData)o;
+    return Objects.equals(gradleHomeDir, data.gradleHomeDir) &&
+           classpathEntries.equals(data.classpathEntries);
   }
 
-  public static class ClasspathEntry implements Serializable {
+  @Override
+  public int hashCode() {
+    return Objects.hash(super.hashCode(), gradleHomeDir, classpathEntries);
+  }
 
-    private static final long serialVersionUID = 1L;
+  @NotNull
+  public List<ClasspathEntry> getClasspathEntries() {
+    return classpathEntries;
+  }
+
+  public static final class ClasspathEntry {
+
+    private final static Interner<ClasspathEntry> ourEntryInterner = new WeakInterner<>();
 
     @NotNull
-    private final Set<String> myClassesFile;
+    private final Set<String> classesFile;
 
     @NotNull
-    private final Set<String> mySourcesFile;
+    private final Set<String> sourcesFile;
 
     @NotNull
-    private final Set<String> myJavadocFile;
+    private final Set<String> javadocFile;
 
+    public static ClasspathEntry create(@NotNull Set<String> classesFile,
+                                        @NotNull Set<String> sourcesFile,
+                                        @NotNull Set<String> javadocFile) {
+      return ourEntryInterner.intern(new ClasspathEntry(classesFile, sourcesFile, javadocFile));
+    }
+
+
+    /**
+     * @deprecated use ClasspathEntry{@link #create(Set, Set, Set)} to avoid memory leaks
+     */
+    @Deprecated
+    @PropertyMapping({"classesFile", "sourcesFile", "javadocFile"})
     public ClasspathEntry(@NotNull Set<String> classesFile, @NotNull Set<String> sourcesFile, @NotNull Set<String> javadocFile) {
-      myClassesFile = classesFile;
-      mySourcesFile = sourcesFile;
-      myJavadocFile = javadocFile;
+      this.classesFile = classesFile;
+      this.sourcesFile = sourcesFile;
+      this.javadocFile = javadocFile;
     }
 
     @NotNull
     public Set<String> getClassesFile() {
-      return myClassesFile;
+      return classesFile;
     }
 
     @NotNull
     public Set<String> getSourcesFile() {
-      return mySourcesFile;
+      return sourcesFile;
     }
 
     @NotNull
     public Set<String> getJavadocFile() {
-      return myJavadocFile;
+      return javadocFile;
     }
 
     @Override
@@ -103,18 +116,18 @@ public class BuildScriptClasspathData extends AbstractExternalEntityData {
 
       ClasspathEntry entry = (ClasspathEntry)o;
 
-      if (!myClassesFile.equals(entry.myClassesFile)) return false;
-      if (!myJavadocFile.equals(entry.myJavadocFile)) return false;
-      if (!mySourcesFile.equals(entry.mySourcesFile)) return false;
+      if (!classesFile.equals(entry.classesFile)) return false;
+      if (!javadocFile.equals(entry.javadocFile)) return false;
+      if (!sourcesFile.equals(entry.sourcesFile)) return false;
 
       return true;
     }
 
     @Override
     public int hashCode() {
-      int result = myClassesFile.hashCode();
-      result = 31 * result + mySourcesFile.hashCode();
-      result = 31 * result + myJavadocFile.hashCode();
+      int result = classesFile.hashCode();
+      result = 31 * result + sourcesFile.hashCode();
+      result = 31 * result + javadocFile.hashCode();
       return result;
     }
   }

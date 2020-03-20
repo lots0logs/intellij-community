@@ -38,9 +38,6 @@ import java.util.List;
 
 import static com.intellij.openapi.keymap.KeymapUtil.getActiveKeymapShortcuts;
 
-/**
- * @author nik
- */
 public class SurroundElementWithAction extends LayoutTreeActionBase {
   public SurroundElementWithAction(ArtifactEditorEx artifactEditor) {
     super("Surround With...", artifactEditor);
@@ -91,7 +88,7 @@ public class SurroundElementWithAction extends LayoutTreeActionBase {
     }
   }
 
-  private void surroundWith(final CompositePackagingElementType<?> type, final CompositePackagingElement<?> parent, final List<PackagingElement<?>> selected,
+  private void surroundWith(final CompositePackagingElementType<?> type, final CompositePackagingElement<?> parent, final List<? extends PackagingElement<?>> selected,
                             LayoutTreeComponent treeComponent) {
     if (myArtifactEditor.isDisposed() || selected.isEmpty()) return;
 

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui;
 
 import com.intellij.ide.SearchTopHitProvider;
@@ -32,7 +32,7 @@ public class UISimpleSettingsProvider implements SearchTopHitProvider, OptionsTo
 
   @Override
   public void consumeTopHits(@NotNull String pattern, @NotNull Consumer<Object> collector, @Nullable Project project) {
-    pattern = pattern.trim().toLowerCase();
+    pattern = StringUtil.toLowerCase(pattern.trim());
     if (StringUtil.isBetween(pattern, "cyc", "cyclic ") || StringUtil.isBetween(pattern, "scr", "scroll ")) {
       collector.accept(CYCLING_SCROLLING);
     }

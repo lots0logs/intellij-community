@@ -1,31 +1,39 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.featureStatistics;
 
+import com.intellij.internal.statistic.eventLog.FeatureUsageData;
+import com.intellij.internal.statistic.eventLog.validator.ValidationResultType;
+import com.intellij.internal.statistic.eventLog.validator.rules.EventContext;
+import com.intellij.internal.statistic.eventLog.validator.rules.impl.CustomWhiteListRule;
 import com.intellij.internal.statistic.persistence.UsageStatisticsPersistenceComponent;
 import com.intellij.internal.statistic.service.fus.collectors.FUCounterUsageLogger;
+import com.intellij.internal.statistic.utils.PluginInfo;
+import com.intellij.internal.statistic.utils.PluginInfoDetectorKt;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.RoamingType;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.xmlb.XmlSerializer;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Set;
 
+import static com.intellij.internal.statistic.utils.PluginInfoDetectorKt.getPluginInfo;
+
 @State(name = "FeatureUsageStatistics", storages = @Storage(value = UsageStatisticsPersistenceComponent.USAGE_STATISTICS_XML, roamingType = RoamingType.DISABLED))
-public class FeatureUsageTrackerImpl extends FeatureUsageTracker implements PersistentStateComponent<Element> {
+public final class FeatureUsageTrackerImpl extends FeatureUsageTracker implements PersistentStateComponent<Element> {
   private static final int HOUR = 1000 * 60 * 60;
   private static final long DAY = HOUR * 24;
   private long FIRST_RUN_TIME = 0;
   private CompletionStatistics myCompletionStats = new CompletionStatistics();
   private CumulativeStatistics myFixesStats = new CumulativeStatistics();
   boolean HAVE_BEEN_SHOWN = false;
-
-  private final ProductivityFeaturesRegistry myRegistry;
 
   @NonNls private static final String FEATURE_TAG = "feature";
   @NonNls private static final String ATT_SHOW_IN_OTHER = "show-in-other";
@@ -36,10 +44,6 @@ public class FeatureUsageTrackerImpl extends FeatureUsageTracker implements Pers
   @NonNls private static final String FIXES_STATS_TAG = "fixesStatsTag";
   @NonNls private static final String ATT_HAVE_BEEN_SHOWN = "have-been-shown";
 
-  public FeatureUsageTrackerImpl(ProductivityFeaturesRegistry productivityFeaturesRegistry) {
-    myRegistry = productivityFeaturesRegistry;
-  }
-
   @Override
   public boolean isToBeShown(String featureId, Project project) {
     return isToBeShown(featureId, project, DAY);
@@ -48,7 +52,9 @@ public class FeatureUsageTrackerImpl extends FeatureUsageTracker implements Pers
   private boolean isToBeShown(String featureId, Project project, final long timeUnit) {
     ProductivityFeaturesRegistry registry = ProductivityFeaturesRegistry.getInstance();
     FeatureDescriptor descriptor = registry.getFeatureDescriptor(featureId);
-    if (descriptor == null || !descriptor.isUnused()) return false;
+    if (descriptor == null || !descriptor.isUnused()) {
+      return false;
+    }
 
     String[] dependencyFeatures = descriptor.getDependencyFeatures();
     boolean locked = dependencyFeatures.length > 0;
@@ -100,14 +106,17 @@ public class FeatureUsageTrackerImpl extends FeatureUsageTracker implements Pers
   }
 
   @Override
-  public void loadState(@NotNull final Element element) {
-    List featuresList = element.getChildren(FEATURE_TAG);
-    for (Object aFeaturesList : featuresList) {
-      Element featureElement = (Element)aFeaturesList;
-      FeatureDescriptor descriptor =
-        myRegistry.getFeatureDescriptor(featureElement.getAttributeValue(ATT_ID));
-      if (descriptor != null) {
-        descriptor.readStatistics(featureElement);
+  public void loadState(@NotNull Element element) {
+    List<Element> featuresList = element.getChildren(FEATURE_TAG);
+    if (!featuresList.isEmpty()) {
+      ProductivityFeaturesRegistry featureRegistry = ProductivityFeaturesRegistry.getInstance();
+      if (featureRegistry != null) {
+        for (Element itemElement : featuresList) {
+          FeatureDescriptor descriptor = featureRegistry.getFeatureDescriptor(itemElement.getAttributeValue(ATT_ID));
+          if (descriptor != null) {
+            descriptor.readStatistics(itemElement);
+          }
+        }
       }
     }
 
@@ -137,13 +146,15 @@ public class FeatureUsageTrackerImpl extends FeatureUsageTracker implements Pers
   public Element getState() {
     Element element = new Element("state");
     ProductivityFeaturesRegistry registry = ProductivityFeaturesRegistry.getInstance();
-    Set<String> ids = registry.getFeatureIds();
-    for (String id: ids) {
-      Element featureElement = new Element(FEATURE_TAG);
-      featureElement.setAttribute(ATT_ID, id);
-      FeatureDescriptor descriptor = registry.getFeatureDescriptor(id);
-      descriptor.writeStatistics(featureElement);
-      element.addContent(featureElement);
+    if (registry != null) {
+      Set<String> ids = registry.getFeatureIds();
+      for (String id: ids) {
+        Element featureElement = new Element(FEATURE_TAG);
+        featureElement.setAttribute(ATT_ID, id);
+        FeatureDescriptor descriptor = registry.getFeatureDescriptor(id);
+        descriptor.writeStatistics(featureElement);
+        element.addContent(featureElement);
+      }
     }
 
     Element statsTag = new Element(COMPLETION_STATS_TAG);
@@ -163,16 +174,21 @@ public class FeatureUsageTrackerImpl extends FeatureUsageTracker implements Pers
   }
 
   @Override
-  public void triggerFeatureUsed(String featureId) {
+  public void triggerFeatureUsed(@NotNull String featureId) {
     ProductivityFeaturesRegistry registry = ProductivityFeaturesRegistry.getInstance();
-    FeatureDescriptor descriptor = registry.getFeatureDescriptor(featureId);
+    FeatureDescriptor descriptor = registry == null ? null : registry.getFeatureDescriptor(featureId);
     if (descriptor == null) {
-     // TODO: LOG.error("Feature '" + featureId +"' must be registered prior triggerFeatureUsed() is called");
+      // TODO: LOG.error("Feature '" + featureId +"' must be registered prior triggerFeatureUsed() is called");
+      return;
     }
-    else {
-      FUCounterUsageLogger.getInstance().logEvent("productivity", descriptor.getId());
-      descriptor.triggerUsed();
-    }
+
+    descriptor.triggerUsed();
+
+    Class<? extends ProductivityFeaturesProvider> provider = descriptor.getProvider();
+    String id = provider == null || getPluginInfo(provider).isDevelopedByJetBrains() ? descriptor.getId() : "third.party";
+    String group = descriptor.getGroupId();
+    FeatureUsageData data = new FeatureUsageData().addData("id", id).addData("group", StringUtil.notNullize(group, "unknown"));
+    FUCounterUsageLogger.getInstance().logEvent("productivity", "feature.used", data);
   }
 
   @Override
@@ -183,4 +199,39 @@ public class FeatureUsageTrackerImpl extends FeatureUsageTracker implements Pers
     }
   }
 
+  public static class ProductivityUtilValidator extends CustomWhiteListRule {
+
+    @Override
+    public boolean acceptRuleId(@Nullable String ruleId) {
+      return "productivity".equals(ruleId) || "productivity_group".equals(ruleId);
+    }
+
+    @NotNull
+    @Override
+    protected ValidationResultType doValidate(@NotNull String data, @NotNull EventContext context) {
+      if (isThirdPartyValue(data)) return ValidationResultType.ACCEPTED;
+
+      final String id = getEventDataField(context, "id");
+      final String group = getEventDataField(context, "group");
+      if (isValid(data, id, group)) {
+        ProductivityFeaturesRegistry registry = ProductivityFeaturesRegistry.getInstance();
+        FeatureDescriptor descriptor = registry.getFeatureDescriptor(id);
+        if (descriptor != null) {
+          final String actualGroup = descriptor.getGroupId();
+          if (StringUtil.equals(group, "unknown") || StringUtil.equals(group, actualGroup)) {
+            final Class<? extends ProductivityFeaturesProvider> provider = descriptor.getProvider();
+            final PluginInfo info =
+              provider == null ? PluginInfoDetectorKt.getPlatformPlugin() : getPluginInfo(provider);
+            context.setPluginInfo(info);
+            return info.isDevelopedByJetBrains() ? ValidationResultType.ACCEPTED : ValidationResultType.THIRD_PARTY;
+          }
+        }
+      }
+      return ValidationResultType.REJECTED;
+    }
+
+    private static boolean isValid(@NotNull String data, String id, String group) {
+      return id != null && group != null && (data.equals(id) || data.equals(group));
+    }
+  }
 }

@@ -1,32 +1,39 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.intention.impl;
 
+import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.daemon.impl.HighlightInfo;
 import com.intellij.codeInsight.daemon.impl.ShowIntentionsPass;
 import com.intellij.codeInsight.hint.HintManager;
-import com.intellij.codeInsight.intention.*;
+import com.intellij.codeInsight.intention.AbstractEmptyIntentionAction;
+import com.intellij.codeInsight.intention.IntentionAction;
+import com.intellij.codeInsight.intention.IntentionActionDelegate;
+import com.intellij.codeInsight.intention.impl.preview.IntentionPreviewPopupUpdateProcessor;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.*;
 import com.intellij.openapi.util.Iconable;
-import com.intellij.psi.*;
+import com.intellij.psi.PsiDocumentManager;
+import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiUtilBase;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
 import javax.swing.*;
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
 * @author cdr
 */
 public class IntentionListStep implements ListPopupStep<IntentionActionWithTextCaching>, SpeedSearchFilter<IntentionActionWithTextCaching> {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.intention.impl.IntentionListStep");
+  private static final Logger LOG = Logger.getInstance(IntentionListStep.class);
 
   private final CachedIntentions myCachedIntentions;
   @Nullable
@@ -39,10 +46,10 @@ public class IntentionListStep implements ListPopupStep<IntentionActionWithTextC
   private final Editor myEditor;
 
   public IntentionListStep(@Nullable IntentionHintComponent intentionHintComponent,
-                    @Nullable Editor editor,
-                    @NotNull PsiFile file,
-                    @NotNull Project project,
-                    CachedIntentions intentions) {
+                           @Nullable Editor editor,
+                           @NotNull PsiFile file,
+                           @NotNull Project project,
+                           CachedIntentions intentions) {
     myIntentionHintComponent = intentionHintComponent;
     myProject = project;
     myFile = file;
@@ -61,11 +68,8 @@ public class IntentionListStep implements ListPopupStep<IntentionActionWithTextC
   }
 
   @Override
-  public PopupStep onChosen(IntentionActionWithTextCaching action, final boolean finalChoice) {
-    IntentionAction a = action.getAction();
-    while (a instanceof IntentionActionDelegate) {
-      a = ((IntentionActionDelegate)a).getDelegate();
-    }
+  public PopupStep<?> onChosen(IntentionActionWithTextCaching action, final boolean finalChoice) {
+    IntentionAction a = IntentionActionDelegate.unwrap(action.getAction());
 
     if (finalChoice && !(a instanceof AbstractEmptyIntentionAction)) {
       applyAction(action);
@@ -73,10 +77,19 @@ public class IntentionListStep implements ListPopupStep<IntentionActionWithTextC
     }
 
     if (hasSubstep(action)) {
+      closeIntentionPreviewPopup();
+
       return getSubStep(action, action.getToolName());
     }
 
     return FINAL_CHOICE;
+  }
+
+  private static void closeIntentionPreviewPopup() {
+    ApplicationManager.getApplication().invokeLater(() ->
+       StackingPopupDispatcher.getInstance().getPopupStream()
+      .filter(popup -> popup.getUserData(IntentionPreviewPopupUpdateProcessor.IntentionPreviewPopupKey.class) != null)
+      .forEach(popup -> popup.cancel()));
   }
 
   @Override
@@ -87,9 +100,12 @@ public class IntentionListStep implements ListPopupStep<IntentionActionWithTextC
   private void applyAction(@NotNull IntentionActionWithTextCaching cachedAction) {
     myFinalRunnable = () -> {
       HintManager.getInstance().hideAllHints();
-      if (myProject.isDisposed() || myEditor != null && (myEditor.isDisposed() || !myEditor.getComponent().isShowing())) return;
+      if (myProject.isDisposed()) return;
+      if (myEditor != null && (myEditor.isDisposed() || (!myEditor.getComponent().isShowing() && !ApplicationManager.getApplication().isUnitTestMode()))) return;
+
       if (DumbService.isDumb(myProject) && !DumbService.isDumbAware(cachedAction)) {
-        DumbService.getInstance(myProject).showDumbModeNotification(cachedAction.getText() + " is not available during indexing");
+        DumbService.getInstance(myProject).showDumbModeNotification(
+          CodeInsightBundle.message("notification.0.is.not.available.during.indexing", cachedAction.getText()));
         return;
       }
 
@@ -133,7 +149,7 @@ public class IntentionListStep implements ListPopupStep<IntentionActionWithTextC
 
   @TestOnly
   public Map<IntentionAction, List<IntentionAction>> getActionsWithSubActions() {
-    Map<IntentionAction, List<IntentionAction>> result = ContainerUtil.newLinkedHashMap();
+    Map<IntentionAction, List<IntentionAction>> result = new LinkedHashMap<>();
 
     for (IntentionActionWithTextCaching cached : getValues()) {
       IntentionAction action = cached.getAction();
@@ -163,9 +179,9 @@ public class IntentionListStep implements ListPopupStep<IntentionActionWithTextC
   @Override
   @NotNull
   public String getTextFor(final IntentionActionWithTextCaching action) {
-    final String text = action.getAction().getText();
+    final String text = action.getText();
     if (LOG.isDebugEnabled() && text.startsWith("<html>")) {
-      LOG.info("IntentionAction.getText() returned HTML: action=" + action + " text=" + text);
+      LOG.info("IntentionAction.getText() returned HTML: action=" + action.getAction().getClass() + " text=" + text);
     }
     return text;
   }

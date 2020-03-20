@@ -1,9 +1,15 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.projectWizard;
 
+import com.intellij.execution.RunManager;
+import com.intellij.execution.RunnerAndConfigurationSettings;
+import com.intellij.execution.application.ApplicationConfiguration;
+import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.ide.util.projectWizard.ModuleWizardStep;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.module.JavaModuleType;
+import com.intellij.openapi.module.Module;
+import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.projectRoots.JavaSdk;
@@ -14,16 +20,14 @@ import com.intellij.openapi.roots.LanguageLevelProjectExtension;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.testFramework.IdeaTestUtil;
-import com.intellij.util.Consumer;
+import com.intellij.util.EmptyConsumer;
 
 import java.util.List;
 
 /**
  * @author Dmitry Avdeev
  */
-@SuppressWarnings("unchecked")
 public class NewProjectWizardTest extends NewProjectWizardTestCase {
-
   public void testCreateProject() throws Exception {
     Project project = createProject(step -> {
       if (step instanceof ProjectTypeStep) {
@@ -52,7 +56,7 @@ public class NewProjectWizardTest extends NewProjectWizardTestCase {
 
   public void testDefaultLanguageLevel() throws Exception {
     final Sdk defaultSdk = ProjectJdkTable.getInstance().findJdk(DEFAULT_SDK);
-    setProjectSdk(myProjectManager.getDefaultProject(), defaultSdk);
+    setProjectSdk(ProjectManager.getInstance().getDefaultProject(), defaultSdk);
 
     JavaSdkVersion version = JavaSdk.getInstance().getVersion(defaultSdk);
     assertNotNull(version);
@@ -64,7 +68,7 @@ public class NewProjectWizardTest extends NewProjectWizardTestCase {
   }
 
   public void testChangeSdk() throws Exception {
-    Project project = createProject(Consumer.EMPTY_CONSUMER);
+    Project project = createProject(EmptyConsumer.getInstance());
     Sdk jdk17 = IdeaTestUtil.getMockJdk17();
     addSdk(jdk17);
     setProjectSdk(project, jdk17);
@@ -82,11 +86,22 @@ public class NewProjectWizardTest extends NewProjectWizardTestCase {
     defaultExt.setLanguageLevel(LanguageLevel.JDK_1_4);
     defaultExt.setDefault(null); // emulate migration from previous build
 
-    Project project = createProject(Consumer.EMPTY_CONSUMER);
+    Project project = createProject(EmptyConsumer.getInstance());
     LanguageLevelProjectExtension extension = LanguageLevelProjectExtension.getInstance(project);
     Sdk sdk = ProjectRootManager.getInstance(project).getProjectSdk();
     JavaSdkVersion version = JavaSdk.getInstance().getVersion(sdk);
     assertEquals(version.getMaxLanguageLevel(), extension.getLanguageLevel());
+  }
+
+  public void testCommandLineApp() throws Exception {
+    Project project = createProjectFromTemplate(JavaModuleType.JAVA_GROUP, "Command Line App", null);
+    List<RunConfiguration> configurations = RunManager.getInstance(project).getAllConfigurationsList();
+    assertEquals(1, configurations.size());
+    ApplicationConfiguration configuration = (ApplicationConfiguration)configurations.get(0);
+    Module module = ModuleManager.getInstance(project).getModules()[0];
+    assertEquals(module, configuration.getConfigurationModule().getModule());
+    RunnerAndConfigurationSettings settings = RunManager.getInstance(project).getSelectedConfiguration();
+    assertEquals(configuration, settings.getConfiguration());
   }
 
   private static void setProjectSdk(final Project project, final Sdk jdk17) {
@@ -101,7 +116,7 @@ public class NewProjectWizardTest extends NewProjectWizardTestCase {
     try {
       LanguageLevelProjectExtension.getInstance(defaultProject).setLanguageLevel(languageLevel);
       LanguageLevelProjectExtension.getInstance(defaultProject).setDefault(detect);
-      @SuppressWarnings("unchecked") Project project = createProject(Consumer.EMPTY_CONSUMER);
+      Project project = createProject(EmptyConsumer.getInstance());
       assertEquals(languageLevel, LanguageLevelProjectExtension.getInstance(project).getLanguageLevel());
       return project;
     }

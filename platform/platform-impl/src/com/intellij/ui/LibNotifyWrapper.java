@@ -38,7 +38,7 @@ class LibNotifyWrapper implements SystemNotificationsImpl.Notifier {
   private boolean myDisposed = false;
 
   private LibNotifyWrapper() {
-    myLibNotify = Native.loadLibrary("libnotify.so.4", LibNotify.class);
+    myLibNotify = Native.load("libnotify.so.4", LibNotify.class);
 
     String appName = ApplicationNamesInfo.getInstance().getProductName();
     if (myLibNotify.notify_init(appName) == 0) {
@@ -62,11 +62,13 @@ class LibNotifyWrapper implements SystemNotificationsImpl.Notifier {
 
   @Override
   public void notify(@NotNull String name, @NotNull String title, @NotNull String description) {
-    synchronized (myLock) {
-      if (!myDisposed) {
-        Pointer notification = myLibNotify.notify_notification_new(title, description, myIcon);
-        myLibNotify.notify_notification_show(notification, null);
+    ApplicationManager.getApplication().executeOnPooledThread(() -> {
+      synchronized (myLock) {
+        if (!myDisposed) {
+          Pointer notification = myLibNotify.notify_notification_new(title, description, myIcon);
+          myLibNotify.notify_notification_show(notification, null);
+        }
       }
-    }
+    });
   }
 }

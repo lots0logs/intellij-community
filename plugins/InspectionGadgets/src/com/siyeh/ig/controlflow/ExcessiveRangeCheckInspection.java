@@ -4,8 +4,8 @@ package com.siyeh.ig.controlflow;
 import com.intellij.codeInspection.*;
 import com.intellij.codeInspection.dataFlow.SpecialField;
 import com.intellij.codeInspection.dataFlow.rangeSet.LongRangeSet;
-import com.intellij.codeInspection.dataFlow.value.DfaRelationValue;
-import com.intellij.codeInspection.dataFlow.value.DfaValueFactory;
+import com.intellij.codeInspection.dataFlow.types.DfLongType;
+import com.intellij.codeInspection.dataFlow.value.RelationType;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
@@ -16,10 +16,7 @@ import com.intellij.util.ObjectUtils;
 import com.intellij.util.containers.ContainerUtil;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.callMatcher.CallMatcher;
-import com.siyeh.ig.psiutils.BoolUtils;
-import com.siyeh.ig.psiutils.CommentTracker;
-import com.siyeh.ig.psiutils.EquivalenceChecker;
-import com.siyeh.ig.psiutils.JavaPsiMathUtil;
+import com.siyeh.ig.psiutils.*;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
@@ -81,7 +78,7 @@ public class ExcessiveRangeCheckInspection extends AbstractBaseJavaLocalInspecti
     }
     if (expression instanceof PsiMethodCallExpression) {
       PsiExpression qualifier = ((PsiMethodCallExpression)expression).getMethodExpression().getQualifierExpression();
-      if (qualifier != null) {
+      if (qualifier != null && !SideEffectChecker.mayHaveSideEffects(qualifier)) {
         if (STRING_IS_EMPTY.matches(expression)) {
           return new RangeConstraint(textRange, qualifier, SpecialField.STRING_LENGTH, LongRangeSet.point(0));
         }
@@ -92,7 +89,7 @@ public class ExcessiveRangeCheckInspection extends AbstractBaseJavaLocalInspecti
     }
     if (expression instanceof PsiBinaryExpression) {
       PsiBinaryExpression binOp = (PsiBinaryExpression)expression;
-      DfaRelationValue.RelationType rel = DfaRelationValue.RelationType.fromElementType(binOp.getOperationTokenType());
+      RelationType rel = RelationType.fromElementType(binOp.getOperationTokenType());
       if (rel == null) return null;
       PsiExpression left = PsiUtil.skipParenthesizedExprDown(binOp.getLOperand());
       PsiExpression right = PsiUtil.skipParenthesizedExprDown(binOp.getROperand());
@@ -149,8 +146,7 @@ public class ExcessiveRangeCheckInspection extends AbstractBaseJavaLocalInspecti
     LongRangeSet getFullRange() {
       LongRangeSet result;
       if (myField != null) {
-        DfaValueFactory factory = new DfaValueFactory(null, false);
-        result = LongRangeSet.fromDfaValue(myField.getDefaultValue(factory, false));
+        result = DfLongType.extractRange(myField.getDefaultValue(false));
       }
       else {
         result = LongRangeSet.fromType(myExpression.getType());
@@ -172,7 +168,7 @@ public class ExcessiveRangeCheckInspection extends AbstractBaseJavaLocalInspecti
       }
     }
 
-    @NotNull
+    @Nullable
     static RangeConstraint create(TextRange textRange, PsiExpression expr, LongRangeSet set) {
       SpecialField field = null;
       PsiReferenceExpression ref = expr instanceof PsiReferenceExpression ? (PsiReferenceExpression)expr :
@@ -185,6 +181,9 @@ public class ExcessiveRangeCheckInspection extends AbstractBaseJavaLocalInspecti
             expr = qualifier;
           }
         }
+      }
+      if (SideEffectChecker.mayHaveSideEffects(expr)) {
+        return null;
       }
       return new RangeConstraint(textRange, expr, field, set);
     }

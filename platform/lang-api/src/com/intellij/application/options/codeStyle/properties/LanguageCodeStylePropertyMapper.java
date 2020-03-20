@@ -1,16 +1,17 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.codeStyle.properties;
 
 import com.intellij.application.options.IndentOptionsEditor;
 import com.intellij.application.options.SmartIndentOptionsEditor;
 import com.intellij.lang.Language;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.options.OptionsBundle;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.CodeStyleSettingsProvider;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions;
 import com.intellij.psi.codeStyle.CustomCodeStyleSettings;
 import com.intellij.psi.codeStyle.LanguageCodeStyleSettingsProvider;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,15 +31,15 @@ public final class LanguageCodeStylePropertyMapper extends AbstractCodeStyleProp
                                          @Nullable String languageDomainId) {
     super(settings);
     myLanguage = language;
-    myLanguageDomainId = languageDomainId == null ? myLanguage.getID().toLowerCase(Locale.ENGLISH) : languageDomainId;
+    myLanguageDomainId = languageDomainId == null ? StringUtil.toLowerCase(myLanguage.getID()) : languageDomainId;
     mySettingsProvider = LanguageCodeStyleSettingsProvider.forLanguage(language);
     myCustomSettings = getCustomSettings();
   }
 
   @Nullable
   @Override
-  protected CodeStylePropertyAccessor getAccessor(@NotNull Object codeStyleObject, @NotNull Field field) {
-    CodeStylePropertyAccessor accessor = mySettingsProvider != null ? mySettingsProvider.getAccessor(codeStyleObject, field) : null;
+  protected CodeStylePropertyAccessor<?> getAccessor(@NotNull Object codeStyleObject, @NotNull Field field) {
+    CodeStylePropertyAccessor<?> accessor = mySettingsProvider != null ? mySettingsProvider.getAccessor(codeStyleObject, field) : null;
     if (accessor != null) {
       return accessor;
     }
@@ -46,11 +47,11 @@ public final class LanguageCodeStylePropertyMapper extends AbstractCodeStyleProp
   }
 
   @Override
-  protected void addAdditionalAccessors(@NotNull Map<String, CodeStylePropertyAccessor> accessorMap) {
+  protected void addAdditionalAccessors(@NotNull Map<String, CodeStylePropertyAccessor<?>> accessorMap) {
     accessorMap.put(VisualGuidesAccessor.VISUAL_GUIDES_PROPERTY_NAME, new VisualGuidesAccessor(getRootSettings(), myLanguage));
     if (mySettingsProvider != null) {
       for (CustomCodeStyleSettings customSettings :  myCustomSettings) {
-        for (CodeStylePropertyAccessor accessor : mySettingsProvider.getAdditionalAccessors(customSettings)) {
+        for (CodeStylePropertyAccessor<?> accessor : mySettingsProvider.getAdditionalAccessors(customSettings)) {
           accessorMap.put(accessor.getPropertyName(), accessor);
         }
       }
@@ -60,7 +61,7 @@ public final class LanguageCodeStylePropertyMapper extends AbstractCodeStyleProp
   @NotNull
   @Override
   protected List<CodeStyleObjectDescriptor> getSupportedFields() {
-    List<CodeStyleObjectDescriptor> fieldsDescriptors = ContainerUtil.newArrayList();
+    List<CodeStyleObjectDescriptor> fieldsDescriptors = new ArrayList<>();
     IndentOptions indentOptions = getRootSettings().getCommonSettings(myLanguage).getIndentOptions();
     if (indentOptions != null) {
       fieldsDescriptors.add(new CodeStyleObjectDescriptor(indentOptions, getSupportedIndentOptions()));
@@ -90,11 +91,11 @@ public final class LanguageCodeStylePropertyMapper extends AbstractCodeStyleProp
     return customSettingsList;
   }
 
-  private void addCustomSettings(@NotNull List<CustomCodeStyleSettings> list,
+  private void addCustomSettings(@NotNull List<? super CustomCodeStyleSettings> list,
                                  @NotNull CodeStyleSettings rootSettings,
                                  @NotNull List<? extends CodeStyleSettingsProvider> providerList) {
     for (CodeStyleSettingsProvider provider : providerList) {
-      if (provider.getLanguage() == myLanguage) {
+      if (provider.getLanguage() == myLanguage && isEnabled(provider)) {
         CustomCodeStyleSettings customSettingsTemplate = provider.createCustomSettings(rootSettings);
         if (customSettingsTemplate != null) {
           CustomCodeStyleSettings customSettings = rootSettings.getCustomSettings(customSettingsTemplate.getClass());
@@ -104,19 +105,28 @@ public final class LanguageCodeStylePropertyMapper extends AbstractCodeStyleProp
     }
   }
 
+  private static boolean isEnabled(@NotNull CodeStyleSettingsProvider provider) {
+    // Enable only providers defining a main language configurable in unit test mode, skip any secondary contributors
+    // to avoid test flickering on different class paths.
+    return !ApplicationManager.getApplication().isUnitTestMode() || provider.hasSettingsPage();
+  }
+
   private Set<String> getSupportedIndentOptions() {
     LanguageCodeStyleSettingsProvider provider = LanguageCodeStyleSettingsProvider.forLanguage(myLanguage);
     if (provider == null) return Collections.emptySet();
-    Set<String> indentOptions = ContainerUtil.newHashSet();
-    IndentOptionsEditor editor = provider.getIndentOptionsEditor();
-    if (editor != null) {
-      indentOptions.add("TAB_SIZE");
-      indentOptions.add("USE_TAB_CHARACTER");
-      indentOptions.add("INDENT_SIZE");
-      if (editor instanceof SmartIndentOptionsEditor) {
-        indentOptions.add("CONTINUATION_INDENT_SIZE");
-        indentOptions.add("SMART_TABS");
-        indentOptions.add("KEEP_INDENTS_ON_EMPTY_LINES");
+    Set<String> indentOptions =
+      new HashSet<>(provider.getSupportedFields(LanguageCodeStyleSettingsProvider.SettingsType.INDENT_SETTINGS));
+    if (indentOptions.isEmpty()) {
+      IndentOptionsEditor editor = provider.getIndentOptionsEditor();
+      if (editor != null) {
+        indentOptions.add("TAB_SIZE");
+        indentOptions.add("USE_TAB_CHARACTER");
+        indentOptions.add("INDENT_SIZE");
+        if (editor instanceof SmartIndentOptionsEditor) {
+          indentOptions.add("CONTINUATION_INDENT_SIZE");
+          indentOptions.add("SMART_TABS");
+          indentOptions.add("KEEP_INDENTS_ON_EMPTY_LINES");
+        }
       }
     }
     return indentOptions;
@@ -130,6 +140,6 @@ public final class LanguageCodeStylePropertyMapper extends AbstractCodeStyleProp
   @Override
   public String getPropertyDescription(@NotNull String externalName) {
     String key = "codestyle.property.description." + externalName;
-    return OptionsBundle.getBundle().containsKey(key) ? OptionsBundle.message(key) : null;
+    return OptionsBundle.INSTANCE.containsKey(key) ? OptionsBundle.message(key) : null;
   }
 }

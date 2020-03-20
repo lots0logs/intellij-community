@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.typeMigration.inspections;
 
 import com.intellij.codeInsight.intention.impl.AddOnDemandStaticImportAction;
@@ -15,9 +15,9 @@ import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiTypesUtil;
 import com.intellij.refactoring.typeMigration.TypeConversionDescriptor;
+import com.intellij.refactoring.typeMigration.TypeMigrationBundle;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
-import java.util.HashMap;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -25,6 +25,8 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -49,13 +51,15 @@ public class MigrateAssertToMatcherAssertInspection extends AbstractBaseJavaLoca
 
   private static final String CORE_MATCHERS_CLASS_NAME = "org.hamcrest.CoreMatchers";
   private static final String MATCHERS_CLASS_NAME = "org.hamcrest.Matchers";
+  private static final String ORDERING_COMPARISON_NAME = "org.hamcrest.number.OrderingComparison";
 
   public boolean myStaticallyImportMatchers = true;
 
   @Nullable
   @Override
   public JComponent createOptionsPanel() {
-    return new SingleCheckboxOptionsPanel("Statically import matcher's methods", this, "myStaticallyImportMatchers");
+    return new SingleCheckboxOptionsPanel(TypeMigrationBundle.message("checkbox.statically.import.matcher.methods"), this,
+                                          "myStaticallyImportMatchers");
   }
 
   @NotNull
@@ -83,16 +87,23 @@ public class MigrateAssertToMatcherAssertInspection extends AbstractBaseJavaLoca
           return;
         }
 
+        if (isBooleanAssert(assertMethod.getName())) {
+          PsiExpression[] args = expression.getArgumentList().getExpressions();
+          if (args[args.length - 1] instanceof PsiBinaryExpression &&
+              javaPsiFacade.findClass(ORDERING_COMPARISON_NAME, expression.getResolveScope()) == null) {
+            return;
+          }
+        }
+
         holder
           .registerProblem(expression.getMethodExpression(),
-                           "Assert expression <code>#ref</code> can be replaced with 'assertThat' call #loc",
+                           TypeMigrationBundle.message("inspection.migrate.assert.to.matcher.description", "assertThat"),
                            new MyQuickFix(matchersClass != null ? MATCHERS_CLASS_NAME : CORE_MATCHERS_CLASS_NAME));
       }
     };
   }
 
   public class MyQuickFix implements LocalQuickFix {
-    private static final String ORDERING_COMPARISON_NAME = "org.hamcrest.number.OrderingComparison";
     private final String myMatchersClassName;
 
     public MyQuickFix(String name) {myMatchersClassName = name;}
@@ -101,7 +112,7 @@ public class MigrateAssertToMatcherAssertInspection extends AbstractBaseJavaLoca
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Replace with '" + StringUtil.getShortName(myMatchersClassName) + ".assertThat'";
+      return CommonQuickFixBundle.message("fix.replace.with.x", StringUtil.getShortName(myMatchersClassName) + ".assertThat");
     }
 
     @Override
@@ -115,7 +126,7 @@ public class MigrateAssertToMatcherAssertInspection extends AbstractBaseJavaLoca
       }
       final String methodName = method.getName();
       Pair<String, String> templatePair = null;
-      if ("assertFalse".equals(methodName) || "assertTrue".equals(methodName)) {
+      if (isBooleanAssert(methodName)) {
         final PsiExpression[] expressions = methodCall.getArgumentList().getExpressions();
         final PsiExpression conditionExpression = expressions[expressions.length - 1];
         final boolean negate = methodName.contains("False");
@@ -188,7 +199,7 @@ public class MigrateAssertToMatcherAssertInspection extends AbstractBaseJavaLoca
       final String fromTemplate = "$left$ " + sign.getText() + "  $right$";
       if (JavaTokenType.EQEQ.equals(tokenType) || JavaTokenType.NE.equals(tokenType)) {
         boolean isEqEqForPrimitives = true;
-        for (PsiExpression operand : ContainerUtil.list(expression.getLOperand(), expression.getROperand())) {
+        for (PsiExpression operand : Arrays.asList(expression.getLOperand(), expression.getROperand())) {
           if (!(operand.getType() instanceof PsiPrimitiveType)) {
             isEqEqForPrimitives = false;
             break;
@@ -221,6 +232,10 @@ public class MigrateAssertToMatcherAssertInspection extends AbstractBaseJavaLoca
       replaceTemplate = ORDERING_COMPARISON_NAME + "." + replaceTemplate;
       return Pair.create(fromTemplate, "$left$, " + replaceTemplate);
     }
+  }
+
+  private static boolean isBooleanAssert(String methodName) {
+    return "assertFalse".equals(methodName) || "assertTrue".equals(methodName);
   }
 
   private static IElementType negate(IElementType tokenType) {

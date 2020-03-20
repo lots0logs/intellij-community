@@ -30,62 +30,6 @@ class CaretModelWindow implements CaretModel {
     myEditorWindow = editorWindow;
   }
 
-  @Override
-  public void moveCaretRelatively(final int columnShift,
-                                  final int lineShift,
-                                  final boolean withSelection,
-                                  final boolean blockSelection,
-                                  final boolean scrollToCaret) {
-    myDelegate.moveCaretRelatively(columnShift, lineShift, withSelection, blockSelection, scrollToCaret);
-  }
-
-  @Override
-  public void moveToLogicalPosition(@NotNull final LogicalPosition pos) {
-    LogicalPosition hostPos = myEditorWindow.injectedToHost(pos);
-    myDelegate.moveToLogicalPosition(hostPos);
-  }
-
-  @Override
-  public void moveToVisualPosition(@NotNull final VisualPosition pos) {
-    LogicalPosition hostPos = myEditorWindow.injectedToHost(myEditorWindow.visualToLogicalPosition(pos));
-    myDelegate.moveToLogicalPosition(hostPos);
-  }
-
-  @Override
-  public void moveToOffset(int offset) {
-    moveToOffset(offset, false);
-  }
-
-  @Override
-  public void moveToOffset(final int offset, boolean locateBeforeSoftWrap) {
-    int hostOffset = myEditorWindow.getDocument().injectedToHost(offset);
-    myDelegate.moveToOffset(hostOffset, locateBeforeSoftWrap);
-  }
-
-  @Override
-  @NotNull
-  public LogicalPosition getLogicalPosition() {
-    LogicalPosition hostPos = myDelegate.getLogicalPosition();
-    return myEditorWindow.hostToInjected(hostPos);
-  }
-
-  @Override
-  @NotNull
-  public VisualPosition getVisualPosition() {
-    LogicalPosition logicalPosition = getLogicalPosition();
-    return myEditorWindow.logicalToVisualPosition(logicalPosition);
-  }
-
-  @Override
-  public int getOffset() {
-    return myEditorWindow.getDocument().hostToInjected(myDelegate.getOffset());
-  }
-
-  @Override
-  public boolean isUpToDate() {
-    return myDelegate.isUpToDate();
-  }
-
   private final ListenerWrapperMap<CaretListener> myCaretListeners = new ListenerWrapperMap<>();
   @Override
   public void addCaretListener(@NotNull final CaretListener listener) {
@@ -118,16 +62,6 @@ class CaretModelWindow implements CaretModel {
       myDelegate.removeCaretListener(wrapper);
     }
     myCaretListeners.clear();
-  }
-
-  @Override
-  public int getVisualLineStart() {
-    return myEditorWindow.getDocument().hostToInjected(myDelegate.getVisualLineStart());
-  }
-
-  @Override
-  public int getVisualLineEnd() {
-    return myEditorWindow.getDocument().hostToInjected(myDelegate.getVisualLineEnd());
   }
 
   @Override
@@ -178,15 +112,16 @@ class CaretModelWindow implements CaretModel {
 
   @Nullable
   @Override
-  public Caret addCaret(@NotNull VisualPosition pos) {
-    return addCaret(pos, true);
-  }
-
-  @Nullable
-  @Override
   public Caret addCaret(@NotNull VisualPosition pos, boolean makePrimary) {
     LogicalPosition hostPos = myEditorWindow.injectedToHost(myEditorWindow.visualToLogicalPosition(pos));
     Caret caret = myDelegate.addCaret(myHostEditor.logicalToVisualPosition(hostPos));
+    return createInjectedCaret(caret);
+  }
+
+  @Override
+  public @Nullable Caret addCaret(@NotNull LogicalPosition pos, boolean makePrimary) {
+    LogicalPosition hostPos = myEditorWindow.injectedToHost(pos);
+    Caret caret = myDelegate.addCaret(hostPos, makePrimary);
     return createInjectedCaret(caret);
   }
 
@@ -204,18 +139,18 @@ class CaretModelWindow implements CaretModel {
   }
 
   @Override
-  public void setCaretsAndSelections(@NotNull List<CaretState> caretStates) {
+  public void setCaretsAndSelections(@NotNull List<? extends CaretState> caretStates) {
     List<CaretState> convertedStates = convertCaretStates(caretStates);
     myDelegate.setCaretsAndSelections(convertedStates);
   }
 
   @Override
-  public void setCaretsAndSelections(@NotNull List<CaretState> caretStates, boolean updateSystemSelection) {
+  public void setCaretsAndSelections(@NotNull List<? extends CaretState> caretStates, boolean updateSystemSelection) {
     List<CaretState> convertedStates = convertCaretStates(caretStates);
     myDelegate.setCaretsAndSelections(convertedStates, updateSystemSelection);
   }
 
-  private List<CaretState> convertCaretStates(List<CaretState> caretStates) {
+  private List<CaretState> convertCaretStates(List<? extends CaretState> caretStates) {
     List<CaretState> convertedStates = new ArrayList<>(caretStates.size());
     for (CaretState state : caretStates) {
       convertedStates.add(new CaretState(injectedToHost(state.getCaretPosition()),

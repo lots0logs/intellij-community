@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.log;
 
 import com.intellij.diff.DiffContentFactoryEx;
@@ -40,7 +26,6 @@ import com.intellij.openapi.vcs.history.VcsDiffUtil;
 import com.intellij.openapi.vcs.ui.VcsBalloonProblemNotifier;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcs.log.Hash;
 import com.intellij.vcs.log.VcsLogDiffHandler;
 import com.intellij.vcsUtil.VcsFileUtil;
@@ -49,6 +34,7 @@ import git4idea.GitContentRevision;
 import git4idea.GitRevisionNumber;
 import git4idea.changes.GitChangeUtils;
 import git4idea.diff.GitSubmoduleContentRevision;
+import git4idea.i18n.GitBundle;
 import git4idea.repo.GitSubmodule;
 import git4idea.util.GitFileUtils;
 import org.jetbrains.annotations.Nls;
@@ -56,6 +42,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -84,19 +71,16 @@ public class GitLogDiffHandler implements VcsLogDiffHandler {
       showDiffForPaths(root, Collections.singleton(chooseNotNull(leftPath, rightPath)), leftHash, rightHash);
     }
     else {
-      loadDiffAndShow(new ThrowableComputable<DiffRequest, VcsException>() {
-                        @Override
-                        public DiffRequest compute() throws VcsException {
-                          DiffContent leftDiffContent = createDiffContent(root, leftPath, leftHash);
-                          DiffContent rightDiffContent = createDiffContent(root, rightPath, rightHash);
+      loadDiffAndShow((ThrowableComputable<DiffRequest, VcsException>)() -> {
+        DiffContent leftDiffContent = createDiffContent(root, leftPath, leftHash);
+        DiffContent rightDiffContent = createDiffContent(root, rightPath, rightHash);
 
-                          return new SimpleDiffRequest(getTitle(leftPath, rightPath, DIFF_TITLE_RENAME_SEPARATOR),
-                                                       leftDiffContent, rightDiffContent,
-                                                       leftHash.asString(), rightHash.asString());
-                        }
-                      },
+        return new SimpleDiffRequest(getTitle(leftPath, rightPath, DIFF_TITLE_RENAME_SEPARATOR),
+                                     leftDiffContent, rightDiffContent,
+                                     leftHash.asString(), rightHash.asString());
+      },
                       request -> DiffManager.getInstance().showDiff(myProject, request),
-                      "Calculating Diff for " + chooseNotNull(rightPath, leftPath).getName());
+                      GitBundle.message("git.log.diff.handler.process", chooseNotNull(rightPath, leftPath).getName()));
     }
   }
 
@@ -107,17 +91,16 @@ public class GitLogDiffHandler implements VcsLogDiffHandler {
       showDiffForPaths(root, Collections.singleton(localPath), revisionHash, null);
     }
     else {
-      loadDiffAndShow(new ThrowableComputable<DiffRequest, VcsException>() {
-                        @Override
-                        public DiffRequest compute() throws VcsException {
-                          DiffContent leftDiffContent = createDiffContent(root, revisionPath, revisionHash);
-                          DiffContent rightDiffContent = createCurrentDiffContent(localPath);
-                          return new SimpleDiffRequest(getTitle(revisionPath, localPath, DIFF_TITLE_RENAME_SEPARATOR),
-                                                       leftDiffContent, rightDiffContent,
-                                                       revisionHash.asString(), "(Local)");
-                        }
-                      },
-                      request -> DiffManager.getInstance().showDiff(myProject, request), "Calculating Diff for " + localPath.getName());
+      loadDiffAndShow((ThrowableComputable<DiffRequest, VcsException>)() -> {
+        DiffContent leftDiffContent = createDiffContent(root, revisionPath, revisionHash);
+        DiffContent rightDiffContent = createCurrentDiffContent(localPath);
+        return new SimpleDiffRequest(getTitle(revisionPath, localPath, DIFF_TITLE_RENAME_SEPARATOR),
+                                     leftDiffContent, rightDiffContent,
+                                     revisionHash.asString(),
+                                     "(" + GitBundle.message("git.log.diff.handler.local.version.content.title") + ")");
+      },
+                      request -> DiffManager.getInstance().showDiff(myProject, request),
+                      GitBundle.message("git.log.diff.handler.process", localPath.getName()));
     }
   }
 
@@ -129,20 +112,20 @@ public class GitLogDiffHandler implements VcsLogDiffHandler {
     Collection<FilePath> filePaths = affectedPaths != null ? affectedPaths : Collections.singleton(VcsUtil.getFilePath(root));
     loadDiffAndShow(() -> getDiff(root, filePaths, leftRevision, rightRevision),
                     (diff) -> {
-                      String dialogTitle = "Changes between " +
-                                           leftRevision.toShortString() +
-                                           " and " +
-                                           (rightRevision == null ? "local version" : rightRevision.toShortString()) +
-                                           " in " +
-                                           getTitleForPaths(root, affectedPaths);
-                      VcsDiffUtil.showChangesDialog(myProject, dialogTitle, ContainerUtil.newArrayList(diff));
+                      String rightRevisionTitle = rightRevision == null
+                                                  ? GitBundle.message("git.log.diff.handler.local.version.name")
+                                                  : rightRevision.toShortString();
+                      String dialogTitle = GitBundle.message("git.log.diff.handler.paths.diff.title", leftRevision.toShortString(),
+                                                             rightRevisionTitle,
+                                                             getTitleForPaths(root, affectedPaths));
+                      VcsDiffUtil.showChangesDialog(myProject, dialogTitle, new ArrayList<>(diff));
                     },
-                    "Calculating Diff for " +
-                    StringUtil.shortenTextWithEllipsis(StringUtil.join(filePaths, FilePath::getName, ", "), 100, 0));
+                    GitBundle.message("git.log.diff.handler.process",
+                                      StringUtil.shortenTextWithEllipsis(StringUtil.join(filePaths, FilePath::getName, ", "), 100, 0)));
   }
 
   @NotNull
-  private static String getTitleForPaths(@NotNull VirtualFile root, @Nullable Collection<FilePath> filePaths) {
+  private static String getTitleForPaths(@NotNull VirtualFile root, @Nullable Collection<? extends FilePath> filePaths) {
     if (filePaths == null) return getContentTitle(VcsUtil.getFilePath(root));
     String joinedPaths = StringUtil.join(filePaths, path -> VcsFileUtil.relativePath(root, path), ", ");
     return StringUtil.shortenTextWithEllipsis(joinedPaths, 100, 0);
@@ -165,7 +148,7 @@ public class GitLogDiffHandler implements VcsLogDiffHandler {
 
   @NotNull
   private Collection<Change> getDiff(@NotNull VirtualFile root,
-                                     @NotNull Collection<FilePath> filePaths,
+                                     @NotNull Collection<? extends FilePath> filePaths,
                                      @NotNull Hash leftRevision,
                                      @Nullable Hash rightRevision) throws VcsException {
     if (rightRevision == null) {
@@ -174,8 +157,8 @@ public class GitLogDiffHandler implements VcsLogDiffHandler {
     return GitChangeUtils.getDiff(myProject, root, leftRevision.asString(), rightRevision.asString(), filePaths);
   }
 
-  private <T> void loadDiffAndShow(@NotNull ThrowableComputable<T, VcsException> load,
-                                   @NotNull Consumer<T> show,
+  private <T> void loadDiffAndShow(@NotNull ThrowableComputable<? extends T, VcsException> load,
+                                   @NotNull Consumer<? super T> show,
                                    @NotNull @Nls(capitalization = Nls.Capitalization.Title) String title) {
     if (ApplicationManager.getApplication().isDispatchThread()) {
       ProgressManager.getInstance().run(new Task.Backgroundable(myProject, title + "...", false) {
@@ -200,8 +183,9 @@ public class GitLogDiffHandler implements VcsLogDiffHandler {
 
         @Override
         public void onThrowable(@NotNull Throwable error) {
-          VcsBalloonProblemNotifier.showOverVersionControlView(myProject, title + " failed\n" +
-                                                                          error.getMessage(), MessageType.ERROR);
+          VcsBalloonProblemNotifier.showOverVersionControlView(myProject,
+                                                               GitBundle.message("git.log.diff.handler.failed.message", title) +
+                                                               "\n" + error.getMessage(), MessageType.ERROR);
         }
       });
     }
@@ -211,8 +195,9 @@ public class GitLogDiffHandler implements VcsLogDiffHandler {
         ApplicationManager.getApplication().invokeLater(() -> show.consume(result));
       }
       catch (VcsException e) {
-        VcsBalloonProblemNotifier.showOverVersionControlView(myProject, title + " failed\n" +
-                                                                        e.getMessage(), MessageType.ERROR);
+        VcsBalloonProblemNotifier.showOverVersionControlView(myProject,
+                                                             GitBundle.message("git.log.diff.handler.failed.message", title) +
+                                                             "\n" + e.getMessage(), MessageType.ERROR);
       }
     }
   }

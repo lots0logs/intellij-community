@@ -32,8 +32,12 @@ import java.util.Map;
 
 public class BaseFilterLexerUtil {
   private static final Key<ScanContent> scanContentKey = Key.create("id.todo.scan.content");
+  private static final ScanContent EMPTY = new ScanContent(Collections.emptyMap(), Collections.emptyMap());
 
   public static ScanContent scanContent(FileContent content, IdAndToDoScannerBasedOnFilterLexer indexer) {
+    IndexPattern[] patterns = IndexPatternUtil.getIndexPatterns();
+    if (patterns.length <= 0) return EMPTY;
+
     ScanContent data = content.getUserData(scanContentKey);
     if (data != null) {
       content.putUserData(scanContentKey, null);
@@ -43,7 +47,7 @@ public class BaseFilterLexerUtil {
     final boolean needTodo = TodoIndexers.needsTodoIndex(content.getFile());
     final boolean needIdIndex = IdTableBuilding.getFileTypeIndexer(content.getFileType()) instanceof LexingIdIndexer;
 
-    final IdDataConsumer consumer = needIdIndex? new IdDataConsumer():null;
+    final IdDataConsumer consumer = needIdIndex ? new IdDataConsumer() : null;
     final OccurrenceConsumer todoOccurrenceConsumer = new OccurrenceConsumer(consumer, needTodo);
     final Lexer filterLexer = indexer.createLexer(todoOccurrenceConsumer);
     filterLexer.start(content.getContentAsText());
@@ -52,7 +56,7 @@ public class BaseFilterLexerUtil {
 
     Map<TodoIndexEntry,Integer> todoMap = null;
     if (needTodo) {
-      for (IndexPattern indexPattern : IndexPatternUtil.getIndexPatterns()) {
+      for (IndexPattern indexPattern : patterns) {
           final int count = todoOccurrenceConsumer.getOccurrenceCount(indexPattern);
           if (count > 0) {
             if (todoMap == null) todoMap = new THashMap<>();

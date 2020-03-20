@@ -14,13 +14,12 @@ import com.intellij.util.containers.ContainerUtil;
 
 import java.awt.*;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Map;
 
 /**
  * @author Dmitry Batkovich
  */
-public abstract class InspectionTreeTailRenderer {
+public abstract class InspectionTreeTailRenderer<E extends Exception> {
   private final static int MAX_LEVEL_TYPES = 5;
 
   private final static JBColor TREE_RED = new JBColor(new Color(184, 66, 55), new Color(204, 102, 102));
@@ -35,7 +34,7 @@ public abstract class InspectionTreeTailRenderer {
     myContext = context;
   }
 
-  public void appendTailText(InspectionTreeNode node) {
+  public void appendTailText(InspectionTreeNode node) throws E {
     final String customizedTailText = node.getTailText();
     if (customizedTailText != null) {
       if (!customizedTailText.isEmpty()) {
@@ -62,16 +61,16 @@ public abstract class InspectionTreeTailRenderer {
     }
   }
 
-  protected abstract void appendText(String text, SimpleTextAttributes attributes);
+  protected abstract void appendText(String text, SimpleTextAttributes attributes) throws E;
 
-  protected abstract void appendText(String text);
+  protected abstract void appendText(String text) throws E;
 
   private String getPresentableName(HighlightDisplayLevel level, boolean pluralize) {
     final HighlightSeverity severity = level.getSeverity();
     if (pluralize) {
       String name = myPluralizedSeverityNames.get(severity);
       if (name == null) {
-        final String lowerCaseName = level.getName().toLowerCase(Locale.ENGLISH);
+        final String lowerCaseName = StringUtil.toLowerCase(level.getName());
         name = SeverityRegistrar.isDefaultSeverity(severity) ? StringUtil.pluralize(lowerCaseName) : lowerCaseName;
         myPluralizedSeverityNames.put(severity, name);
       }
@@ -80,7 +79,7 @@ public abstract class InspectionTreeTailRenderer {
     else {
       String name = myUnpluralizedSeverityNames.get(severity);
       if (name == null) {
-        name = level.getName().toLowerCase(Locale.ENGLISH);
+        name = StringUtil.toLowerCase(level.getName());
         myUnpluralizedSeverityNames.put(severity, name);
       }
       return name;

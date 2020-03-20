@@ -26,14 +26,14 @@ import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.anonymousToInner.AnonymousToInnerHandler;
 import org.jetbrains.annotations.NotNull;
 
-public class AnonymousToInnerAction extends BaseRefactoringAction {
+public class AnonymousToInnerAction extends BaseJavaRefactoringAction {
   @Override
   public boolean isAvailableInEditorOnly() {
     return true;
   }
 
   @Override
-  public boolean isEnabledOnElements(@NotNull PsiElement[] elements) {
+  public boolean isEnabledOnElements(PsiElement @NotNull [] elements) {
     return false;
   }
 

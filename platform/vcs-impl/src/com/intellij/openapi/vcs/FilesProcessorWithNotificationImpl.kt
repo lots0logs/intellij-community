@@ -12,11 +12,6 @@ import com.intellij.openapi.vcs.changes.ui.SelectFilesDialog
 import com.intellij.openapi.vfs.VirtualFile
 
 abstract class FilesProcessorWithNotificationImpl(protected val project: Project, parentDisposable: Disposable) : FilesProcessor {
-
-  private val vcsNotifier = VcsNotifier.getInstance(project)
-
-  protected val projectProperties = PropertiesComponent.getInstance(project)
-
   private val files = mutableSetOf<VirtualFile>()
 
   private val NOTIFICATION_LOCK = Object()
@@ -25,7 +20,7 @@ abstract class FilesProcessorWithNotificationImpl(protected val project: Project
 
   abstract val askedBeforeProperty: String
 
-  abstract val doForCurrentProjectProperty: String
+  abstract val doForCurrentProjectProperty: String?
 
   abstract val showActionText: String
   abstract val forCurrentProjectActionText: String
@@ -40,6 +35,14 @@ abstract class FilesProcessorWithNotificationImpl(protected val project: Project
   abstract fun doFilterFiles(files: Collection<VirtualFile>): Collection<VirtualFile>
 
   abstract fun rememberForAllProjects()
+
+  protected open val viewFilesDialogTitle: String? = null
+  protected open val viewFilesDialogOkActionName: String = CommonBundle.getAddButtonText()
+  protected open val viewFilesDialogCancelActionName: String = CommonBundle.getCancelButtonText()
+
+  protected open fun rememberForCurrentProject() {
+    setForCurrentProject(true)
+  }
 
   init {
     Disposer.register(parentDisposable, this)
@@ -73,13 +76,13 @@ abstract class FilesProcessorWithNotificationImpl(protected val project: Project
           }
           add(muteAction())
         }
-        notification = vcsNotifier.notifyMinorInfo(true, notificationTitle(), notificationMessage(), *notificationActions.toTypedArray())
+        notification = VcsNotifier.getInstance(project).notifyMinorInfo(true, notificationTitle(), notificationMessage(), *notificationActions.toTypedArray())
       }
     }
   }
 
   @Synchronized
-  private fun removeFiles(filesToRemove: Collection<VirtualFile>) {
+  protected fun removeFiles(filesToRemove: Collection<VirtualFile>) {
     files.removeAll(filesToRemove)
   }
 
@@ -92,7 +95,7 @@ abstract class FilesProcessorWithNotificationImpl(protected val project: Project
   }
 
   @Synchronized
-  private fun acquireValidFiles(): List<VirtualFile> {
+  protected fun acquireValidFiles(): List<VirtualFile> {
     files.removeAll { !it.isValid }
     return files.toList()
   }
@@ -110,7 +113,8 @@ abstract class FilesProcessorWithNotificationImpl(protected val project: Project
     val allFiles = acquireValidFiles()
     if (allFiles.isNotEmpty()) {
       with(SelectFilesDialog.init(project, allFiles, null, null, true, true,
-                                  CommonBundle.getAddButtonText(), CommonBundle.getCancelButtonText())) {
+                                  viewFilesDialogOkActionName, viewFilesDialogCancelActionName)) {
+        title = viewFilesDialogTitle
         selectedFiles = allFiles
         if (showAndGet()) {
           val userSelectedFiles = selectedFiles
@@ -126,38 +130,50 @@ abstract class FilesProcessorWithNotificationImpl(protected val project: Project
 
   private fun addForCurrentProjectAction() = NotificationAction.create(forCurrentProjectActionText) { _, _ ->
     doActionOnChosenFiles(acquireValidFiles())
-    projectProperties.setValue(doForCurrentProjectProperty, true)
-    projectProperties.setValue(askedBeforeProperty, true)
+    rememberForCurrentProject()
+    PropertiesComponent.getInstance(project).setValue(askedBeforeProperty, true)
     expireNotification()
     clearFiles()
   }
 
   private fun forAllProjectsAction() = NotificationAction.create(forAllProjectsActionText!!) { _, _ ->
     doActionOnChosenFiles(acquireValidFiles())
-    projectProperties.setValue(doForCurrentProjectProperty, true)
-    projectProperties.setValue(askedBeforeProperty, true)
+    rememberForCurrentProject()
+    PropertiesComponent.getInstance(project).setValue(askedBeforeProperty, true)
     rememberForAllProjects()
     expireNotification()
     clearFiles()
   }
 
   private fun muteAction() = NotificationAction.create(muteActionText) { _, notification ->
-    projectProperties.setValue(doForCurrentProjectProperty, false)
-    projectProperties.setValue(askedBeforeProperty, true)
+    setForCurrentProject(false)
+    PropertiesComponent.getInstance(project).setValue(askedBeforeProperty, true)
     notification.expire()
   }
 
-  private fun notificationNotPresent() =
+  protected fun notificationNotPresent() =
     synchronized(NOTIFICATION_LOCK) {
       notification?.isExpired ?: true
     }
 
-  private fun expireNotification() =
+  protected fun expireNotification() =
     synchronized(NOTIFICATION_LOCK) {
       notification?.expire()
     }
 
-  private fun notAskedBefore() = !projectProperties.getBoolean(askedBeforeProperty, false)
+  private fun setForCurrentProject(value: Boolean) {
+    doForCurrentProjectProperty?.let {
+      PropertiesComponent.getInstance(project).setValue(it, value)
+    }
+  }
 
-  private fun needDoForCurrentProject() = projectProperties.getBoolean(doForCurrentProjectProperty, false)
+  private fun getForCurrentProject(): Boolean {
+    return doForCurrentProjectProperty?.let { PropertiesComponent.getInstance(project).getBoolean(it, false) } ?: false
+  }
+
+  private fun notAskedBefore() = !wasAskedBefore()
+
+  protected fun wasAskedBefore() = PropertiesComponent.getInstance(project).getBoolean(askedBeforeProperty, false)
+
+  protected open fun needDoForCurrentProject() = getForCurrentProject()
 }

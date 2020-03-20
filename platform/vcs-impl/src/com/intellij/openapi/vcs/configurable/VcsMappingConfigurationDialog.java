@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.vcs.configurable;
 
@@ -11,17 +11,21 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.*;
 import com.intellij.openapi.vcs.AbstractVcs;
 import com.intellij.openapi.vcs.ProjectLevelVcsManager;
+import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vcs.VcsDirectoryMapping;
 import com.intellij.openapi.vcs.impl.DefaultVcsRootPolicy;
 import com.intellij.openapi.vcs.impl.VcsDescriptor;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.components.JBLabel;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.google.common.collect.Maps.uniqueIndex;
 import static com.intellij.openapi.fileChooser.FileChooserDescriptorFactory.createSingleFolderDescriptor;
@@ -29,7 +33,6 @@ import static com.intellij.openapi.util.io.FileUtil.toSystemDependentName;
 import static com.intellij.openapi.util.io.FileUtil.toSystemIndependentName;
 import static com.intellij.openapi.vcs.configurable.VcsDirectoryConfigurationPanel.buildVcsWrappersModel;
 import static com.intellij.util.ObjectUtils.notNull;
-import static com.intellij.util.containers.ContainerUtil.list;
 import static com.intellij.util.containers.UtilKt.getIfSingle;
 import static com.intellij.xml.util.XmlStringUtil.wrapInHtml;
 
@@ -52,15 +55,26 @@ public class VcsMappingConfigurationDialog extends DialogWrapper {
     super(project, false);
     myProject = project;
     myVcsManager = ProjectLevelVcsManager.getInstance(myProject);
-    myVcses = uniqueIndex(list(myVcsManager.getAllVcss()), VcsDescriptor::getName);
+    myVcses = uniqueIndex(Arrays.asList(myVcsManager.getAllVcss()), VcsDescriptor::getName);
     myVCSComboBox.setModel(buildVcsWrappersModel(project));
     myDirectoryTextField.addActionListener(
-      new MyBrowseFolderListener("Select Directory", "Select directory to map to a VCS", myDirectoryTextField, project,
+      new MyBrowseFolderListener(VcsBundle.getString("settings.vcs.mapping.browser.select.directory.title"),
+                                 VcsBundle.getString("settings.vcs.mapping.browser.select.directory.description"),
+                                 myDirectoryTextField,
+                                 project,
                                  createSingleFolderDescriptor()));
-    myMappingCopy = new VcsDirectoryMapping("", "");
+    setMapping(suggestDefaultMapping(project));
+    initProjectMessage();
     setTitle(title);
     init();
     myVCSComboBox.addActionListener(e -> updateVcsConfigurable());
+  }
+
+  @NotNull
+  private static VcsDirectoryMapping suggestDefaultMapping(@NotNull Project project) {
+    String basePath = project.getBasePath();
+    if (basePath == null) return VcsDirectoryMapping.createDefault("");
+    return new VcsDirectoryMapping(basePath, "");
   }
 
   @Override
@@ -77,8 +91,6 @@ public class VcsMappingConfigurationDialog extends DialogWrapper {
     myVCSComboBox.setSelectedItem(myVcses.get(mapping.getVcs()));
     updateVcsConfigurable();
     myDirectoryTextField.setEnabled(myDirectoryRadioButton.isSelected());
-
-    initProjectMessage();
   }
 
   @NotNull
@@ -102,7 +114,7 @@ public class VcsMappingConfigurationDialog extends DialogWrapper {
         UnnamedConfigurable configurable = vcs.getRootConfigurable(myMappingCopy);
         if (configurable != null) {
           myVcsConfigurable = configurable;
-          myVcsConfigurableComponent = notNull(myVcsConfigurable.createComponent());
+          myVcsConfigurableComponent = Objects.requireNonNull(myVcsConfigurable.createComponent());
           myVcsConfigurablePlaceholder.add(myVcsConfigurableComponent, BorderLayout.CENTER);
         }
       }
@@ -117,7 +129,7 @@ public class VcsMappingConfigurationDialog extends DialogWrapper {
         myVcsConfigurable.apply();
       }
       catch(ConfigurationException ex) {
-        Messages.showErrorDialog(myPanel, "Invalid VCS options: " + ex.getMessage());
+        Messages.showErrorDialog(myPanel, VcsBundle.message("settings.vcs.mapping.invalid.vcs.options.error", ex.getMessage()));
       }
     }
     super.doOKAction();
@@ -135,8 +147,8 @@ public class VcsMappingConfigurationDialog extends DialogWrapper {
     myDirectoryRadioButton.setSelected(true);
   }
 
-  public void initProjectMessage() {
-    myProjectButtonComment.setText(wrapInHtml(DefaultVcsRootPolicy.getInstance(myProject).getProjectConfigurationMessage(myProject)));
+  private void initProjectMessage() {
+    myProjectButtonComment.setText(wrapInHtml(DefaultVcsRootPolicy.getInstance(myProject).getProjectConfigurationMessage()));
   }
 
   private class MyBrowseFolderListener extends ComponentWithBrowseButton.BrowseFolderActionListener<JTextField> {
@@ -168,7 +180,7 @@ public class VcsMappingConfigurationDialog extends DialogWrapper {
       super.onFileChosen(chosenFile);
       VcsDescriptor wrapper = (VcsDescriptor)myVCSComboBox.getSelectedItem();
       if (oldText.isEmpty() && (wrapper == null || wrapper.isNone())) {
-        new Task.Backgroundable(myProject, "Looking for VCS Administrative Area", false) {
+        new Task.Backgroundable(myProject, VcsBundle.message("settings.vcs.mapping.status.looking.for.vcs.administrative.area"), false) {
           private VcsDescriptor probableVcs = null;
 
           @Override

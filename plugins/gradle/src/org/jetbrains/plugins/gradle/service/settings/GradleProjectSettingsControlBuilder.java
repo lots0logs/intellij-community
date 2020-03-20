@@ -20,8 +20,11 @@ import com.intellij.openapi.externalSystem.service.settings.ExternalSystemSettin
 import com.intellij.openapi.externalSystem.util.PaintAwarePanel;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.settings.GradleProjectSettings;
+
+import javax.swing.*;
 
 /**
  * @author Vladislav.Soroka
@@ -41,19 +44,14 @@ public interface GradleProjectSettingsControlBuilder {
   GradleProjectSettings getInitialSettings();
 
   /**
-   * Add Gradle home components to the panel
-   */
-  GradleProjectSettingsControlBuilder addGradleHomeComponents(PaintAwarePanel content, int indentLevel);
-
-  /**
    * Add Gradle JDK component to the panel
    */
-  GradleProjectSettingsControlBuilder addGradleJdkComponents(PaintAwarePanel content, int indentLevel);
+  GradleProjectSettingsControlBuilder addGradleJdkComponents(JPanel content, int indentLevel);
 
   /**
    * Add Gradle distribution chooser component to the panel
    */
-  GradleProjectSettingsControlBuilder addGradleChooserComponents(PaintAwarePanel content, int indentLevel);
+  GradleProjectSettingsControlBuilder addGradleChooserComponents(JPanel content, int indentLevel);
 
   boolean validate(GradleProjectSettings settings) throws ConfigurationException;
 
@@ -78,8 +76,15 @@ public interface GradleProjectSettingsControlBuilder {
 
   void update(String linkedProjectPath, GradleProjectSettings settings, boolean isDefaultModuleCreation);
 
+  /**
+   * @deprecated see {@link ExternalSystemSettingsControlCustomizer} for details
+   */
   @Nullable
-  ExternalSystemSettingsControlCustomizer getExternalSystemSettingsControlCustomizer();
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
+  default ExternalSystemSettingsControlCustomizer getExternalSystemSettingsControlCustomizer() {
+    return new ExternalSystemSettingsControlCustomizer();
+  }
 
   void disposeUIResources();
 }

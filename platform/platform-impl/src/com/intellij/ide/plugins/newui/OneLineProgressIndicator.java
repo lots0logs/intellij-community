@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins.newui;
 
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -17,9 +17,19 @@ public class OneLineProgressIndicator extends InlineProgressIndicator {
   private Runnable myCancelRunnable;
 
   public OneLineProgressIndicator() {
-    super(true, task());
+    this(true);
+  }
 
-    myText.putClientProperty("NoFillPanelColorForDarcula", Boolean.TRUE);
+  public OneLineProgressIndicator(boolean withText) {
+    this(withText, true);
+  }
+
+  public OneLineProgressIndicator(boolean withText, boolean canBeCancelled) {
+    super(true, task(withText ? "Downloading..." : "", canBeCancelled));
+
+    if (!withText) {
+      myText.getParent().remove(myText);
+    }
     updateProgressNow();
     getComponent().setToolTipText(null);
   }
@@ -31,7 +41,9 @@ public class OneLineProgressIndicator extends InlineProgressIndicator {
   @Override
   protected void cancelRequest() {
     super.cancelRequest();
-    myCancelRunnable.run();
+    if (myCancelRunnable != null) {
+      myCancelRunnable.run();
+    }
   }
 
   @NotNull
@@ -45,11 +57,15 @@ public class OneLineProgressIndicator extends InlineProgressIndicator {
   }
 
   @NotNull
-  public static TaskInfo task() {
-    return new Task.Modal(null, "Downloading...", true) {
+  public static TaskInfo task(@NotNull String title) {
+    return task(title, true);
+  }
+
+  @NotNull
+  private static TaskInfo task(@NotNull String title, boolean canBeCancelled) {
+    return new Task.Modal(null, title, canBeCancelled) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
-        // TODO: Auto-generated method stub
       }
     };
   }

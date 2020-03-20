@@ -45,7 +45,7 @@ import java.util.List;
  */
 @Tag("FogBugz")
 public class FogBugzRepository extends BaseRepositoryImpl {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.tasks.fogbugz.FogBugzRepository");
+  private static final Logger LOG = Logger.getInstance(FogBugzRepository.class);
 
   private String myToken;
 
@@ -132,10 +132,9 @@ public class FogBugzRepository extends BaseRepositoryImpl {
         return null;
       }
 
-      @NotNull
       @Override
       @SuppressWarnings("unchecked")
-      public Comment[] getComments() {
+      public Comment @NotNull [] getComments() {
         List<Element> nodes;
         try {
           nodes = commentPath.selectNodes(element);

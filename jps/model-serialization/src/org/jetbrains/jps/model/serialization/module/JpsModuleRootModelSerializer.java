@@ -41,9 +41,6 @@ import java.util.List;
 
 import static com.intellij.openapi.util.JDOMUtil.getChildren;
 
-/**
- * @author nik
- */
 public class JpsModuleRootModelSerializer {
   private static final Logger LOG = Logger.getInstance(JpsModuleRootModelSerializer.class);
   public static final String URL_ATTRIBUTE = "url";
@@ -68,7 +65,7 @@ public class JpsModuleRootModelSerializer {
   public static final String MODULE_LIBRARY_TYPE = "module-library";
   public static final String MODULE_TYPE = "module";
   public static final String MODULE_NAME_ATTRIBUTE = "module-name";
-  private static final String SOURCE_ROOT_TYPE_ATTRIBUTE = "type";
+  public static final String SOURCE_ROOT_TYPE_ATTRIBUTE = "type";
   public static final String JAVA_SOURCE_ROOT_TYPE_ID = "java-source";
   public static final String JAVA_TEST_ROOT_TYPE_ID = "java-test";
   private static final String GENERATED_LIBRARY_NAME_PREFIX = "#";
@@ -196,6 +193,10 @@ public class JpsModuleRootModelSerializer {
   }
 
   public static void saveRootModel(JpsModule module, Element rootModelElement) {
+    for (JpsModelSerializerExtension extension : JpsModelSerializerExtension.getExtensions()) {
+      extension.saveRootModel(module, rootModelElement);
+    }
+
     List<JpsModuleSourceRoot> sourceRoots = module.getSourceRoots();
     List<String> excludedUrls = getSortedList(module.getExcludeRootsList().getUrls());
     for (String url : getSortedList(module.getContentRootsList().getUrls())) {
@@ -265,10 +266,6 @@ public class JpsModuleRootModelSerializer {
         saveModuleDependencyProperties(dependency, element);
         rootModelElement.addContent(element);
       }
-    }
-
-    for (JpsModelSerializerExtension extension : JpsModelSerializerExtension.getExtensions()) {
-      extension.saveRootModel(module, rootModelElement);
     }
   }
 

@@ -1,8 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.references
 
 import com.intellij.openapi.util.io.FileUtil
-import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.util.PathUtil
 import com.intellij.util.indexing.IndexId
 import com.intellij.util.indexing.impl.MapIndexStorage
@@ -14,6 +13,7 @@ import org.jetbrains.jps.backwardRefs.index.JavaCompilerIndices
 import org.jetbrains.jps.builders.JpsBuildTestCase
 import org.jetbrains.jps.builders.TestProjectBuilderLogger
 import org.jetbrains.jps.builders.logging.BuildLoggingManager
+import org.jetbrains.jps.incremental.relativizer.PathRelativizerService
 import java.io.File
 
 abstract class ReferenceIndexTestBase : JpsBuildTestCase() {
@@ -45,11 +45,11 @@ abstract class ReferenceIndexTestBase : JpsBuildTestCase() {
   }
 
   protected fun changeFileContent(name: String, changesSourceFile: String) {
-    changeFile("m/" + name, FileUtil.loadFile(File(testDataRootPath + "/" + getTestName(true) + "/" + changesSourceFile), CharsetToolkit.UTF8_CHARSET))
+    changeFile("m/" + name, FileUtil.loadFile(File(testDataRootPath + "/" + getTestName(true) + "/" + changesSourceFile), Charsets.UTF_8))
   }
 
   protected fun addFile(name: String): String {
-    return createFile("m/" + name, FileUtil.loadFile(File(getTestDataPath() + name), CharsetToolkit.UTF8_CHARSET))
+    return createFile("m/" + name, FileUtil.loadFile(File(getTestDataPath() + name), Charsets.UTF_8))
   }
 
 
@@ -61,7 +61,8 @@ abstract class ReferenceIndexTestBase : JpsBuildTestCase() {
     val pd = createProjectDescriptor(BuildLoggingManager(TestProjectBuilderLogger()))
     val manager = pd.dataManager
     val buildDir = manager.dataPaths.dataStorageRoot
-    val index = JavaCompilerBackwardReferenceIndex(buildDir, true)
+    val index = JavaCompilerBackwardReferenceIndex(buildDir,
+                                                   PathRelativizerService(myProject), true)
 
     try {
       val fileEnumerator = index.filePathEnumerator

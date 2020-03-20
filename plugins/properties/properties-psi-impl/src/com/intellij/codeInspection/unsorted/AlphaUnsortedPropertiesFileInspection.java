@@ -22,6 +22,7 @@ import com.intellij.lang.properties.ResourceBundle;
 import com.intellij.lang.properties.psi.PropertiesElementFactory;
 import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.lang.properties.psi.PropertiesList;
+import com.intellij.lang.properties.psi.PropertyKeyValueFormat;
 import com.intellij.lang.properties.psi.codeStyle.PropertiesCodeStyleSettings;
 import com.intellij.lang.properties.psi.impl.PropertiesFileImpl;
 import com.intellij.openapi.diagnostic.Logger;
@@ -48,7 +49,7 @@ public class AlphaUnsortedPropertiesFileInspection extends LocalInspectionTool {
   public PsiElementVisitor buildVisitor(@NotNull final ProblemsHolder holder, boolean isOnTheFly) {
     return new PsiElementVisitor() {
       @Override
-      public void visitFile(PsiFile file) {
+      public void visitFile(@NotNull PsiFile file) {
         final PropertiesFile propertiesFile = PropertiesImplUtil.getPropertiesFile(file);
         if (!(propertiesFile instanceof PropertiesFileImpl)) {
           return;
@@ -129,7 +130,7 @@ public class AlphaUnsortedPropertiesFileInspection extends LocalInspectionTool {
       final String key = property.getKey();
       final String propertyText;
       if (key != null) {
-        propertyText = PropertiesElementFactory.getPropertyText(key, value != null ? value : "", delimiter, null, false);
+        propertyText = PropertiesElementFactory.getPropertyText(key, value != null ? value : "", delimiter, null, PropertyKeyValueFormat.FILE);
         rawText.append(propertyText);
         if (i != properties.size() - 1) {
           rawText.append("\n");
@@ -144,12 +145,6 @@ public class AlphaUnsortedPropertiesFileInspection extends LocalInspectionTool {
     final PropertiesList fakePropertiesList = PsiTreeUtil.findChildOfType(fakeFile.getContainingFile(), PropertiesList.class);
     LOG.assertTrue(fakePropertiesList != null);
     propertiesList.replace(fakePropertiesList);
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return "Alphabetically Unsorted Properties File or Resource Bundle";
   }
 
   @Override

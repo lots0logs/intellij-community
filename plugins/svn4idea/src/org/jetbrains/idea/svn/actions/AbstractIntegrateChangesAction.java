@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.actions;
 
 import com.intellij.openapi.actionSystem.*;
@@ -31,17 +31,16 @@ public abstract class AbstractIntegrateChangesAction<T extends SelectedCommitted
   @Override
   public final void update(@NotNull final AnActionEvent e) {
     final Project project = e.getProject();
-    final CommittedChangesBrowserUseCase useCase = CommittedChangesBrowserUseCase.DATA_KEY.getData(e.getDataContext());
+    final CommittedChangesBrowserUseCase useCase = e.getData(CommittedChangesBrowserUseCase.DATA_KEY);
     final Presentation presentation = e.getPresentation();
 
     if ((project == null) || (myCheckUseCase) && ((useCase == null) || (! CommittedChangesBrowserUseCase.COMMITTED.equals(useCase)))) {
-      presentation.setEnabled(false);
-      presentation.setVisible(false);
+      presentation.setEnabledAndVisible(false);
       return;
     }
 
-    presentation.setText(SvnBundle.message("action.Subversion.integrate.changes.actionname"));
-    presentation.setDescription(SvnBundle.message("action.Subversion.integrate.changes.description"));
+    presentation.setText(SvnBundle.messagePointer("action.Subversion.integrate.changes.actionname"));
+    presentation.setDescription(SvnBundle.messagePointer("action.Subversion.integrate.changes.description"));
 
     final T checker = createChecker();
     checker.execute(e);

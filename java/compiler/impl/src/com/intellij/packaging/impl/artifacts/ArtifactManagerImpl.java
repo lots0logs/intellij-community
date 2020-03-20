@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.packaging.impl.artifacts;
 
 import com.intellij.compiler.server.BuildManager;
@@ -6,7 +6,6 @@ import com.intellij.configurationStore.XmlSerializer;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
-import com.intellij.openapi.components.BaseComponent;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
@@ -37,13 +36,9 @@ import org.jetbrains.jps.model.serialization.artifact.ArtifactState;
 
 import java.util.*;
 
-/**
- * @author nik
- */
 @State(name = ArtifactManagerImpl.COMPONENT_NAME, storages = @Storage(value = "artifacts", stateSplitter = ArtifactManagerStateSplitter.class))
-public class ArtifactManagerImpl extends ArtifactManager implements BaseComponent, PersistentStateComponent<ArtifactManagerState>,
-                                                                    Disposable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.packaging.impl.artifacts.ArtifactManagerImpl");
+public final class ArtifactManagerImpl extends ArtifactManager implements PersistentStateComponent<ArtifactManagerState>, Disposable {
+  private static final Logger LOG = Logger.getInstance(ArtifactManagerImpl.class);
   @NonNls public static final String COMPONENT_NAME = "ArtifactManager";
   @NonNls public static final String PACKAGING_ELEMENT_NAME = "element";
   @NonNls public static final String TYPE_ID_ATTRIBUTE = "id";
@@ -55,7 +50,7 @@ public class ArtifactManagerImpl extends ArtifactManager implements BaseComponen
   private final SimpleModificationTracker myModificationTracker = new SimpleModificationTracker();
   private final Map<String, LocalFileSystem.WatchRequest> myWatchedOutputs = new HashMap<>();
 
-  public ArtifactManagerImpl(Project project) {
+  public ArtifactManagerImpl(@NotNull Project project) {
     myProject = project;
     myModel = new ArtifactManagerModel();
     myResolvingContext = new DefaultPackagingElementResolvingContext(myProject);
@@ -63,8 +58,7 @@ public class ArtifactManagerImpl extends ArtifactManager implements BaseComponen
   }
 
   @Override
-  @NotNull
-  public Artifact[] getArtifacts() {
+  public Artifact @NotNull [] getArtifacts() {
     return myModel.getArtifacts();
   }
 
@@ -269,13 +263,7 @@ public class ArtifactManagerImpl extends ArtifactManager implements BaseComponen
   }
 
   @Override
-  @NotNull
-  public String getComponentName() {
-    return COMPONENT_NAME;
-  }
-
-  @Override
-  public void initComponent() {
+  public void initializeComponent() {
     myProject.getMessageBus().connect(this).subscribe(VirtualFileManager.VFS_CHANGES, new ArtifactVirtualFileListener(myProject, this));
     updateWatchedRoots();
   }

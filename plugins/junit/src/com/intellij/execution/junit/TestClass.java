@@ -18,6 +18,7 @@ package com.intellij.execution.junit;
 
 import com.intellij.execution.ExecutionBundle;
 import com.intellij.execution.ExecutionException;
+import com.intellij.execution.JUnitBundle;
 import com.intellij.execution.JavaExecutionUtil;
 import com.intellij.execution.configurations.JavaParameters;
 import com.intellij.execution.configurations.JavaRunConfigurationModule;
@@ -25,9 +26,12 @@ import com.intellij.execution.configurations.RuntimeConfigurationException;
 import com.intellij.execution.configurations.RuntimeConfigurationWarning;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.refactoring.listeners.RefactoringElementListener;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.List;
 
 class TestClass extends TestObject {
   TestClass(JUnitConfiguration configuration, ExecutionEnvironment environment) {
@@ -40,6 +44,11 @@ class TestClass extends TestObject {
     final JUnitConfiguration.Data data = getConfiguration().getPersistentData();
     javaParameters.getProgramParametersList().add(data.getMainClassName());
     return javaParameters;
+  }
+
+  @Override
+  protected void collectPackagesToOpen(List<String> options) {
+    options.add(StringUtil.getPackageName(getConfiguration().getPersistentData().getMainClassName()));
   }
 
   @NotNull
@@ -85,7 +94,7 @@ class TestClass extends TestObject {
     super.checkConfiguration();
     final String testClassName = getConfiguration().getPersistentData().getMainClassName();
     final JavaRunConfigurationModule configurationModule = getConfiguration().getConfigurationModule();
-    final PsiClass testClass = configurationModule.checkModuleAndClassName(testClassName, ExecutionBundle.message("no.test.class.specified.error.text"));
+    final PsiClass testClass = configurationModule.checkModuleAndClassName(testClassName, JUnitBundle.message("no.test.class.specified.error.text"));
     if (!JUnitUtil.isTestClass(testClass)) {
       throw new RuntimeConfigurationWarning(ExecutionBundle.message("class.isnt.test.class.error.message", testClassName));
     }

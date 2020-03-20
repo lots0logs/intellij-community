@@ -1,14 +1,15 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.deprecation;
 
 import com.intellij.codeInsight.AnnotationUtil;
-import com.intellij.codeInsight.daemon.JavaErrorMessages;
+import com.intellij.codeInsight.daemon.JavaErrorBundle;
 import com.intellij.codeInsight.daemon.impl.analysis.HighlightMessageUtil;
 import com.intellij.codeInspection.LocalInspectionTool;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemHighlightType;
 import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
+import com.intellij.java.analysis.JavaAnalysisBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.*;
@@ -38,7 +39,7 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
     return true;
   }
 
-  public static void checkDeprecated(@NotNull PsiElement element,
+  public static void checkDeprecated(@NotNull PsiModifierListOwner element,
                                      @NotNull PsiElement elementToHighlight,
                                      @Nullable TextRange rangeInElement,
                                      boolean ignoreInsideDeprecated,
@@ -48,13 +49,8 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
                                      @NotNull ProblemsHolder holder,
                                      boolean forRemoval,
                                      @NotNull ProblemHighlightType highlightType) {
-    if (!(element instanceof PsiModifierListOwner)) {
-      return;
-    }
-
-    PsiModifierListOwner modifierListOwner = (PsiModifierListOwner)element;
-    if (PsiImplUtil.isDeprecated(modifierListOwner)) {
-      if (forRemoval != isForRemovalAttributeSet(modifierListOwner)) {
+    if (PsiImplUtil.isDeprecated(element)) {
+      if (forRemoval != isForRemovalAttributeSet(element)) {
         return;
       }
     }
@@ -75,8 +71,8 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
 
     if (ignoreImportStatements && isElementInsideImportStatement(elementToHighlight)) return;
 
-    String description = JavaErrorMessages.message(forRemoval ? "marked.for.removal.symbol" : "deprecated.symbol",
-                                                   getPresentableName(element));
+    String description = JavaErrorBundle.message(forRemoval ? "marked.for.removal.symbol" : "deprecated.symbol",
+                                                 getPresentableName(element));
 
     LocalQuickFix replacementQuickFix = getReplacementQuickFix(element, elementToHighlight);
 
@@ -108,7 +104,7 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
       }
     }
     if (refElement instanceof PsiField) {
-      PsiReferenceExpression referenceExpression = ObjectUtils.tryCast(elementToHighlight.getParent(), PsiReferenceExpression.class);
+      PsiReferenceExpression referenceExpression = getFieldReferenceExpression(elementToHighlight);
       if (referenceExpression != null) {
         PsiField replacement = findReplacementInJavaDoc((PsiField)refElement, referenceExpression);
         if (replacement != null) {
@@ -155,7 +151,7 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
   }
 
   static void addSameOutermostClassCheckBox(MultipleCheckboxOptionsPanel panel) {
-    panel.addCheckbox("Ignore in the same outermost class", "IGNORE_IN_SAME_OUTERMOST_CLASS");
+    panel.addCheckbox(JavaAnalysisBundle.message("ignore.in.the.same.outermost.class"), "IGNORE_IN_SAME_OUTERMOST_CLASS");
   }
 
   protected static String getDescription(@NotNull String description, boolean forRemoval, ProblemHighlightType highlightType) {
@@ -169,7 +165,7 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
   }
 
   private static PsiField findReplacementInJavaDoc(@NotNull PsiField field, @NotNull PsiReferenceExpression referenceExpression) {
-    return getReplacementCandidatesFromJavadoc(field, PsiField.class, field, getQualifierClass(referenceExpression))
+    return getReplacementCandidatesFromJavadoc(field, PsiField.class, field, RefactoringChangeUtil.getQualifierClass(referenceExpression))
       .filter(tagField -> areReplaceable(tagField, referenceExpression))
       .collect(MoreCollectors.onlyOne())
       .orElse(null);
@@ -182,7 +178,8 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
       return sourceMethod == null ? null : findReplacementInJavaDoc(sourceMethod, call);
     }
 
-    return getReplacementCandidatesFromJavadoc(method, PsiMethod.class, call, getQualifierClass(call.getMethodExpression()))
+    return getReplacementCandidatesFromJavadoc(method, PsiMethod.class, call,
+                                               RefactoringChangeUtil.getQualifierClass(call.getMethodExpression()))
       .filter(tagMethod -> areReplaceable(method, tagMethod, call))
       .collect(MoreCollectors.onlyOne())
       .orElse(null);
@@ -229,11 +226,18 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
 
     String qualifierText;
     if (isInitialStatic) {
-      qualifierText = ObjectUtils.notNull(suggestedReplacement.getContainingClass()).getQualifiedName() + ".";
+      qualifierText = Objects.requireNonNull(suggestedReplacement.getContainingClass()).getQualifiedName() + ".";
     }
     else {
       PsiExpression qualifierExpression = call.getMethodExpression().getQualifierExpression();
       qualifierText = qualifierExpression == null ? "" : qualifierExpression.getText() + ".";
+
+      PsiExpression qualifier = ExpressionUtils.getEffectiveQualifier(call.getMethodExpression());
+      if (qualifier == null) return false;
+      PsiClass qualifierClass = PsiUtil.resolveClassInType(qualifier.getType());
+      if (qualifierClass == null) return false;
+      PsiClass suggestedClass = suggestedReplacement.getContainingClass();
+      if (suggestedClass == null || !InheritanceUtil.isInheritorOrSelf(qualifierClass, suggestedClass, true)) return false;
     }
 
     PsiElementFactory elementFactory = JavaPsiFacade.getElementFactory(initial.getProject());
@@ -254,19 +258,21 @@ public abstract class DeprecationInspectionBase extends LocalInspectionTool {
   }
 
   @Nullable
-  private static PsiClass getQualifierClass(@NotNull PsiReferenceExpression referenceExpression) {
-    PsiExpression expression = referenceExpression.getQualifierExpression();
-    if (expression == null) {
-      return RefactoringChangeUtil.getThisClass(referenceExpression);
+  private static PsiReferenceExpression getFieldReferenceExpression(@NotNull PsiElement element) {
+    if (element instanceof PsiReferenceExpression) {
+      return (PsiReferenceExpression) element;
     }
-    return PsiUtil.resolveClassInType(expression.getType());
+    return ObjectUtils.tryCast(element.getParent(), PsiReferenceExpression.class);
   }
 
   @Nullable
   private static PsiMethodCallExpression getMethodCall(@NotNull PsiElement element) {
-    if (!(element instanceof PsiIdentifier)) return null;
-    PsiElement parent = element.getParent();
-    if (!(parent instanceof PsiReferenceExpression)) return null;
-    return ObjectUtils.tryCast(parent.getParent(), PsiMethodCallExpression.class);
+    if (element instanceof PsiReferenceExpression) {
+      return ObjectUtils.tryCast(element.getParent(), PsiMethodCallExpression.class);
+    }
+    if (element instanceof PsiIdentifier) {
+      return getMethodCall(element.getParent());
+    }
+    return null;
   }
 }

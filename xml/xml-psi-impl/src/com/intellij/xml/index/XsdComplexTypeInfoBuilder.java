@@ -3,7 +3,6 @@ package com.intellij.xml.index;
 
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.MultiMap;
-import com.intellij.util.containers.hash.HashMap;
 import com.intellij.util.xml.NanoXmlBuilder;
 import com.intellij.util.xml.NanoXmlUtil;
 import org.jetbrains.annotations.NotNull;
@@ -12,6 +11,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 
 public class XsdComplexTypeInfoBuilder implements NanoXmlBuilder {
@@ -26,7 +27,7 @@ public class XsdComplexTypeInfoBuilder implements NanoXmlBuilder {
   }
 
   public static MultiMap<SchemaTypeInfo, SchemaTypeInfo> parse(final InputStream is) {
-    return parse(new InputStreamReader(is));
+    return parse(new InputStreamReader(is, StandardCharsets.UTF_8));
   }
 
   public static MultiMap<SchemaTypeInfo, SchemaTypeInfo> parse(@NotNull Reader reader) {

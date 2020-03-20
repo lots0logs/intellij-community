@@ -18,12 +18,12 @@ package git4idea.push;
 import com.intellij.dvcs.push.VcsPushOptionValue;
 import com.intellij.dvcs.push.VcsPushOptionsPanel;
 import com.intellij.openapi.ui.ComboBox;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.components.JBCheckBox;
+import git4idea.i18n.GitBundle;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -38,7 +38,7 @@ public class GitPushTagPanel extends VcsPushOptionsPanel {
   private final JBCheckBox myCheckBox;
 
   public GitPushTagPanel(@Nullable GitPushTagMode defaultMode, boolean followTagsSupported) {
-    String checkboxText = "Push Tags";
+    String checkboxText = GitBundle.getString("push.dialog.push.tags");
     if (followTagsSupported) {
       checkboxText += ": ";
     }
@@ -51,12 +51,7 @@ public class GitPushTagPanel extends VcsPushOptionsPanel {
 
     if (followTagsSupported) {
       myCombobox = new ComboBox<>(GitPushTagMode.getValues());
-      myCombobox.setRenderer(new ListCellRendererWrapper<GitPushTagMode>() {
-        @Override
-        public void customize(JList list, GitPushTagMode value, int index, boolean selected, boolean hasFocus) {
-          setText(value.getTitle());
-        }
-      });
+      myCombobox.setRenderer(SimpleListCellRenderer.create("", GitPushTagModeKt::localizedTitle));
       myCombobox.setEnabled(myCheckBox.isSelected());
       if (defaultMode != null) {
         myCombobox.setSelectedItem(defaultMode);

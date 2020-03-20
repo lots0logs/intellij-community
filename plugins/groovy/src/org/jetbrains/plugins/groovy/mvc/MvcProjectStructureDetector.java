@@ -21,6 +21,7 @@ import com.intellij.ide.util.projectWizard.ProjectWizardStepFactory;
 import com.intellij.ide.util.projectWizard.importSources.DetectedProjectRoot;
 import com.intellij.ide.util.projectWizard.importSources.ProjectFromSourcesBuilder;
 import com.intellij.ide.util.projectWizard.importSources.ProjectStructureDetector;
+import com.intellij.openapi.util.text.StringUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -28,21 +29,18 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * @author nik
- */
 public abstract class MvcProjectStructureDetector extends ProjectStructureDetector {
   private final MvcFramework myFramework;
   private final String myDirectoryName;
 
   public MvcProjectStructureDetector(MvcFramework framework) {
     myFramework = framework;
-    myDirectoryName = myFramework.getFrameworkName().toLowerCase() + "-app";
+    myDirectoryName = StringUtil.toLowerCase(myFramework.getFrameworkName()) + "-app";
   }
 
   @NotNull
   @Override
-  public DirectoryProcessingResult detectRoots(@NotNull File dir, @NotNull File[] children, @NotNull File base,
+  public DirectoryProcessingResult detectRoots(@NotNull File dir, File @NotNull [] children, @NotNull File base,
                                                @NotNull List<DetectedProjectRoot> result) {
     for (File child : children) {
       if (child.getName().equals("build.gradle")) return DirectoryProcessingResult.PROCESS_CHILDREN;

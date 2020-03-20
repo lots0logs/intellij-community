@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.service.ui;
 
 import com.intellij.icons.AllIcons;
@@ -32,7 +18,6 @@ import com.intellij.openapi.externalSystem.model.project.ModuleData;
 import com.intellij.openapi.externalSystem.model.project.ModuleDependencyData;
 import com.intellij.openapi.externalSystem.model.project.ProjectData;
 import com.intellij.openapi.externalSystem.service.project.ProjectDataManager;
-import com.intellij.openapi.externalSystem.service.project.manage.ProjectDataManagerImpl;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemBundle;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUiUtil;
@@ -54,9 +39,9 @@ import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBLoadingPanel;
 import com.intellij.util.BooleanValueHolder;
 import com.intellij.util.CachedValueImpl;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.tree.TreeUtil;
 import gnu.trove.TObjectHashingStrategy;
 import org.jetbrains.annotations.NotNull;
@@ -125,13 +110,12 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
   }
 
   private void init(@NotNull ExternalProjectInfo projectInfo) {
-    ProjectDataManagerImpl.getInstance().ensureTheDataIsReadyToUse(projectInfo.getExternalProjectStructure());
     myProjectInfo = projectInfo;
     myExternalSystemUiAware = ExternalSystemUiUtil.getUiAware(myProjectInfo.getProjectSystemId());
     myTree = createTree();
     updateSelectionState();
 
-    myTree.addCheckboxTreeListener(new CheckboxTreeAdapter() {
+    myTree.addCheckboxTreeListener(new CheckboxTreeListener() {
       @Override
       public void nodeStateChanged(@NotNull CheckedTreeNode node) {
         updateSelectionState();
@@ -160,8 +144,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
       addExtraAction(new UnselectAllButton()).
       addExtraAction(new ShowSelectedOnlyButton()).
       addExtraAction(new SelectRequiredButton()).
-      setToolbarPosition(ActionToolbarPosition.BOTTOM).
-      setToolbarBorder(JBUI.Borders.empty());
+      setToolbarPosition(ActionToolbarPosition.BOTTOM);
 
     contentPanel.add(decorator.createPanel());
     loadingPanel = new JBLoadingPanel(new BorderLayout(), getDisposable());
@@ -193,7 +176,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
     final DataNode<ProjectData> projectStructure = myProjectInfo.getExternalProjectStructure();
     if (projectStructure != null) {
       final boolean[] isModified = {false};
-      ExternalSystemApiUtil.visit(projectStructure, node -> {
+      projectStructure.visit(node -> {
         final DataNode modifiedDataNode = node.getUserData(MODIFIED_NODE_KEY);
         if (modifiedDataNode != null) {
           if (node.isIgnored() != modifiedDataNode.isIgnored()) {
@@ -308,13 +291,13 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
   private Couple<CheckedTreeNode> createRoot() {
     final Map<DataNode, DataNodeCheckedTreeNode> treeNodeMap = ContainerUtil.newIdentityTroveMap();
-    final Map<String, DataNode> ideGroupingMap = ContainerUtil.newTreeMap(); // need order for assigning parents
+    final Map<String, DataNode> ideGroupingMap = new TreeMap<>(); // need order for assigning parents
 
     final DataNodeCheckedTreeNode[] preselectedNode = {null};
     final DataNodeCheckedTreeNode[] rootModuleNode = {null};
 
     final MultiMap<String, String> moduleDependenciesMap = MultiMap.create();
-    final Map<String, DataNode<Identifiable>> modulesNodeMap = ContainerUtil.newHashMap();
+    final Map<String, DataNode<Identifiable>> modulesNodeMap = new HashMap<>();
 
     for (DataNode<ModuleDependencyData> moduleDependencyDataNode : ExternalSystemApiUtil.findAllRecursively(
       myProjectInfo.getExternalProjectStructure(), ProjectKeys.MODULE_DEPENDENCY)) {
@@ -451,7 +434,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
   @NotNull
   private static Set<Key<? extends Identifiable>> getDependencyAwareDataKeys() {
-    Set<Key<? extends Identifiable>> result = ContainerUtil.newHashSet();
+    Set<Key<? extends Identifiable>> result = new HashSet<>();
     result.add(ProjectKeys.MODULE);
     for (ExternalProjectStructureCustomizer customizer : ExternalProjectStructureCustomizer.EP_NAME.getExtensions()) {
       result.addAll(customizer.getDependencyAwareDataKeys());
@@ -528,16 +511,10 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
         if (moduleNode != null) {
           moduleNode.isChecked = true;
         }
-        ExternalSystemApiUtil.visit(moduleNode == null ? myDataNode : moduleNode.myDataNode, node -> {
-          final DataNode modifiedDataNode = getModifiableDataNode(node);
-          modifiedDataNode.setIgnored(false);
-        });
+        ExternalSystemApiUtil.visit(moduleNode == null ? myDataNode : moduleNode.myDataNode, node -> getModifiableDataNode(node).setIgnored(false));
       }
       else {
-        ExternalSystemApiUtil.visit(myDataNode, node -> {
-          final DataNode modifiedDataNode = getModifiableDataNode(node);
-          modifiedDataNode.setIgnored(true);
-        });
+        ExternalSystemApiUtil.visit(myDataNode, node -> getModifiableDataNode(node).setIgnored(true));
         if (myShowSelectedRowsOnly) {
           final DefaultTreeModel treeModel = (DefaultTreeModel)myTree.getModel();
           TreePath[] before = myTree.getSelectionPaths();
@@ -572,7 +549,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
     }
 
     private void warnAboutMissedDependencies(boolean checked) {
-      List<DataNode<Identifiable>> selectedModules = ContainerUtil.newSmartList();
+      List<DataNode<Identifiable>> selectedModules = new SmartList<>();
       for (DataNode node : TreeUtil.collectSelectedObjectsOfType(myTree, DataNode.class)) {
         if (myDependencyAwareDataKeys.contains(node.getKey())) {
           //noinspection unchecked
@@ -580,7 +557,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
         }
       }
 
-      final Set<DataNode<Identifiable>> deps = ContainerUtil.newHashSet();
+      final Set<DataNode<Identifiable>> deps = new HashSet<>();
       for (DataNode<Identifiable> selectedModule : selectedModules) {
         if (checked) {
           deps.addAll(ContainerUtil.filter(dependentNodeMap.get(selectedModule), node -> {
@@ -603,7 +580,8 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
       if (!deps.isEmpty() && !selectedModules.isEmpty()) {
         final String message = checked ? getEnableMessage(selectedModules, deps) : getDisableMessage(deps);
-        if (Messages.showOkCancelDialog(message, checked ? "Enable Dependant Modules" : "Disable Modules with Dependency on this",
+        if (Messages.showOkCancelDialog(message, checked ? ExternalSystemBundle.message("enable.dependant.modules")
+                                                         : ExternalSystemBundle.message("disable.modules.with.dependency.on.this"),
                                         Messages.getQuestionIcon()) == Messages.OK) {
           List<DataNodeCheckedTreeNode> nodes =
             ContainerUtil.mapNotNull(deps, node -> node.getUserData(CONNECTED_UI_NODE_KEY));
@@ -619,7 +597,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
       }
     }
 
-    private String getEnableMessage(List<DataNode<Identifiable>> selectedModules, Set<DataNode<Identifiable>> deps) {
+    private String getEnableMessage(List<? extends DataNode<Identifiable>> selectedModules, Set<? extends DataNode<Identifiable>> deps) {
       if (deps.size() > MAX_DEPENDENCIES_TO_DESCRIBE || selectedModules.size() > MAX_DEPENDENCIES_TO_DESCRIBE) {
         return String.format(
           "%d disabled %s depend on %d selected %s. Would you like to enable %s too?",
@@ -638,7 +616,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
         listOfDependencies, deps.size() == 1 ? "it" : "them");
     }
 
-    private String getDisableMessage(Set<DataNode<Identifiable>> deps) {
+    private String getDisableMessage(Set<? extends DataNode<Identifiable>> deps) {
       if (deps.size() > MAX_DEPENDENCIES_TO_DESCRIBE) {
         return String.format("%d enabled modules depend on selected modules. Would you like to disable them too?", deps.size());
       }
@@ -712,7 +690,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
   private class SelectAllButton extends AnActionButton {
     SelectAllButton() {
-      super("Select All", AllIcons.Actions.Selectall);
+      super(ExternalSystemBundle.messagePointer("action.text.select.all"), AllIcons.Actions.Selectall);
     }
 
     @Override
@@ -735,7 +713,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
   private class UnselectAllButton extends AnActionButton {
     UnselectAllButton() {
-      super("Unselect All", AllIcons.Actions.Unselectall);
+      super(ExternalSystemBundle.messagePointer("action.text.unselect.all"), AllIcons.Actions.Unselectall);
     }
 
     @Override
@@ -760,7 +738,7 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
   private class ShowSelectedOnlyButton extends ToggleActionButton {
 
     ShowSelectedOnlyButton() {
-      super("Show Selected Only", AllIcons.Actions.ShowHiddens);
+      super(ExternalSystemBundle.messagePointer("show.selected.only"), AllIcons.Actions.ShowHiddens);
     }
 
     @Override
@@ -777,7 +755,8 @@ public class ExternalProjectDataSelectorDialog extends DialogWrapper {
 
   private class SelectRequiredButton extends AnActionButton {
     SelectRequiredButton() {
-      super("Select Required", "select modules depended on currently selected modules", AllIcons.Actions.IntentionBulb);
+      super(ExternalSystemBundle.message("select.required"),
+            ExternalSystemBundle.message("select.modules.depended.on.currently.selected.modules"), AllIcons.Actions.IntentionBulb);
 
       addCustomUpdater(e -> selectionState.getValue().isRequiredSelectionEnabled);
     }

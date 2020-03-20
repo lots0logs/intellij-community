@@ -17,14 +17,18 @@ package com.jetbrains.python.inspections;
 
 import com.intellij.codeInspection.LocalInspectionToolSession;
 import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.psi.PyGlobalStatement;
 import com.jetbrains.python.psi.PyTargetExpression;
+import com.jetbrains.python.psi.PyUtil;
 import com.jetbrains.python.psi.resolve.PyResolveContext;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * User: ktisha
@@ -32,12 +36,6 @@ import org.jetbrains.annotations.Nullable;
  * pylint W0601
  */
 public class PyGlobalUndefinedInspection extends PyInspection {
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.global.undefined");
-  }
 
   @NotNull
   @Override
@@ -58,8 +56,12 @@ public class PyGlobalUndefinedInspection extends PyInspection {
       final PyTargetExpression[] globals = node.getGlobals();
 
       for (PyTargetExpression global : globals) {
-        final PyResolveContext resolveContext = PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext);
-        if (global.getReference(resolveContext).resolve() == global) {
+        final PyResolveContext resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext);
+
+        final List<PsiElement> elements = PyUtil.multiResolveTopPriority(global.getReference(resolveContext));
+        final boolean noTopLevelDeclaration = elements.stream().noneMatch(PyUtil::isTopLevel);
+
+        if (noTopLevelDeclaration) {
           registerProblem(global, PyBundle.message("INSP.NAME.global.$0.undefined", global.getName()));
         }
       }

@@ -9,6 +9,7 @@ import com.intellij.remoteServer.ServerType;
 import com.intellij.remoteServer.configuration.RemoteServer;
 import com.intellij.remoteServer.configuration.RemoteServersManager;
 import com.intellij.util.text.UniqueNameGenerator;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -80,33 +81,6 @@ public abstract class CloudConfigurableBase<SC extends CloudConfigurationBase> e
   protected boolean isCoreConfigEqual(SC configuration1, SC configuration2) {
     return Comparing.equal(configuration1.getEmail(), configuration2.getEmail())
            && Comparing.equal(configuration1.getPasswordSafe(), configuration2.getPasswordSafe());
-  }
-
-  private String generateServerName() {
-    return UniqueNameGenerator.generateUniqueName(myCloudType.getPresentableName(), s -> {
-      for (RemoteServer<?> server : RemoteServersManager.getInstance().getServers()) {
-        if (server.getName().equals(s)) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }
-
-  /**
-   * This method is not used anymore and will be removed in 2019.1
-   */
-  @Deprecated
-  protected final RemoteServer<SC> createTempServer() {
-    RemoteServer<SC> tempServer = RemoteServersManager.getInstance().createServer(myCloudType, generateServerName());
-    SC newConfiguration = tempServer.getConfiguration();
-    try {
-      applyCoreTo(newConfiguration, true);
-    }
-    catch (ConfigurationException e) {
-      return null;
-    }
-    return tempServer;
   }
 
   protected abstract JComponent getMainPanel();

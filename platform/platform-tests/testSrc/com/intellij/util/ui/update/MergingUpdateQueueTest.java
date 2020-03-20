@@ -1,31 +1,17 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.ui.update;
 
 import com.intellij.concurrency.JobScheduler;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.UsefulTestCase;
 import com.intellij.util.Alarm;
 import com.intellij.util.ExceptionUtil;
 import com.intellij.util.TimeoutUtil;
 import com.intellij.util.WaitFor;
-import com.intellij.util.concurrency.AppExecutorUtil;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -234,7 +220,7 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
     MyQueue queue = new MyQueue();
     queue.showNotify();
     AtomicReference<Object> executed = new AtomicReference<>();
-    AppExecutorUtil.getAppExecutorService().submit(() -> {
+    ApplicationManager.getApplication().executeOnPooledThread(() -> {
       try {
         queue.queue(new MyUpdate("update"));
         queue.flush();
@@ -307,7 +293,6 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
 
     private MyQueue(int mergingTimeSpan) {
       super("Test", mergingTimeSpan, false, null);
-      setPassThrough(false);
     }
 
     @Override
@@ -320,7 +305,7 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
     }
 
     @Override
-    protected void execute(@NotNull final Update[] update) {
+    protected void execute(final Update @NotNull [] update) {
       super.execute(update);
       myExecuted = true;
     }
@@ -371,7 +356,7 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
 
     final AtomicInteger count = new AtomicInteger();
     ScheduledExecutorService executor = JobScheduler.getScheduler();
-    List<Future> futures = ContainerUtil.newArrayList();
+    List<Future> futures = new ArrayList<>();
     for (int i = 0; i < 10; i++) {
       ScheduledFuture<?> future = executor.schedule(() -> {
         for (int j = 0; j < 100; j++) {
@@ -420,7 +405,6 @@ public class MergingUpdateQueueTest extends UsefulTestCase {
   public void testAddRequestsInPooledThreadDoNotExecuteConcurrently() throws InterruptedException {
     int delay = 10;
     MergingUpdateQueue queue = new MergingUpdateQueue("x", delay, true, null, getTestRootDisposable(), null, Alarm.ThreadToUse.POOLED_THREAD);
-    queue.setPassThrough(false);
     CountDownLatch startedExecuting1 = new CountDownLatch(1);
     CountDownLatch canContinue = new CountDownLatch(1);
     queue.queue(new Update("1") {

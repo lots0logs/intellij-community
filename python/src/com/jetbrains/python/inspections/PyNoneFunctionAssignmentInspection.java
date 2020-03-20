@@ -6,17 +6,17 @@ import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.openapi.util.Condition;
 import com.intellij.psi.PsiElementVisitor;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.hash.HashMap;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.inspections.quickfix.PyRemoveAssignmentQuickFix;
 import com.jetbrains.python.psi.*;
 import com.jetbrains.python.psi.search.PyOverridingMethodsSearch;
 import com.jetbrains.python.psi.types.PyNoneType;
 import com.jetbrains.python.psi.types.PyType;
-import com.jetbrains.python.sdk.PySdkUtil;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,12 +28,6 @@ import java.util.Map;
  * Used when an assignment is done on a function call but the inferred function doesn't return anything.
  */
 public class PyNoneFunctionAssignmentInspection extends PyInspection {
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.none.function.assignment");
-  }
 
   @NotNull
   @Override
@@ -62,7 +56,7 @@ public class PyNoneFunctionAssignmentInspection extends PyInspection {
         if (type instanceof PyNoneType && callee != null) {
           final Condition<PyCallable> ignoredCallable =
             callable -> myTypeEvalContext.getReturnType(callable) != PyNoneType.INSTANCE ||
-                        PySdkUtil.isElementInSkeletons(callable) ||
+                        PythonSdkUtil.isElementInSkeletons(callable) ||
                         callable instanceof PyFunction && hasInheritors((PyFunction)callable);
 
           final List<PyCallable> callables = call.multiResolveCalleeFunction(getResolveContext());

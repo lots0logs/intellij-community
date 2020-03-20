@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.patch;
 
 import com.intellij.openapi.application.ReadAction;
@@ -17,12 +17,15 @@ import org.jetbrains.annotations.Nullable;
 public class LazyPatchContentRevision implements ContentRevision {
   private final VirtualFile myVf;
   private final FilePath myNewFilePath;
-  private final String myRevision;
+  @NotNull private final String myRevision;
   private final TextFilePatch myPatch;
 
   private final AtomicNotNullLazyValue<Data> myData;
 
-  public LazyPatchContentRevision(final VirtualFile vf, final FilePath newFilePath, final String revision, final TextFilePatch patch) {
+  public LazyPatchContentRevision(final VirtualFile vf,
+                                  final FilePath newFilePath,
+                                  @NotNull final String revision,
+                                  final TextFilePatch patch) {
     myVf = vf;
     myNewFilePath = newFilePath;
     myRevision = revision;
@@ -69,6 +72,7 @@ public class LazyPatchContentRevision implements ContentRevision {
   @NotNull
   public VcsRevisionNumber getRevisionNumber() {
     return new VcsRevisionNumber() {
+      @NotNull
       @Override
       public String asString() {
         return myRevision;

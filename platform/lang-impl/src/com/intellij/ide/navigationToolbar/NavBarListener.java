@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.navigationToolbar;
 
 import com.intellij.ProjectTopics;
@@ -31,6 +31,7 @@ import com.intellij.problems.ProblemListener;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.PsiTreeChangeEvent;
 import com.intellij.psi.PsiTreeChangeListener;
+import com.intellij.ui.ListActions;
 import com.intellij.ui.ScrollingUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.util.ui.UIUtil;
@@ -46,8 +47,8 @@ import java.util.List;
 /**
  * @author Konstantin Bulenkov
  */
-public class NavBarListener
-  implements ProblemListener, ActionListener, FocusListener, FileStatusListener, AnActionListener, FileEditorManagerListener,
+public final class NavBarListener
+  implements ProblemListener, FocusListener, FileStatusListener, AnActionListener, FileEditorManagerListener,
              PsiTreeChangeListener, ModuleRootListener, NavBarModelListener, PropertyChangeListener, KeyListener, WindowFocusListener,
              LafManagerListener {
   private static final String LISTENER = "NavBarListener";
@@ -55,7 +56,7 @@ public class NavBarListener
   private final NavBarPanel myPanel;
   private boolean shouldFocusEditor;
 
-  static void subscribeTo(NavBarPanel panel) {
+  static void subscribeTo(@NotNull NavBarPanel panel) {
     if (panel.getClientProperty(LISTENER) != null) {
       unsubscribeFrom(panel);
     }
@@ -67,7 +68,7 @@ public class NavBarListener
     FileStatusManager.getInstance(project).addFileStatusListener(listener);
     PsiManager.getInstance(project).addPsiTreeChangeListener(listener);
 
-    final MessageBusConnection connection = project.getMessageBus().connect();
+    MessageBusConnection connection = project.getMessageBus().connect();
     connection.subscribe(AnActionListener.TOPIC, listener);
     connection.subscribe(ProjectTopics.PROJECT_ROOTS, listener);
     connection.subscribe(NavBarModelListener.NAV_BAR, listener);
@@ -77,65 +78,39 @@ public class NavBarListener
     panel.addKeyListener(listener);
 
     if (panel.isInFloatingMode()) {
-      final Window window = SwingUtilities.windowForComponent(panel);
+      Window window = SwingUtilities.windowForComponent(panel);
       if (window != null) {
         window.addWindowFocusListener(listener);
       }
-    } else {
-      LafManager.getInstance().addLafManagerListener(listener);
+    }
+    else {
+      connection.subscribe(LafManagerListener.TOPIC, listener);
     }
   }
 
-  static void unsubscribeFrom(NavBarPanel panel) {
-    final NavBarListener listener = (NavBarListener)panel.getClientProperty(LISTENER);
+  static void unsubscribeFrom(@NotNull NavBarPanel panel) {
+    NavBarListener listener = (NavBarListener)panel.getClientProperty(LISTENER);
     panel.putClientProperty(LISTENER, null);
-    if (listener != null) {
-      final Project project = panel.getProject();
-      KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener(listener);
-      FileStatusManager.getInstance(project).removeFileStatusListener(listener);
-      PsiManager.getInstance(project).removePsiTreeChangeListener(listener);
-      final MessageBusConnection connection = (MessageBusConnection)panel.getClientProperty(BUS);
-      panel.putClientProperty(BUS, null);
-      if (connection != null) {
-        connection.disconnect();
-      }
-      LafManager.getInstance().removeLafManagerListener(listener);
+    if (listener == null) {
+      return;
+    }
+
+    Project project = panel.getProject();
+    KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener(listener);
+    FileStatusManager.getInstance(project).removeFileStatusListener(listener);
+    PsiManager.getInstance(project).removePsiTreeChangeListener(listener);
+    MessageBusConnection connection = (MessageBusConnection)panel.getClientProperty(BUS);
+    panel.putClientProperty(BUS, null);
+    if (connection != null) {
+      connection.disconnect();
     }
   }
 
   NavBarListener(NavBarPanel panel) {
     myPanel = panel;
-    for (NavBarKeyboardCommand command : NavBarKeyboardCommand.values()) {
-      registerKey(command);
-    }
     myPanel.addFocusListener(this);
     if (myPanel.allowNavItemsFocus()) {
       myPanel.addNavBarItemFocusListener(this);
-    }
-  }
-
-  private void registerKey(NavBarKeyboardCommand cmd) {
-    int whenFocused = myPanel.allowNavItemsFocus() ?
-        JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT :
-        JComponent.WHEN_FOCUSED;
-    myPanel.registerKeyboardAction(this, cmd.name(), cmd.getKeyStroke(), whenFocused);
-  }
-
-  @Override
-  public void actionPerformed(ActionEvent e) {
-    final NavBarKeyboardCommand cmd = NavBarKeyboardCommand.fromString(e.getActionCommand());
-    if (cmd != null) {
-      switch (cmd) {
-        case LEFT:     myPanel.moveLeft();  break;
-        case RIGHT:    myPanel.moveRight(); break;
-        case HOME:     myPanel.moveHome();  break;
-        case END:      myPanel.moveEnd();   break;
-        case DOWN:     myPanel.moveDown();  break;
-        case UP:       myPanel.moveDown();  break;
-        case ENTER:    myPanel.enter();     break;
-        case ESCAPE:   myPanel.escape();    break;
-        case NAVIGATE: myPanel.navigate();  break;
-      }
     }
   }
 
@@ -317,6 +292,8 @@ public class NavBarListener
     return action instanceof PopupAction
            || action instanceof CopyAction
            || action instanceof CutAction
+           || action instanceof ListActions
+           || action instanceof NavBarActions
            || action instanceof ScrollingUtil.ScrollingAction;
   }
 

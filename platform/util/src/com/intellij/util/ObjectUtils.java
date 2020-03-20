@@ -1,21 +1,23 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util;
 
 import com.intellij.openapi.util.Condition;
 import com.intellij.openapi.util.NotNullFactory;
 import com.intellij.util.containers.Convertor;
 import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Proxy;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @author peter
  */
-public class ObjectUtils {
+public final class ObjectUtils {
   private ObjectUtils() {
   }
 
@@ -34,7 +36,7 @@ public class ObjectUtils {
    * @return a new sentinel object
    */
   @NotNull
-  public static Object sentinel(@NotNull String name) {
+  public static Object sentinel(@NotNull @NonNls String name) {
     return new Sentinel(name);
   }
 
@@ -44,7 +46,7 @@ public class ObjectUtils {
   */
   public static void reachabilityFence(@SuppressWarnings("unused") Object o) {}
 
-  private static class Sentinel {
+  private static final class Sentinel {
     private final String myName;
 
     Sentinel(@NotNull String name) {
@@ -71,7 +73,7 @@ public class ObjectUtils {
     // java.lang.reflect.Proxy.ProxyClassFactory fails if the class is not available via the classloader.
     // We must use interface own classloader because classes from plugins are not available via ObjectUtils' classloader.
     //noinspection unchecked
-    return (T)Proxy.newProxyInstance(ofInterface.getClassLoader(), new Class[]{ofInterface}, (proxy, method, args) -> {
+    return (T)Proxy.newProxyInstance(ofInterface.getClassLoader(), new Class[]{ofInterface}, (__, method, args) -> {
       if ("toString".equals(method.getName()) && args.length == 0) {
         return name;
       }
@@ -79,12 +81,15 @@ public class ObjectUtils {
     });
   }
 
-  @NotNull
-  public static <T> T assertNotNull(@Nullable T t) {
-    return notNull(t);
+  /**
+   * @deprecated Use {@link Objects#requireNonNull(Object)}
+   */
+  @Deprecated
+  public static @NotNull <T> T assertNotNull(@Nullable T t) {
+    return Objects.requireNonNull(t);
   }
 
-  public static <T> void assertAllElementsNotNull(@NotNull T[] array) {
+  public static <T> void assertAllElementsNotNull(T @NotNull [] array) {
     for (int i = 0; i < array.length; i++) {
       T t = array[i];
       if (t == null) {
@@ -109,7 +114,7 @@ public class ObjectUtils {
   }
 
   @Nullable
-  public static <T> T coalesce(@Nullable Iterable<T> o) {
+  public static <T> T coalesce(@Nullable Iterable<? extends T> o) {
     if (o == null) return null;
     for (T t : o) {
       if (t != null) return t;
@@ -117,10 +122,12 @@ public class ObjectUtils {
     return null;
   }
 
-  @NotNull
+  /**
+   * @deprecated Use {@link Objects#requireNonNull(Object)}
+   */
+  @Deprecated
   public static <T> T notNull(@Nullable T value) {
-    //noinspection ConstantConditions
-    return notNull(value, value);
+    return Objects.requireNonNull(value);
   }
 
   @NotNull
@@ -158,6 +165,12 @@ public class ObjectUtils {
     return obj == null ? null : function.fun(obj);
   }
 
+  public static <T> void consumeIfNotNull(@Nullable T obj, @NotNull Consumer<? super T> consumer) {
+    if (obj != null) {
+      consumer.consume(obj);
+    }
+  }
+
   public static <T> void consumeIfCast(@Nullable Object obj, @NotNull Class<T> clazz, final Consumer<? super T> consumer) {
     if (clazz.isInstance(obj)) {
       //noinspection unchecked
@@ -169,6 +182,15 @@ public class ObjectUtils {
   @Contract("null, _ -> null")
   public static <T> T nullizeByCondition(@Nullable final T obj, @NotNull final Condition<? super T> condition) {
     if (condition.value(obj)) {
+      return null;
+    }
+    return obj;
+  }
+
+  @Nullable
+  @Contract("null, _ -> null")
+  public static <T> T nullizeIfDefaultValue(@Nullable T obj, @NotNull T defaultValue) {
+    if (obj == defaultValue) {
       return null;
     }
     return obj;

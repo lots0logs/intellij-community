@@ -15,17 +15,18 @@
  */
 package com.siyeh.ipp.fqnames;
 
+import com.intellij.openapi.editor.Editor;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiJavaFile;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.siyeh.IntentionPowerPackBundle;
+import com.siyeh.ig.psiutils.HighlightUtils;
 import com.siyeh.ig.psiutils.ImportUtils;
 import com.siyeh.ig.style.UnnecessaryFullyQualifiedNameInspection;
 import com.siyeh.ipp.base.Intention;
 import com.siyeh.ipp.base.PsiElementPredicate;
-import com.siyeh.ipp.psiutils.HighlightUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
@@ -43,7 +44,12 @@ public class ReplaceFullyQualifiedNameWithImportIntention extends Intention {
   }
 
   @Override
-  public void processIntention(@NotNull PsiElement element) {
+  protected void processIntention(@NotNull PsiElement element) {
+    throw new UnsupportedOperationException("The only 'processIntention(Editor, PsiElement)' is allowed to be invoked.");
+  }
+
+  @Override
+  public void processIntention(Editor editor, @NotNull PsiElement element) {
     PsiJavaCodeReferenceElement reference = (PsiJavaCodeReferenceElement)element;
     PsiElement target = reference.resolve();
     if (!(target instanceof PsiClass)) {
@@ -87,6 +93,6 @@ public class ReplaceFullyQualifiedNameWithImportIntention extends Intention {
         "multiple.fully.qualified.names.status.bar.escape.highlighting.message",
         Integer.valueOf(elementCount));
     }
-    HighlightUtil.highlightElements(shortenedElements, text);
+    HighlightUtils.highlightElements(shortenedElements, text, editor);
   }
 }

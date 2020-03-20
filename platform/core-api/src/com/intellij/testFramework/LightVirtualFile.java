@@ -1,28 +1,15 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework;
 
 import com.intellij.lang.Language;
 import com.intellij.openapi.fileTypes.CharsetUtil;
 import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.fileTypes.FileTypeRegistry;
+import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.LocalTimeCounter;
-import org.jetbrains.annotations.NonNls;
+import com.intellij.util.ThreeState;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
@@ -39,15 +26,15 @@ public class LightVirtualFile extends LightVirtualFileBase {
     this("");
   }
 
-  public LightVirtualFile(@NonNls @NotNull String name) {
+  public LightVirtualFile(@NotNull String name) {
     this(name, "");
   }
 
-  public LightVirtualFile(@NonNls @NotNull String name, @NotNull CharSequence content) {
+  public LightVirtualFile(@NotNull String name, @NotNull CharSequence content) {
     this(name, null, content, LocalTimeCounter.currentTime());
   }
 
-  public LightVirtualFile(@NotNull String name, final FileType fileType, @NotNull CharSequence text) {
+  public LightVirtualFile(@NotNull String name, FileType fileType, @NotNull CharSequence text) {
     this(name, fileType, text, LocalTimeCounter.currentTime());
   }
 
@@ -56,15 +43,15 @@ public class LightVirtualFile extends LightVirtualFileBase {
     setCharset(original.getCharset());
   }
 
-  public LightVirtualFile(@NotNull String name, final FileType fileType, @NotNull CharSequence text, final long modificationStamp) {
+  public LightVirtualFile(@NotNull String name, FileType fileType, @NotNull CharSequence text, long modificationStamp) {
     this(name, fileType, text, CharsetUtil.extractCharsetFromFileContent(null, null, fileType, text), modificationStamp);
   }
 
   public LightVirtualFile(@NotNull String name,
-                          final FileType fileType,
+                          FileType fileType,
                           @NotNull CharSequence text,
                           Charset charset,
-                          final long modificationStamp) {
+                          long modificationStamp) {
     super(name, fileType, modificationStamp);
     myContent = text;
     setCharset(charset);
@@ -74,6 +61,7 @@ public class LightVirtualFile extends LightVirtualFileBase {
     super(name, null, LocalTimeCounter.currentTime());
     myContent = text;
     setLanguage(language);
+    setCharset(CharsetToolkit.UTF8_CHARSET);
   }
 
   public Language getLanguage() {
@@ -115,8 +103,7 @@ public class LightVirtualFile extends LightVirtualFileBase {
   }
 
   @Override
-  @NotNull
-  public byte[] contentsToByteArray() throws IOException {
+  public byte @NotNull [] contentsToByteArray() throws IOException {
     final Charset charset = getCharset();
     final String s = getContent().toString();
     return s.getBytes(charset.name());
@@ -131,6 +118,10 @@ public class LightVirtualFile extends LightVirtualFileBase {
   @NotNull
   public CharSequence getContent() {
     return myContent;
+  }
+
+  public @NotNull ThreeState isTooLargeForIntelligence() {
+    return ThreeState.UNSURE;
   }
 
   @Override

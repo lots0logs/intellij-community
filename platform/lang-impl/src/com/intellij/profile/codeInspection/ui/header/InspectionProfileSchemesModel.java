@@ -12,10 +12,7 @@ import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public abstract class InspectionProfileSchemesModel implements SchemesModel<InspectionProfileModifiableModel> {
   private static final Logger LOG = Logger.getInstance(InspectionProfileSchemesModel.class);
@@ -94,12 +91,7 @@ public abstract class InspectionProfileSchemesModel implements SchemesModel<Insp
   }
 
   private void removeProfile(@NotNull InspectionProfileImpl profile) {
-    for (SingleInspectionProfilePanel panel : myProfilePanels) {
-      if (panel.getProfile().equals(profile)) {
-        myProfilePanels.remove(panel);
-        break;
-      }
-    }
+    myProfilePanels.removeIf(panel -> panel.getProfile().equals(profile));
   }
 
   void updatePanel(@NotNull InspectionProfileSchemesPanel panel) {
@@ -194,7 +186,7 @@ public abstract class InspectionProfileSchemesModel implements SchemesModel<Insp
   @NotNull
   public static List<InspectionProfileImpl> getSortedProfiles(@NotNull InspectionProfileManager appManager,
                                                               @NotNull InspectionProfileManager projectManager) {
-    return ContainerUtil.concat(ContainerUtil.sorted(appManager.getProfiles()),
-                                ContainerUtil.sorted(projectManager.getProfiles()));
+    return ContainerUtil.notNullize(ContainerUtil.concat(ContainerUtil.sorted(appManager.getProfiles()),
+                                                         ContainerUtil.sorted(projectManager.getProfiles())));
   }
 }

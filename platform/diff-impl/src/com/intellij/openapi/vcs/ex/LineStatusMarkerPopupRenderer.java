@@ -18,10 +18,12 @@ import com.intellij.diff.util.DiffUtil;
 import com.intellij.diff.util.TextDiffType;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.DataManager;
+import com.intellij.ide.lightEdit.LightEditCompatible;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.diff.DiffBundle;
 import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.highlighter.EditorHighlighter;
@@ -43,6 +45,7 @@ import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.*;
 import com.intellij.util.ui.JBUI;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -89,7 +92,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     return PlainTextFileType.INSTANCE;
   }
 
-  protected boolean isShowInnerDifferences() {
+  private static boolean isShowInnerDifferences() {
     return VcsApplicationSettings.getInstance().SHOW_LST_WORD_DIFFERENCES;
   }
 
@@ -132,11 +135,10 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     if (!myTracker.isValid()) return;
     final Disposable disposable = Disposer.newDisposable();
 
-    FileType fileType = getFileType();
     List<DiffFragment> wordDiff = computeWordDiff(range);
 
     installMasterEditorHighlighters(editor, range, wordDiff, disposable);
-    JComponent editorComponent = createEditorComponent(editor, range, fileType, wordDiff);
+    JComponent editorComponent = createEditorComponent(editor, range, wordDiff);
 
     ActionToolbar toolbar = buildToolbar(editor, range, mousePosition, disposable);
     toolbar.updateActionsImmediately(); // we need valid ActionToolbar.getPreferredSize() to calc size of popup
@@ -147,12 +149,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     PopupPanel popupPanel = new PopupPanel(editor, toolbar, editorComponent, additionalInfoPanel);
 
     LightweightHint hint = new LightweightHint(popupPanel);
-    HintListener closeListener = new HintListener() {
-      @Override
-      public void hintHidden(@NotNull final EventObject event) {
-        Disposer.dispose(disposable);
-      }
-    };
+    HintListener closeListener = __ -> Disposer.dispose(disposable);
     hint.addHintListener(closeListener);
 
     int line = editor.getCaretModel().getLogicalPosition().line;
@@ -198,7 +195,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
 
   private void installMasterEditorHighlighters(@NotNull Editor editor,
                                                @NotNull Range range,
-                                               @Nullable List<DiffFragment> wordDiff,
+                                               @Nullable List<? extends DiffFragment> wordDiff,
                                                @NotNull Disposable parentDisposable) {
     if (wordDiff == null) return;
     final List<RangeHighlighter> highlighters = new ArrayList<>();
@@ -218,8 +215,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
   @Nullable
   private JComponent createEditorComponent(@NotNull Editor editor,
                                            @NotNull Range range,
-                                           @Nullable FileType fileType,
-                                           @Nullable List<DiffFragment> wordDiff) {
+                                           @Nullable List<? extends DiffFragment> wordDiff) {
     if (range.getType() == Range.INSERTED) return null;
 
     TextRange vcsTextRange = getVcsTextRange(range);
@@ -297,12 +293,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
       DiffUtil.registerAction(action, editorComponent);
     }
 
-    Disposer.register(parentDisposable, new Disposable() {
-      @Override
-      public void dispose() {
-        ActionUtil.getActions(editorComponent).removeAll(actions);
-      }
-    });
+    Disposer.register(parentDisposable, () -> ActionUtil.getActions(editorComponent).removeAll(actions));
 
     return ActionManager.getInstance().createActionToolbar(ActionPlaces.TOOLBAR, new DefaultActionGroup(actions), true);
   }
@@ -385,7 +376,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
       editor.getContentComponent().dispatchEvent(SwingUtilities.convertMouseEvent(e.getComponent(), e, editor.getContentComponent()));
     }
 
-    public int getEditorTextOffset() {
+    int getEditorTextOffset() {
       return EditorFragmentComponent.createEditorFragmentBorder(myEditor).getBorderInsets(myEditorComponent).left;
     }
   }
@@ -416,7 +407,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     @NotNull private final Range myRange;
     @NotNull private final Editor myEditor;
 
-    public RangeMarkerAction(@NotNull Editor editor, @NotNull Range range, @Nullable String actionId) {
+    public RangeMarkerAction(@NotNull Editor editor, @NotNull Range range, @Nullable @NonNls String actionId) {
       myRange = range;
       myEditor = editor;
       if (actionId != null) ActionUtil.copyFrom(this, actionId);
@@ -439,7 +430,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     protected abstract void actionPerformed(@NotNull Editor editor, @NotNull Range range);
   }
 
-  public class ShowNextChangeMarkerAction extends RangeMarkerAction {
+  public class ShowNextChangeMarkerAction extends RangeMarkerAction implements LightEditCompatible {
     public ShowNextChangeMarkerAction(@NotNull Editor editor, @NotNull Range range) {
       super(editor, range, "VcsShowNextChangeMarker");
     }
@@ -452,11 +443,13 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     @Override
     protected void actionPerformed(@NotNull Editor editor, @NotNull Range range) {
       Range targetRange = myTracker.getNextRange(range.getLine1());
-      if (targetRange != null) LineStatusMarkerPopupRenderer.this.scrollAndShow(editor, targetRange);
+      if (targetRange != null) {
+        scrollAndShow(editor, targetRange);
+      }
     }
   }
 
-  public class ShowPrevChangeMarkerAction extends RangeMarkerAction {
+  public class ShowPrevChangeMarkerAction extends RangeMarkerAction implements LightEditCompatible {
     public ShowPrevChangeMarkerAction(@NotNull Editor editor, @NotNull Range range) {
       super(editor, range, "VcsShowPrevChangeMarker");
     }
@@ -469,11 +462,13 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     @Override
     protected void actionPerformed(@NotNull Editor editor, @NotNull Range range) {
       Range targetRange = myTracker.getPrevRange(range.getLine1());
-      if (targetRange != null) LineStatusMarkerPopupRenderer.this.scrollAndShow(editor, targetRange);
+      if (targetRange != null) {
+        scrollAndShow(editor, targetRange);
+      }
     }
   }
 
-  public class CopyLineStatusRangeAction extends RangeMarkerAction {
+  public class CopyLineStatusRangeAction extends RangeMarkerAction implements LightEditCompatible {
     public CopyLineStatusRangeAction(@NotNull Editor editor, @NotNull Range range) {
       super(editor, range, IdeActions.ACTION_COPY);
     }
@@ -490,7 +485,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     }
   }
 
-  public class ShowLineStatusRangeDiffAction extends RangeMarkerAction {
+  public class ShowLineStatusRangeDiffAction extends RangeMarkerAction implements LightEditCompatible {
     public ShowLineStatusRangeDiffAction(@NotNull Editor editor, @NotNull Range range) {
       super(editor, range, IdeActions.ACTION_SHOW_DIFF_COMMON);
     }
@@ -538,7 +533,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     }
   }
 
-  public class ToggleByWordDiffAction extends ToggleAction implements DumbAware {
+  public class ToggleByWordDiffAction extends ToggleAction implements DumbAware, LightEditCompatible {
     @NotNull private final Editor myEditor;
     @NotNull private final Range myRange;
     @Nullable private final Point myMousePosition;
@@ -546,7 +541,7 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
     public ToggleByWordDiffAction(@NotNull Editor editor,
                                   @NotNull Range range,
                                   @Nullable Point position) {
-      super("Highlight Words", null, AllIcons.Actions.Highlighting);
+      super(DiffBundle.message("highlight.words"), null, AllIcons.Actions.Highlighting);
       myEditor = editor;
       myRange = range;
       myMousePosition = position;
@@ -563,7 +558,9 @@ public abstract class LineStatusMarkerPopupRenderer extends LineStatusMarkerRend
       VcsApplicationSettings.getInstance().SHOW_LST_WORD_DIFFERENCES = state;
 
       Range newRange = myTracker.findRange(myRange);
-      if (newRange != null) LineStatusMarkerPopupRenderer.this.showHintAt(myEditor, newRange, myMousePosition);
+      if (newRange != null) {
+        showHintAt(myEditor, newRange, myMousePosition);
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.actions;
 
 import com.intellij.debugger.SourcePosition;
@@ -12,7 +12,10 @@ import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.util.TextRange;
-import com.intellij.psi.*;
+import com.intellij.psi.PsiCodeBlock;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiLambdaExpression;
+import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.Range;
 import com.intellij.xdebugger.XDebugProcess;
@@ -24,9 +27,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.TestOnly;
 
-/**
- * @author egor
- */
 public class StepOutOfBlockAction extends DebuggerAction implements DumbAware {
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
@@ -47,10 +47,7 @@ public class StepOutOfBlockAction extends DebuggerAction implements DumbAware {
         PsiElement block = PsiTreeUtil.getParentOfType(element, PsiCodeBlock.class, PsiLambdaExpression.class);
         if (block instanceof PsiCodeBlock) {
           PsiElement parent = block.getParent();
-          if (parent instanceof PsiMethod || parent instanceof PsiLambdaExpression) {
-            xSession.stepOut();
-          }
-          else {
+          if (!(parent instanceof PsiMethod) && !(parent instanceof PsiLambdaExpression)) {
             TextRange textRange = block.getTextRange();
             Document document = FileDocumentManager.getInstance().getDocument(position.getFile().getVirtualFile());
             if (document != null) {
@@ -58,14 +55,13 @@ public class StepOutOfBlockAction extends DebuggerAction implements DumbAware {
               int endLine = document.getLineNumber(textRange.getEndOffset());
               session.sessionResumed();
               session.stepOver(false, new BlockFilter(startLine, endLine), StepRequest.STEP_LINE);
+              return;
             }
           }
         }
-        else {
-          xSession.stepOut();
-        }
       }
     }
+    xSession.stepOut();
   }
 
   @TestOnly

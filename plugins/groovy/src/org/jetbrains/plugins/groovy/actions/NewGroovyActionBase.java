@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,27 +23,35 @@ import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.util.NlsActions;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiElement;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.config.GroovyFacetUtil;
 import org.jetbrains.plugins.groovy.util.LibrariesUtil;
 
 import javax.swing.*;
+import java.util.function.Supplier;
 
 public abstract class NewGroovyActionBase extends CreateElementActionBase {
 
   @NonNls
   public static final String GROOVY_EXTENSION = ".groovy";
 
-  public NewGroovyActionBase(String text, String description, Icon icon) {
+  public NewGroovyActionBase(@Nls @NlsActions.ActionText String text,
+                             @Nls @NlsActions.ActionDescription String description,
+                             Icon icon) {
+    super(text, description, icon);
+  }
+
+  public NewGroovyActionBase(@NotNull Supplier<String> text, @NotNull Supplier<String> description, Icon icon) {
     super(text, description, icon);
   }
 
   @Override
-  @NotNull
-  protected final PsiElement[] invokeDialog(final Project project, final PsiDirectory directory) {
+  protected final PsiElement @NotNull [] invokeDialog(final Project project, final PsiDirectory directory) {
     MyInputValidator validator = new MyInputValidator(project, directory);
     Messages.showInputDialog(project, getDialogPrompt(), getDialogTitle(), Messages.getQuestionIcon(), "", validator);
 
@@ -65,13 +73,11 @@ public abstract class NewGroovyActionBase extends CreateElementActionBase {
   }
 
   @Override
-  @NotNull
-  protected PsiElement[] create(@NotNull String newName, PsiDirectory directory) throws Exception {
+  protected PsiElement @NotNull [] create(@NotNull String newName, PsiDirectory directory) throws Exception {
     return doCreate(newName, directory);
   }
 
-  @NotNull
-  protected abstract PsiElement[] doCreate(String newName, PsiDirectory directory) throws Exception;
+  protected abstract PsiElement @NotNull [] doCreate(String newName, PsiDirectory directory) throws Exception;
 
 
   @Override

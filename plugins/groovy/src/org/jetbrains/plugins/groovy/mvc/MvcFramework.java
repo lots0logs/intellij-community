@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.plugins.groovy.mvc;
 
@@ -61,7 +61,7 @@ import java.util.regex.Pattern;
 public abstract class MvcFramework {
   protected static final ExtensionPointName<MvcFramework> EP_NAME = ExtensionPointName.create("org.intellij.groovy.mvc.framework");
 
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.plugins.groovy.mvc.MvcFramework");
+  private static final Logger LOG = Logger.getInstance(MvcFramework.class);
   public static final Key<Boolean> CREATE_APP_STRUCTURE = Key.create("CREATE_MVC_APP_STRUCTURE");
   public static final Key<Boolean> UPGRADE = Key.create("UPGRADE");
   @NonNls public static final String GROOVY_STARTER_CONF = "/conf/groovy-starter.conf";
@@ -140,7 +140,7 @@ public abstract class MvcFramework {
                                      "Error", Messages.getErrorIcon()) == Messages.NO) {
           return;
         }
-        ProjectSettingsService.getInstance(module.getProject()).showModuleConfigurationDialog(module.getName(), ClasspathEditor.NAME);
+        ProjectSettingsService.getInstance(module.getProject()).showModuleConfigurationDialog(module.getName(), ClasspathEditor.getName());
       }
       module.putUserData(CREATE_APP_STRUCTURE, null);
       final GeneralCommandLine commandLine = getCreationCommandLine(module);
@@ -171,7 +171,7 @@ public abstract class MvcFramework {
 
   @Nullable
   public VirtualFile findAppRoot(@Nullable Module module) {
-    if (module == null) return null;
+    if (module == null || module.isDisposed()) return null;
 
     String appDirName = getApplicationDirectoryName();
 
@@ -272,7 +272,7 @@ public abstract class MvcFramework {
   }
 
   public PathsList getApplicationClassPath(Module module) {
-    final List<VirtualFile> classPath = ContainerUtil.newArrayList();
+    final List<VirtualFile> classPath = new ArrayList<>();
     classPath.addAll(OrderEnumerator.orderEntries(module).recursively().withoutSdk().getPathsList().getVirtualFiles());
 
     retainOnlyJarsAndDirectories(classPath);
@@ -348,8 +348,10 @@ public abstract class MvcFramework {
     return getFrameworkName();
   }
 
+  @NotNull
   public abstract Icon getIcon(); // 16*16
 
+  @NotNull
   public abstract Icon getToolWindowIcon(); // 13*13
 
   public abstract String getSdkHomePropertyName();

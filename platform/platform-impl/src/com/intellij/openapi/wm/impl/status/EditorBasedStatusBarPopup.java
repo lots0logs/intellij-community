@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.wm.impl.status;
 
 import com.intellij.ide.DataManager;
@@ -21,6 +21,10 @@ import com.intellij.openapi.ui.popup.ListPopup;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileListener;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.VirtualFilePropertyEvent;
+import com.intellij.openapi.vfs.impl.BulkVirtualFileListenerAdapter;
 import com.intellij.openapi.wm.CustomStatusBarWidget;
 import com.intellij.openapi.wm.StatusBar;
 import com.intellij.openapi.wm.StatusBarWidget;
@@ -29,9 +33,7 @@ import com.intellij.ui.awt.RelativePoint;
 import com.intellij.util.Alarm;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.UIUtil;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.annotations.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -41,20 +43,18 @@ import java.lang.ref.WeakReference;
 
 public abstract class EditorBasedStatusBarPopup extends EditorBasedWidget implements StatusBarWidget.Multiframe, CustomStatusBarWidget {
   private final TextPanel.WithIconAndArrows myComponent;
+  private final boolean myWriteableFileRequired;
   private boolean actionEnabled;
   private final Alarm update;
   // store editor here to avoid expensive and EDT-only getSelectedEditor() retrievals
   private volatile Reference<Editor> myEditor = new WeakReference<>(null);
 
-  public EditorBasedStatusBarPopup(@NotNull Project project) {
+  public EditorBasedStatusBarPopup(@NotNull Project project, boolean writeableFileRequired) {
     super(project);
+    myWriteableFileRequired = writeableFileRequired;
     update = new Alarm(this);
-    myComponent = new TextPanel.WithIconAndArrows() {
-      @Override
-      protected boolean shouldPaintArrows() {
-        return actionEnabled;
-      }
-    };
+    myComponent = new TextPanel.WithIconAndArrows();
+    myComponent.setVisible(false);
 
     new ClickListener() {
       @Override
@@ -63,18 +63,33 @@ public abstract class EditorBasedStatusBarPopup extends EditorBasedWidget implem
         showPopup(e);
         return true;
       }
-    }.installOn(myComponent);
+    }.installOn(myComponent, true);
     myComponent.setBorder(WidgetBorder.WIDE);
   }
 
   @Override
-  public void selectionChanged(@NotNull FileEditorManagerEvent event) {
+  public final void selectionChanged(@NotNull FileEditorManagerEvent event) {
     if (ApplicationManager.getApplication().isUnitTestMode()) return;
     VirtualFile newFile = event.getNewFile();
 
-    Project project = getProject();
-    assert project != null;
-    FileEditor fileEditor = newFile == null ? null : FileEditorManager.getInstance(project).getSelectedEditor(newFile);
+    FileEditor fileEditor = newFile == null ? null : FileEditorManager.getInstance(getProject()).getSelectedEditor(newFile);
+    Editor editor = fileEditor instanceof TextEditor ? ((TextEditor)fileEditor).getEditor() : null;
+    setEditor(editor);
+
+    fileChanged(newFile);
+  }
+
+  @ApiStatus.Internal
+  public final void setEditor(@Nullable Editor editor) {
+    myEditor = new WeakReference<>(editor);
+  }
+
+  public final void selectionChanged(@Nullable VirtualFile newFile) {
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      return;
+    }
+
+    FileEditor fileEditor = newFile == null ? null : FileEditorManager.getInstance(getProject()).getSelectedEditor(newFile);
     Editor editor = fileEditor instanceof TextEditor ? ((TextEditor)fileEditor).getEditor() : null;
     myEditor = new WeakReference<>(editor);
 
@@ -100,13 +115,13 @@ public abstract class EditorBasedStatusBarPopup extends EditorBasedWidget implem
   }
 
   @Override
-  public StatusBarWidget copy() {
+  public final StatusBarWidget copy() {
     return createInstance(getProject());
   }
 
   @Nullable
   @Override
-  public WidgetPresentation getPresentation(@NotNull PlatformType type) {
+  public WidgetPresentation getPresentation() {
     return null;
   }
 
@@ -121,6 +136,19 @@ public abstract class EditorBasedStatusBarPopup extends EditorBasedWidget implem
         updateForDocument(document);
       }
     }, this);
+    if (myWriteableFileRequired) {
+      ApplicationManager.getApplication().getMessageBus().connect(this)
+        .subscribe(VirtualFileManager.VFS_CHANGES, new BulkVirtualFileListenerAdapter(new VirtualFileListener() {
+          @Override
+          public void propertyChanged(@NotNull VirtualFilePropertyEvent event) {
+            if (VirtualFile.PROP_WRITABLE.equals(event.getPropertyName())) {
+              updateForFile(event.getFile());
+            }
+          }
+        }));
+    }
+    setEditor(getEditor());
+    update();
   }
 
   protected void updateForDocument(@Nullable("null means update anyway") Document document) {
@@ -228,25 +256,17 @@ public abstract class EditorBasedStatusBarPopup extends EditorBasedWidget implem
 
       myComponent.setVisible(true);
 
-      actionEnabled = state.actionEnabled && file != null && (!requiresWritableFile() || file.isWritable());
+      actionEnabled = state.actionEnabled && isEnabledForFile(file);
 
       String widgetText = state.text;
       String toolTipText = state.toolTip;
-      if (actionEnabled) {
-        myComponent.setForeground(UIUtil.getActiveTextColor());
-        myComponent.setTextAlignment(Component.LEFT_ALIGNMENT);
-      }
-      else {
-        myComponent.setForeground(UIUtil.getInactiveTextColor());
-        myComponent.setTextAlignment(Component.CENTER_ALIGNMENT);
-      }
-
+      myComponent.setEnabled(actionEnabled);
+      myComponent.setTextAlignment(Component.CENTER_ALIGNMENT);
       myComponent.setIcon(state.icon);
       myComponent.setToolTipText(toolTipText);
       myComponent.setText(widgetText);
-      myComponent.invalidate();
 
-      if (myStatusBar != null) {
+      if (myStatusBar != null && !myComponent.isValid()) {
         myStatusBar.updateWidget(ID());
       }
 
@@ -285,7 +305,7 @@ public abstract class EditorBasedStatusBarPopup extends EditorBasedWidget implem
       this("", "", false);
     }
 
-    public WidgetState(String toolTip, String text, boolean actionEnabled) {
+    public WidgetState(@Nls(capitalization = Nls.Capitalization.Sentence) String toolTip, @Nls String text, boolean actionEnabled) {
       this.toolTip = toolTip;
       this.text = text;
       this.actionEnabled = actionEnabled;
@@ -308,18 +328,24 @@ public abstract class EditorBasedStatusBarPopup extends EditorBasedWidget implem
     }
   }
 
-  protected boolean requiresWritableFile() {
-    return true;
-  }
-
   @NotNull
   protected abstract WidgetState getWidgetState(@Nullable VirtualFile file);
+
+  /**
+   * @param file result of {@link EditorBasedStatusBarPopup#getSelectedFile()}
+   * @return false if widget should be disabled for {@code file}
+   * even if {@link EditorBasedStatusBarPopup#getWidgetState(VirtualFile)} returned {@link WidgetState#actionEnabled}.
+   */
+  protected boolean isEnabledForFile(@Nullable VirtualFile file) {
+    return file == null || !myWriteableFileRequired || file.isWritable();
+  }
 
   @Nullable
   protected abstract ListPopup createPopup(DataContext context);
 
-  protected abstract void registerCustomListeners();
+  protected void registerCustomListeners() {
+  }
 
   @NotNull
-  protected abstract StatusBarWidget createInstance(Project project);
+  protected abstract StatusBarWidget createInstance(@NotNull Project project);
 }

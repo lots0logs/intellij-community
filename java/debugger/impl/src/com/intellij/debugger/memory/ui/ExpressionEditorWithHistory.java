@@ -2,6 +2,7 @@
 package com.intellij.debugger.memory.ui;
 
 import com.intellij.codeInsight.lookup.LookupManager;
+import com.intellij.debugger.JavaDebuggerBundle;
 import com.intellij.debugger.engine.DebuggerUtils;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -14,8 +15,7 @@ import com.intellij.openapi.ui.popup.PopupStep;
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep;
 import com.intellij.psi.PsiClass;
 import com.intellij.psi.search.GlobalSearchScope;
-import com.intellij.ui.ColoredListCellRenderer;
-import com.intellij.ui.SimpleTextAttributes;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.popup.list.ListPopupImpl;
 import com.intellij.xdebugger.XExpression;
 import com.intellij.xdebugger.evaluation.XDebuggerEditorsProvider;
@@ -37,7 +37,7 @@ class ExpressionEditorWithHistory extends XDebuggerExpressionEditor {
     super(project, debuggerEditorsProvider, HISTORY_ID_PREFIX + className, null,
           XExpressionImpl.EMPTY_EXPRESSION, false, true, true);
 
-    new AnAction("InstancesWindow.ShowHistory") {
+    new AnAction(JavaDebuggerBundle.message("instances.window.show.history")) {
       @Override
       public void actionPerformed(@NotNull AnActionEvent e) {
         showHistory();
@@ -49,23 +49,20 @@ class ExpressionEditorWithHistory extends XDebuggerExpressionEditor {
       }
     }.registerCustomShortcutSet(CustomShortcutSet.fromString("DOWN"), getComponent(), parentDisposable);
 
-    new SwingWorker<Void, Void>() {
-      @Override
-      protected Void doInBackground() {
-        ApplicationManager.getApplication().runReadAction(() -> {
+    ApplicationManager.getApplication().executeOnPooledThread(()->
+      ApplicationManager.getApplication().runReadAction(() -> {
+        if (!project.isDisposed()) {
           final PsiClass psiClass = DebuggerUtils.findClass(className,
                                                             project, GlobalSearchScope.allScope(project));
-          ApplicationManager.getApplication().invokeLater(() -> setContext(psiClass));
-        });
-        return null;
-      }
-    }.execute();
+          ApplicationManager.getApplication().invokeLater(() -> setContext(psiClass), project.getDisposed());
+        }
+      }));
   }
 
   private void showHistory() {
     List<XExpression> expressions = getRecentExpressions();
     if (!expressions.isEmpty()) {
-      ListPopupImpl historyPopup = new ListPopupImpl(new BaseListPopupStep<XExpression>(null, expressions) {
+      ListPopupImpl historyPopup = new ListPopupImpl(getProject(), new BaseListPopupStep<XExpression>(null, expressions) {
         @Override
         public PopupStep onChosen(XExpression selectedValue, boolean finalChoice) {
           setExpression(selectedValue);
@@ -75,13 +72,7 @@ class ExpressionEditorWithHistory extends XDebuggerExpressionEditor {
       }) {
         @Override
         protected ListCellRenderer getListElementRenderer() {
-          return new ColoredListCellRenderer<XExpression>() {
-            @Override
-            protected void customizeCellRenderer(@NotNull JList list, XExpression value, int index,
-                                                 boolean selected, boolean hasFocus) {
-              append(value.getExpression(), SimpleTextAttributes.REGULAR_ATTRIBUTES);
-            }
-          };
+          return SimpleListCellRenderer.create("", XExpression::getExpression);
         }
       };
 

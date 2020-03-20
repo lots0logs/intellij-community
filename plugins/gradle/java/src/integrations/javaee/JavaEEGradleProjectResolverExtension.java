@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.integrations.javaee;
 
 import com.intellij.openapi.externalSystem.model.DataNode;
@@ -27,6 +13,7 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtil;
+import gnu.trove.THashMap;
 import org.gradle.tooling.model.idea.IdeaModule;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.gradle.model.ExternalDependency;
@@ -80,7 +67,7 @@ public class JavaEEGradleProjectResolverExtension extends AbstractProjectResolve
     if (projectDataNode != null) {
       archivesMap = projectDataNode.getUserData(ARCHIVES_ARTIFACTS);
       if (archivesMap == null) {
-        archivesMap = ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+        archivesMap = new THashMap<>(FileUtil.PATH_HASHING_STRATEGY);
         projectDataNode.putUserData(ARCHIVES_ARTIFACTS, archivesMap);
       }
 
@@ -121,7 +108,7 @@ public class JavaEEGradleProjectResolverExtension extends AbstractProjectResolve
       if (projectDataNode != null) {
         List<Pair<DataNode<? extends ModuleData>, EarConfiguration>> ears = projectDataNode.getUserData(EAR_CONFIGURATIONS);
         if (ears == null) {
-          ears = ContainerUtil.newArrayList();
+          ears = new ArrayList<>();
           projectDataNode.putUserData(EAR_CONFIGURATIONS, ears);
         }
         ears.add(Pair.create(findTargetModuleNode.getValue(), earConfiguration));
@@ -132,12 +119,12 @@ public class JavaEEGradleProjectResolverExtension extends AbstractProjectResolve
 
   @NotNull
   @Override
-  public Set<Class> getExtraProjectModelClasses() {
+  public Set<Class<?>> getExtraProjectModelClasses() {
     return ContainerUtil.set(WebConfiguration.class, EarConfiguration.class);
   }
 
   @Override
-  public void onResolveEnd(@NotNull DataNode<ProjectData> projectDataNode) {
+  public void resolveFinished(@NotNull DataNode<ProjectData> projectDataNode) {
     List<Pair<DataNode<? extends ModuleData>, EarConfiguration>> earConfigurations = projectDataNode.getUserData(EAR_CONFIGURATIONS);
     if (earConfigurations == null) return;
     for (Pair<DataNode<? extends ModuleData>, EarConfiguration> pair : earConfigurations) {
@@ -200,7 +187,7 @@ public class JavaEEGradleProjectResolverExtension extends AbstractProjectResolve
     final Map<String, String> allArtifactsMap;
     final Map<String, String> archivesMap = ideProject.getUserData(ARCHIVES_ARTIFACTS);
     if (archivesMap != null && !archivesMap.isEmpty()) {
-      allArtifactsMap = ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+      allArtifactsMap = new THashMap<>(FileUtil.PATH_HASHING_STRATEGY);
       allArtifactsMap.putAll(artifactsMap);
       allArtifactsMap.putAll(archivesMap);
     }
@@ -212,7 +199,7 @@ public class JavaEEGradleProjectResolverExtension extends AbstractProjectResolve
     buildDependencies(resolverCtx, sourceSetMap, allArtifactsMap, fakeNode, dependencies, null);
 
     LibraryDataNodeSubstitutor librarySubstitutor =
-      new LibraryDataNodeSubstitutor(null, null, null, sourceSetMap, moduleOutputsMap, artifactsMap);
+      new LibraryDataNodeSubstitutor(resolverCtx, null, null, null, sourceSetMap, moduleOutputsMap, artifactsMap);
     final Collection<DataNode<LibraryDependencyData>> libraryDependencies = findAllRecursively(fakeNode, ProjectKeys.LIBRARY_DEPENDENCY);
     for (DataNode<LibraryDependencyData> libraryDependencyDataNode : libraryDependencies) {
       librarySubstitutor.run(libraryDependencyDataNode);

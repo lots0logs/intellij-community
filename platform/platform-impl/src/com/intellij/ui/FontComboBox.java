@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.openapi.application.Application;
@@ -33,11 +19,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * @author Sergey.Malenkov
- */
 public final class FontComboBox extends ComboBox {
-  private static final FontInfoRenderer RENDERER = new FontInfoRenderer();
 
   private Model myModel;
   private final JBDimension mySize;
@@ -56,8 +38,8 @@ public final class FontComboBox extends ComboBox {
     size.width = size.height * 8;
     // preScaled=true as 'size' reflects already scaled font
     mySize = JBDimension.create(size, true);
-    setSwingPopup(true);
-    setRenderer(RENDERER);
+    setSwingPopup(false);
+    setRenderer(new FontInfoRenderer());
     getModel().addListDataListener(new ListDataListener() {
       @Override
       public void intervalAdded(ListDataEvent e) {}
@@ -67,6 +49,7 @@ public final class FontComboBox extends ComboBox {
 
       @Override
       public void contentsChanged(ListDataEvent e) {
+        if (e.getIndex0() != -42 || e.getIndex1() != -42) return;
         ComboPopup popup = FontComboBox.this.getPopup();
         if (popup != null && popup.isVisible()) {
           popup.hide();
@@ -87,10 +70,7 @@ public final class FontComboBox extends ComboBox {
   }
 
   public void setMonospacedOnly(boolean monospaced) {
-    if (myModel.myMonospacedOnly != monospaced) {
-      myModel.myMonospacedOnly = monospaced;
-      myModel.updateSelectedItem();
-    }
+    myModel.setMonospacedOnly(monospaced);
   }
 
   public String getFontName() {
@@ -135,7 +115,7 @@ public final class FontComboBox extends ComboBox {
           List<FontInfo> all = FontInfo.getAll(withAllStyles);
           application.invokeLater(() -> {
             setFonts(all, filterNonLatin);
-            updateSelectedItem();
+            onModelToggled();
           }, application.getAnyModalityState());
         });
       }
@@ -156,10 +136,18 @@ public final class FontComboBox extends ComboBox {
       myMonoFonts = monoFonts;
     }
 
-    private void updateSelectedItem() {
+    public void setMonospacedOnly(boolean monospaced) {
+      if (myMonospacedOnly != monospaced) {
+        myMonospacedOnly = monospaced;
+        onModelToggled();
+      }
+    }
+
+    void onModelToggled() {
       Object item = getSelectedItem();
       setSelectedItem(null);
       setSelectedItem(item);
+      fireContentsChanged(this, -42, -42);
     }
 
     @Override

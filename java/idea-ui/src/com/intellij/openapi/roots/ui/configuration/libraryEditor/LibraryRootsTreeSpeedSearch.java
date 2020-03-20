@@ -15,6 +15,7 @@
  */
 package com.intellij.openapi.roots.ui.configuration.libraryEditor;
 
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.TreeSpeedSearch;
 import com.intellij.ui.treeStructure.Tree;
 
@@ -23,9 +24,6 @@ import javax.swing.tree.TreePath;
 import java.io.File;
 import java.util.StringTokenizer;
 
-/**
-* @author nik
-*/
 class LibraryRootsTreeSpeedSearch extends TreeSpeedSearch {
   LibraryRootsTreeSpeedSearch(final Tree tree) {
     super(tree);
@@ -40,7 +38,7 @@ class LibraryRootsTreeSpeedSearch extends TreeSpeedSearch {
         return false;
       }
       if (!hasCapitals(pattern)) { // be case-sensitive only if user types capitals
-        str = str.toLowerCase();
+        str = StringUtil.toLowerCase(str);
       }
       if (pattern.contains(File.separator)) {
         return compare(str,pattern);

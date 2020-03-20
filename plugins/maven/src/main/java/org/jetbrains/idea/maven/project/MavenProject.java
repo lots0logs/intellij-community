@@ -37,6 +37,9 @@ import gnu.trove.THashSet;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.idea.maven.dom.MavenDomUtil;
+import org.jetbrains.idea.maven.dom.MavenPropertyResolver;
+import org.jetbrains.idea.maven.dom.model.MavenDomProjectModel;
 import org.jetbrains.idea.maven.importing.MavenAnnotationProcessorsModuleService;
 import org.jetbrains.idea.maven.importing.MavenExtraArtifactType;
 import org.jetbrains.idea.maven.importing.MavenImporter;
@@ -44,8 +47,8 @@ import org.jetbrains.idea.maven.model.*;
 import org.jetbrains.idea.maven.plugins.api.MavenModelPropertiesPatcher;
 import org.jetbrains.idea.maven.server.MavenEmbedderWrapper;
 import org.jetbrains.idea.maven.server.NativeMavenProjectHolder;
-import org.jetbrains.idea.maven.utils.*;
 import org.jetbrains.idea.maven.utils.MavenJDOMUtil;
+import org.jetbrains.idea.maven.utils.*;
 import org.jetbrains.jps.util.JpsPathUtil;
 
 import java.io.*;
@@ -694,6 +697,7 @@ public class MavenProject {
                                                                          Collections.singleton(getFile()),
                                                                          getActivatedProfilesIds(),
                                                                          locator);
+    MavenUtil.notifySyncForUnresolved(project, results);
     final MavenProjectReaderResult result = results.iterator().next();
     MavenProjectChanges changes = set(result, generalSettings, false, result.readingProblems.isEmpty(), false);
 
@@ -749,7 +753,7 @@ public class MavenProject {
 
     for (Map.Entry<String, String> each : state.myModulesPathsAndNames.entrySet()) {
       if (LocalFileSystem.getInstance().findFileByPath(each.getKey()) == null) {
-        result.add(createDependencyProblem(file, ProjectBundle.message("maven.project.problem.moduleNotFound", each.getValue())));
+        result.add(createDependencyProblem(file, MavenProjectBundle.message("maven.project.problem.moduleNotFound", each.getValue())));
       }
     }
 
@@ -762,27 +766,27 @@ public class MavenProject {
 
   private static void validateParent(VirtualFile file, State state, List<MavenProjectProblem> result) {
     if (!isParentResolved(state)) {
-      result.add(createDependencyProblem(file, ProjectBundle.message("maven.project.problem.parentNotFound", state.myParentId)));
+      result.add(createDependencyProblem(file, MavenProjectBundle.message("maven.project.problem.parentNotFound", state.myParentId)));
     }
   }
 
   private static void validateDependencies(VirtualFile file, State state, List<MavenProjectProblem> result) {
     for (MavenArtifact each : getUnresolvedDependencies(state)) {
-      result.add(createDependencyProblem(file, ProjectBundle.message("maven.project.problem.unresolvedDependency",
-                                                                     each.getDisplayStringWithType())));
+      result.add(createDependencyProblem(file, MavenProjectBundle.message("maven.project.problem.unresolvedDependency",
+                                                                          each.getDisplayStringWithType())));
     }
   }
 
   private static void validateExtensions(VirtualFile file, State state, List<MavenProjectProblem> result) {
     for (MavenArtifact each : getUnresolvedExtensions(state)) {
-      result.add(createDependencyProblem(file, ProjectBundle.message("maven.project.problem.unresolvedExtension",
-                                                                     each.getDisplayStringSimple())));
+      result.add(createDependencyProblem(file, MavenProjectBundle.message("maven.project.problem.unresolvedExtension",
+                                                                          each.getDisplayStringSimple())));
     }
   }
 
   private static void validatePlugins(VirtualFile file, State state, List<MavenProjectProblem> result) {
     for (MavenPlugin each : getUnresolvedPlugins(state)) {
-      result.add(createDependencyProblem(file, ProjectBundle.message("maven.project.problem.unresolvedPlugin", each)));
+      result.add(createDependencyProblem(file, MavenProjectBundle.message("maven.project.problem.unresolvedPlugin", each)));
     }
   }
 
@@ -912,7 +916,7 @@ public class MavenProject {
     }
 
     MavenProjectsManager projectsManager = MavenProjectsManager.getInstance(project);
-    Module module = projectsManager.findModule(this);
+    Module module =  projectsManager.findModule(this);
     if (module != null) {
       MavenAnnotationProcessorsModuleService apService = MavenAnnotationProcessorsModuleService.getInstance(module);
       for (String moduleName : apService.getAnnotationProcessorModules()) {
@@ -958,11 +962,11 @@ public class MavenProject {
 
   @NotNull
   public Set<String> getSupportedDependencyScopes() {
-    Set<String> result = new THashSet<>(Arrays.asList(MavenConstants.SCOPE_COMPILE,
-                                                      MavenConstants.SCOPE_PROVIDED,
-                                                      MavenConstants.SCOPE_RUNTIME,
-                                                      MavenConstants.SCOPE_TEST,
-                                                      MavenConstants.SCOPE_SYSTEM));
+    Set<String> result = ContainerUtil.set(MavenConstants.SCOPE_COMPILE,
+                                           MavenConstants.SCOPE_PROVIDED,
+                                           MavenConstants.SCOPE_RUNTIME,
+                                           MavenConstants.SCOPE_TEST,
+                                           MavenConstants.SCOPE_SYSTEM);
     for (MavenImporter each : getSuitableImporters()) {
       each.getSupportedDependencyScopes(result);
     }
@@ -1064,16 +1068,35 @@ public class MavenProject {
   }
 
   @Nullable
-  public String getEncoding() {
-    String encoding = myState.myProperties.getProperty("project.build.sourceEncoding");
-    if (encoding != null) return encoding;
+  public String getSourceEncoding() {
+    return myState.myProperties.getProperty("project.build.sourceEncoding");
+  }
 
+  @Nullable
+  public String getResourceEncoding(Project project) {
     Element pluginConfiguration = getPluginConfiguration("org.apache.maven.plugins", "maven-resources-plugin");
     if (pluginConfiguration != null) {
-      return pluginConfiguration.getChildTextTrim("encoding");
-    }
 
-    return null;
+      String encoding = pluginConfiguration.getChildTextTrim("encoding");
+      if (encoding == null) {
+        return null;
+      }
+
+      if (encoding.startsWith("$")) {
+        MavenDomProjectModel domModel = MavenDomUtil.getMavenDomProjectModel(project, this.getFile());
+        if (domModel == null) {
+          MavenLog.LOG.warn("cannot get MavenDomProjectModel to find encoding");
+          return getSourceEncoding();
+        }
+        else {
+          MavenPropertyResolver.resolve(encoding, domModel);
+        }
+      }
+      else {
+        return encoding;
+      }
+    }
+    return getSourceEncoding();
   }
 
   @Nullable

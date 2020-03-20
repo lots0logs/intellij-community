@@ -20,22 +20,19 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jps.model.JpsSimpleElement;
 import org.jetbrains.jps.model.ex.JpsElementBase;
 
-/**
- * @author nik
- */
 public class JavaSourceRootProperties extends JpsElementBase<JavaSourceRootProperties> implements JpsSimpleElement<JavaSourceRootProperties> {
   private String myPackagePrefix = "";
   private boolean myForGeneratedSources;
 
   /**
-   * @deprecated do not call this method directly, use {@link org.jetbrains.jps.model.java.JpsJavaExtensionService#createSourceRootProperties(String)} instead
+   * @deprecated do not call this method directly, use {@link JpsJavaExtensionService#createSourceRootProperties(String)} instead
    */
   @Deprecated
   public JavaSourceRootProperties() {
   }
 
   /**
-   * @deprecated do not call this method directly, use {@link org.jetbrains.jps.model.java.JpsJavaExtensionService#createSourceRootProperties(String)} instead
+   * @deprecated do not call this method directly, use {@link JpsJavaExtensionService#createSourceRootProperties(String)} instead
    */
   @Deprecated
   public JavaSourceRootProperties(@NotNull String packagePrefix) {
@@ -43,7 +40,7 @@ public class JavaSourceRootProperties extends JpsElementBase<JavaSourceRootPrope
   }
 
   /**
-   * @deprecated do not call this method directly, use {@link org.jetbrains.jps.model.java.JpsJavaExtensionService#createSourceRootProperties(String, boolean)} instead
+   * @deprecated do not call this method directly, use {@link JpsJavaExtensionService#createSourceRootProperties(String, boolean)} instead
    */
   @Deprecated
   public JavaSourceRootProperties(@NotNull String packagePrefix, boolean forGeneratedSources) {

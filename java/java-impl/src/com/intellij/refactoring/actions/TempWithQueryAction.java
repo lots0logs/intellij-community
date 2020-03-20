@@ -25,14 +25,14 @@ import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.tempWithQuery.TempWithQueryHandler;
 import org.jetbrains.annotations.NotNull;
 
-public class TempWithQueryAction extends BaseRefactoringAction{
+public class TempWithQueryAction extends BaseJavaRefactoringAction{
   @Override
   public boolean isAvailableInEditorOnly() {
     return true;
   }
 
   @Override
-  public boolean isEnabledOnElements(@NotNull PsiElement[] elements) {
+  public boolean isEnabledOnElements(PsiElement @NotNull [] elements) {
     return false;
   }
 

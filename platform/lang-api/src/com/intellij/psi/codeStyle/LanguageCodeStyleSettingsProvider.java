@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.codeStyle;
 
 import com.intellij.application.options.IndentOptionsEditor;
@@ -11,6 +11,7 @@ import com.intellij.lang.Language;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings.IndentOptions;
 import com.intellij.util.containers.ContainerUtil;
@@ -20,7 +21,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;
-import java.util.*;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -69,7 +74,7 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
    */
   @NotNull
   public String getExternalLanguageId() {
-    return getLanguage().getID().toLowerCase(Locale.ENGLISH);
+    return StringUtil.toLowerCase(getLanguage().getID());
   }
 
   /**
@@ -119,9 +124,8 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
   /**
    * @deprecated use PredefinedCodeStyle extension point instead
    */
-  @NotNull
   @Deprecated
-  public PredefinedCodeStyle[] getPredefinedCodeStyles() {
+  public PredefinedCodeStyle @NotNull [] getPredefinedCodeStyles() {
     return PredefinedCodeStyle.EMPTY_ARRAY;
   }
 
@@ -182,8 +186,7 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
 
   @Nullable
   public static CommonCodeStyleSettings getDefaultCommonSettings(Language lang) {
-    final LanguageCodeStyleSettingsProvider provider = forLanguage(lang);
-    //noinspection deprecation
+    LanguageCodeStyleSettingsProvider provider = forLanguage(lang);
     return provider != null ? provider.getDefaultCommonSettings() : null;
   }
 
@@ -300,6 +303,10 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
             myCollectedFields.add(commenterOption.name());
           }
           break;
+        case INDENT_SETTINGS:
+          for (IndentOption indentOption : IndentOption.values()) {
+            myCollectedFields.add(indentOption.name());
+          }
         default:
           // ignore
       }
@@ -360,6 +367,11 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
 
   private static final AtomicReference<List<LanguageCodeStyleSettingsProvider>> ourSettingsPagesProviders = new AtomicReference<>();
 
+  @ApiStatus.Internal
+  public static void resetSettingsPagesProviders() {
+    ourSettingsPagesProviders.set(null);
+  }
+
   /**
    * @return A list of providers implementing {@link #createConfigurable(CodeStyleSettings, CodeStyleSettings)}
    */
@@ -369,11 +381,14 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
 
   @NotNull
   protected static List<LanguageCodeStyleSettingsProvider> calcSettingPagesProviders() {
-    List<LanguageCodeStyleSettingsProvider> settingsPagesProviders = ContainerUtil.newArrayList();
+    List<LanguageCodeStyleSettingsProvider> settingsPagesProviders = new ArrayList<>();
     for (LanguageCodeStyleSettingsProvider provider : EP_NAME.getExtensionList()) {
       try {
-        provider.getClass().getDeclaredMethod("createConfigurable", CodeStyleSettings.class, CodeStyleSettings.class);
-        settingsPagesProviders.add(provider);
+        Method configMethod = provider.getClass().getMethod("createConfigurable", CodeStyleSettings.class, CodeStyleSettings.class);
+        Class declaringClass = configMethod.getDeclaringClass();
+        if (!declaringClass.equals(LanguageCodeStyleSettingsProvider.class)) {
+          settingsPagesProviders.add(provider);
+        }
       }
       catch (NoSuchMethodException e) {
         // Do not add the provider.
@@ -396,5 +411,19 @@ public abstract class LanguageCodeStyleSettingsProvider extends CodeStyleSetting
 
   public List<CodeStylePropertyAccessor> getAdditionalAccessors(@NotNull Object codeStyleObject) {
     return Collections.emptyList();
+  }
+
+  /**
+   * Tells is the provider supports external formats such as Json and .editorconfig. By default it is assumed that language
+   * code style settings use a standard way to define settings, namely via public fields which have a straightforward mapping
+   * between the fields and human-readable stored values without extra transformation. If not, the provider must implement
+   * {@code getAccessor()} method for fields using magic constants, specially encoded strings and etc. and
+   * {@code getAdditionalAccessors()} method for non-stanard properties using their own {@code writer/readExternal() methods}
+   * for serialization.
+   * @return True (default) if standard properties are supported, false to disable language settings to avoid export
+   * partial, non-readable etc. data till proper accessors are implemented.
+   */
+  public boolean supportsExternalFormats() {
+    return true;
   }
 }

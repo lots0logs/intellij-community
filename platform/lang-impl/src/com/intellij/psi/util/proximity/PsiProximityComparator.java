@@ -16,7 +16,6 @@
 
 package com.intellij.psi.util.proximity;
 
-import com.intellij.extapi.psi.MetadataPsiElementBase;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.util.Computable;
@@ -38,8 +37,6 @@ import java.util.Map;
 public class PsiProximityComparator implements Comparator<Object> {
   public static final Key<ProximityStatistician> STATISTICS_KEY = Key.create("proximity");
   public static final Key<ProximityWeigher> WEIGHER_KEY = Key.create("proximity");
-  @SuppressWarnings("unchecked") private static final Weigher<PsiElement, ProximityLocation>[] PROXIMITY_WEIGHERS =
-    WeighingService.getWeighers(WEIGHER_KEY).toArray(new Weigher[0]);
   private static final Key<Module> MODULE_BY_LOCATION = Key.create("ModuleByLocation");
   private final PsiElement myContext;
 
@@ -86,8 +83,6 @@ public class PsiProximityComparator implements Comparator<Object> {
   @Nullable
   public static WeighingComparable<PsiElement, ProximityLocation> getProximity(final PsiElement element, final PsiElement context) {
     if (element == null) return null;
-    //noinspection deprecation,ScheduledForRemoval
-    if (element instanceof MetadataPsiElementBase) return null;
     final Module contextModule = context != null ? ModuleUtilCore.findModuleForPsiElement(context) : null;
     return WeighingService.weigh(WEIGHER_KEY, element, new ProximityLocation(context, contextModule));
   }
@@ -95,10 +90,7 @@ public class PsiProximityComparator implements Comparator<Object> {
   @Nullable
   public static WeighingComparable<PsiElement, ProximityLocation> getProximity(final Computable<? extends PsiElement> elementComputable, final PsiElement context, ProcessingContext processingContext) {
     PsiElement element = elementComputable.compute();
-    if (element == null) return null;
-    //noinspection deprecation,ScheduledForRemoval
-    if (element instanceof MetadataPsiElementBase) return null;
-    if (context == null) return null;
+    if (element == null || context == null) return null;
     Module contextModule = processingContext.get(MODULE_BY_LOCATION);
     if (contextModule == null) {
       contextModule = ModuleUtilCore.findModuleForPsiElement(context);
@@ -107,6 +99,6 @@ public class PsiProximityComparator implements Comparator<Object> {
 
     return new WeighingComparable<>(elementComputable,
                                     new ProximityLocation(context, contextModule, processingContext),
-                                    PROXIMITY_WEIGHERS);
+                                    WeighingService.getWeighers(WEIGHER_KEY).toArray(new Weigher[0]));
   }
 }

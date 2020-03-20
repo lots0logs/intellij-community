@@ -15,21 +15,25 @@
  */
 package com.intellij.refactoring.move.moveMembers;
 
+import com.intellij.java.refactoring.JavaRefactoringBundle;
+import com.intellij.lang.Language;
+import com.intellij.lang.jvm.JvmLanguage;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.refactoring.move.MoveCallback;
 import com.intellij.refactoring.move.MoveHandlerDelegate;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class MoveMembersHandler extends MoveHandlerDelegate {
   @Override
-  public boolean canMove(final PsiElement[] elements, @Nullable final PsiElement targetContainer) {
+  public boolean canMove(final PsiElement[] elements, @Nullable final PsiElement targetContainer, @Nullable PsiReference reference) {
     for(PsiElement element: elements) {
       if (!isFieldOrStaticMethod(element)) return false;
     }
-    return targetContainer == null || super.canMove(elements, targetContainer);
+    return targetContainer == null || super.canMove(elements, targetContainer, reference);
   }
 
   @Override
@@ -59,5 +63,16 @@ public class MoveMembersHandler extends MoveHandlerDelegate {
       return ((PsiMethod) element).hasModifierProperty(PsiModifier.STATIC);
     }
     return false;
+  }
+
+  @Nullable
+  @Override
+  public String getActionName(PsiElement @NotNull [] elements) {
+    return JavaRefactoringBundle.message("move.members.action.name");
+  }
+
+  @Override
+  public boolean supportsLanguage(@NotNull Language language) {
+    return language instanceof JvmLanguage;
   }
 }

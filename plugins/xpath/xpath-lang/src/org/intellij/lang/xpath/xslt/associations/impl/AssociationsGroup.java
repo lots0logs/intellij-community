@@ -32,8 +32,7 @@ public class AssociationsGroup extends ActionGroup {
     }
 
     @Override
-    @NotNull
-    public AnAction[] getChildren(@Nullable AnActionEvent e) {
+    public AnAction @NotNull [] getChildren(@Nullable AnActionEvent e) {
         if (!isEnabled(e)) return AnAction.EMPTY_ARRAY;
 
         final Project project = getEventProject(e);
@@ -83,6 +82,6 @@ public class AssociationsGroup extends ActionGroup {
 
     @Nullable
     static PsiFile getPsiFile(@Nullable AnActionEvent e) {
-        return e != null ? CommonDataKeys.PSI_FILE.getData(e.getDataContext()) : null;
+        return e != null ? e.getData(CommonDataKeys.PSI_FILE) : null;
     }
 }

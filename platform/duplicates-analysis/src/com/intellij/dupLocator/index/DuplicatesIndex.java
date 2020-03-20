@@ -48,7 +48,7 @@ import java.util.Map;
 /**
  * @author Maxim.Mossienko on 12/11/13.
  */
-public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayList> implements PsiDependentIndex {
+public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayList> {
   static boolean ourEnabled = SystemProperties.getBooleanProperty("idea.enable.duplicates.online.calculation",
                                                                   true);
   static final boolean ourEnabledLightProfiles = true;
@@ -122,15 +122,15 @@ public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayL
       if (profile == null || !profile.acceptsContentForIndexing(inputData)) return Collections.emptyMap();
 
       try {
-        FileContentImpl fileContent = (FileContentImpl)inputData;
+        PsiDependentFileContent fileContent = (PsiDependentFileContent)inputData;
 
         if (profile instanceof LightDuplicateProfile && ourEnabledLightProfiles) {
           final THashMap<Integer, TIntArrayList> result = new THashMap<>();
-          LighterAST ast = fileContent.getLighterASTForPsiDependentIndex();
+          LighterAST ast = fileContent.getLighterAST();
 
           ((LightDuplicateProfile)profile).process(ast, new LightDuplicateProfile.Callback() {
             @Override
-            public void process(int hash, int hash2, @NotNull LighterAST ast, @NotNull LighterASTNode... nodes) {
+            public void process(int hash, int hash2, @NotNull LighterAST ast, LighterASTNode @NotNull ... nodes) {
               TIntArrayList list = result.get(hash);
               if (list == null) {
                 result.put(hash, list = new TIntArrayList(2));
@@ -144,7 +144,7 @@ public class DuplicatesIndex extends FileBasedIndexExtension<Integer, TIntArrayL
         MyFragmentsCollector collector = new MyFragmentsCollector(profile, ((LanguageFileType)type).getLanguage());
         DuplocateVisitor visitor = profile.createVisitor(collector, true);
 
-        visitor.visitNode(fileContent.getPsiFileForPsiDependentIndex());
+        visitor.visitNode(fileContent.getPsiFile());
 
         return collector.getMap();
       } catch (StackOverflowError ae) {

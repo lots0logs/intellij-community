@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.compiled;
 
 import com.intellij.navigation.ItemPresentation;
@@ -13,7 +13,8 @@ import com.intellij.psi.impl.java.stubs.PsiFieldStub;
 import com.intellij.psi.impl.source.SourceTreeToPsiMap;
 import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.search.SearchScope;
-import com.intellij.ui.RowIcon;
+import com.intellij.ui.IconManager;
+import com.intellij.ui.icons.RowIcon;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.PlatformIcons;
 import gnu.trove.THashSet;
@@ -21,9 +22,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.Objects;
 import java.util.Set;
-
-import static com.intellij.util.ObjectUtils.assertNotNull;
 
 public class ClsFieldImpl extends ClsMemberImpl<PsiFieldStub> implements PsiField, PsiVariableEx, ClsModifierListOwner {
   private final NotNullLazyValue<PsiTypeElement> myTypeElement;
@@ -53,8 +53,7 @@ public class ClsFieldImpl extends ClsMemberImpl<PsiFieldStub> implements PsiFiel
   }
 
   @Override
-  @NotNull
-  public PsiElement[] getChildren() {
+  public PsiElement @NotNull [] getChildren() {
     return getChildren(getDocComment(), getModifierList(), getTypeElement(), getNameIdentifier());
   }
 
@@ -66,7 +65,7 @@ public class ClsFieldImpl extends ClsMemberImpl<PsiFieldStub> implements PsiFiel
   @Override
   @NotNull
   public PsiType getType() {
-    return assertNotNull(getTypeElement()).getType();
+    return Objects.requireNonNull(getTypeElement()).getType();
   }
 
   @Override
@@ -76,12 +75,12 @@ public class ClsFieldImpl extends ClsMemberImpl<PsiFieldStub> implements PsiFiel
 
   @Override
   public PsiModifierList getModifierList() {
-    return assertNotNull(getStub().findChildStubByType(JavaStubElementTypes.MODIFIER_LIST)).getPsi();
+    return Objects.requireNonNull(getStub().findChildStubByType(JavaStubElementTypes.MODIFIER_LIST)).getPsi();
   }
 
   @Override
   public boolean hasModifierProperty(@NotNull String name) {
-    return assertNotNull(getModifierList()).hasModifierProperty(name);
+    return Objects.requireNonNull(getModifierList()).hasModifierProperty(name);
   }
 
   @Override
@@ -206,7 +205,8 @@ public class ClsFieldImpl extends ClsMemberImpl<PsiFieldStub> implements PsiFiel
 
   @Override
   public Icon getElementIcon(final int flags) {
-    final RowIcon baseIcon = ElementPresentationUtil.createLayeredIcon(PlatformIcons.FIELD_ICON, this, false);
+    final RowIcon baseIcon =
+      IconManager.getInstance().createLayeredIcon(this, PlatformIcons.FIELD_ICON, ElementPresentationUtil.getFlags(this, false));
     return ElementPresentationUtil.addVisibilityIcon(this, flags, baseIcon);
   }
 

@@ -1,46 +1,40 @@
 package com.intellij.configurationScript.providers
 
 import com.intellij.configurationScript.ConfigurationFileManager
-import com.intellij.configurationScript.Keys
-import com.intellij.configurationScript.readObject
+import com.intellij.configurationScript.readIntoObject
+import com.intellij.configurationScript.schemaGenerators.PluginJsonSchemaGenerator
 import com.intellij.openapi.components.BaseState
-import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.processOpenedProjects
 import com.intellij.openapi.updateSettings.impl.UpdateSettingsProvider
+import com.intellij.openapi.util.NotNullLazyKey
+import com.intellij.util.SmartList
 import com.intellij.util.concurrency.SynchronizedClearableLazy
-import org.yaml.snakeyaml.nodes.MappingNode
-import org.yaml.snakeyaml.nodes.ScalarNode
+import com.intellij.util.xmlb.annotations.XCollection
 
-private class MyUpdateSettingsProvider(project: Project) : UpdateSettingsProvider {
-  private val data = SynchronizedClearableLazy<PluginsConfiguration?> {
-    val node = project.service<ConfigurationFileManager>().getConfigurationNode()
-               ?: return@SynchronizedClearableLazy null
-    readPluginsConfiguration(node)
+private val dataKey = NotNullLazyKey.create<SynchronizedClearableLazy<PluginsConfiguration?>, Project>("MyUpdateSettingsProvider") { project ->
+  val data = SynchronizedClearableLazy {
+    val node = ConfigurationFileManager.getInstance(project).findValueNode(PluginJsonSchemaGenerator.plugins) ?: return@SynchronizedClearableLazy null
+    readIntoObject(PluginsConfiguration(), node)
   }
 
-  init {
-    project.service<ConfigurationFileManager>().registerClearableLazyValue(data)
-  }
+  ConfigurationFileManager.getInstance(project).registerClearableLazyValue(data)
+  data
+}
 
+private class MyUpdateSettingsProvider : UpdateSettingsProvider {
   override fun getPluginRepositories(): List<String> {
-    return data.value?.repositories ?: emptyList()
+    val result = SmartList<String>()
+    processOpenedProjects { project ->
+      dataKey.getValue(project).value?.repositories?.let {
+        result.addAll(it)
+      }
+    }
+    return result
   }
 }
 
 internal class PluginsConfiguration : BaseState() {
+  @get:XCollection
   val repositories by list<String>()
-}
-
-internal fun readPluginsConfiguration(rootNode: MappingNode): PluginsConfiguration? {
-  // later we can avoid full node graph building, but for now just use simple implementation (problem is that Yaml supports references and merge - proper support of it can be tricky)
-  // "load" under the hood uses "compose" - i.e. Yaml itself doesn't use stream API to build object model.
-  for (tuple in rootNode.value) {
-    val keyNode = tuple.keyNode
-    if (keyNode is ScalarNode && keyNode.value == Keys.plugins) {
-      val valueNode = tuple.valueNode as? MappingNode ?: continue
-      return readObject(PluginsConfiguration(),
-                        valueNode) as PluginsConfiguration
-    }
-  }
-  return null
 }

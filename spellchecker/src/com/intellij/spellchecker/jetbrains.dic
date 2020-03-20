@@ -1,7 +1,9 @@
 accessor
 accessors
 additivity
+agentlib
 agentmain
+agentpath
 aggregator
 ajax
 akka
@@ -13,6 +15,7 @@ anyschema
 aopalliance
 apomorphism
 apothem
+appdata
 appender
 archivelog
 argc
@@ -25,8 +28,8 @@ asensitive
 aspectj
 async
 asyncable
-atomikos
 atlassian
+atomikos
 attlist
 attr
 attrs
@@ -43,9 +46,11 @@ autorelease
 autorotate
 azul
 backend
+backport
 backref
 backtrace
 barcode
+baseclass
 basedir
 basename
 bashrc
@@ -56,7 +61,9 @@ bfile
 bigfile
 bigint
 binlog
+bintray
 bitcoin
+blit
 blog
 blogger
 blogging
@@ -69,6 +76,8 @@ bson
 btree
 buffered
 buffering
+bugprone
+bugzilla
 buildable
 builtin
 bzip
@@ -77,6 +86,7 @@ calc
 callee
 callouts
 camelcase
+cancellability
 cancelable
 cancellable
 capath
@@ -95,6 +105,7 @@ checkboxes
 checkstyle
 checksum
 chmod
+cifs
 clangd
 classloader
 classloading
@@ -114,12 +125,14 @@ codebase
 codecs
 codeinsight
 codesign
+collatz
 commandline
 committer
 commonjs
 comonad
 comparision
 concat
+concatenable
 cond
 conda
 conf
@@ -138,8 +151,10 @@ couchbase
 coursecreator
 covariant
 cplusplus
+cppcoreguidelines
 cron
 ctrl
+cstyle
 cubemx
 customizer
 customizers
@@ -164,6 +179,7 @@ decompiles
 decompiling
 dedent
 deduplicate
+deduplication
 deferrable
 deferrer
 deque
@@ -177,6 +193,7 @@ deserializer
 deserializers
 devkit
 dirs
+disabler
 distinctrow
 django
 dllexport
@@ -191,12 +208,13 @@ dumpfile
 dword
 dylib
 easymock
+ecma
 ehcache
 elseif
 elsif
 endian
 endif
-endofunctor 
+endofunctor
 endregion
 enum
 enums
@@ -213,6 +231,7 @@ facelets
 fallthrough
 fastcall
 favicon
+fdatasync
 filename
 fileset
 filesets
@@ -231,15 +250,17 @@ freelists
 freemarker
 freepools
 frontend
+fsync
 ftlvariable
 fulltext
 func
 functor
-functors
 functorial
+functors
 fxml
 gbps
 gdata
+gdpr
 gemfire
 generification
 generified
@@ -250,11 +271,18 @@ getters
 gists
 github
 gitlab
+gitter
 globals
 google
+googletest
 goto
 gradle
 grapheme
+graphemes
+graphql
+grayscale
+greenplum
+greyscale
 gruntfile
 gruntfiles
 guid
@@ -275,7 +303,9 @@ haxe
 hazelcast
 hdiv
 helvetica
+helidon
 holdability
+hicpp
 hostname
 hprof
 href
@@ -303,7 +333,11 @@ initializer
 initrans
 injectable
 inline
+inlining
 innodb
+inode
+inode's
+inodes
 inout
 instancetype
 instantiable
@@ -319,6 +353,7 @@ isnull
 iterable
 iterables
 jacoco
+jaeger
 javabean
 javabeans
 javac
@@ -329,7 +364,7 @@ javascript
 javax
 jaxb
 jaxen
-jetbrains
+jcef
 jibx
 jira
 jndi
@@ -378,6 +413,7 @@ liskov
 listable
 lldb
 llvm
+localappdata
 localhost
 localtime
 localtimestamp
@@ -398,6 +434,7 @@ lossy
 lucene
 lvalue
 lvalues
+LVTI
 macrodef
 mailto
 makefile
@@ -423,6 +460,10 @@ metacharacters
 metadata
 metas
 metaspace
+micronaut
+microprofile
+microservice
+microservices
 middleint
 middleware
 millis
@@ -439,9 +480,10 @@ modeless
 mojo
 monad
 mongodb
-monoidal
 monoid
+monoidal
 monoids
+monorepo
 monospaced
 msql
 mssql
@@ -478,6 +520,7 @@ nocopy
 nocreate
 nocycle
 nodegroup
+nodiscard
 noduplicate
 noexcept
 nohistory
@@ -485,6 +528,7 @@ noinline
 noinspection
 noinspections
 nolint
+nolintnextline
 nologging
 nomapping
 nomaxvalue
@@ -537,8 +581,8 @@ overrider
 overriders
 pageable
 param
-parameterize
 parameterizable
+parameterize
 paramorphism
 params
 paren
@@ -553,9 +597,11 @@ pctversion
 perf
 permalink
 petersburg
+pgrep
 pipelined
 pipenv
 pipfile
+pkill
 plaintext
 playlist
 playlists
@@ -588,9 +634,6 @@ preconfigured
 preconfigures
 prefetch
 premain
-prepend
-prepended
-prepends
 preprocessor
 preprocessors
 println
@@ -604,8 +647,10 @@ projectreactor
 proto
 proven
 proxool
+pseudorandom
 ptrdiff
 pycharm
+quarkus
 queryable
 radiobutton
 reactivestreams
@@ -666,6 +711,8 @@ rubymine
 runtime
 rvalue
 rvalues
+rxkotlin
+rxjava
 samskivert
 savepoint
 sbin
@@ -692,7 +739,10 @@ sfinae
 sftp
 shader
 sharding
+shellcheck
+shfmt
 sigabrt
+sigaction
 sigaio
 sigalrm
 sigbus
@@ -713,6 +763,7 @@ sigprof
 sigpwr
 sigquit
 sigsegv
+sigset
 sigstop
 sigsys
 sigterm
@@ -740,6 +791,8 @@ sourcecode
 sourceforge
 spellchecker
 spellchecking
+spliterator
+spliterators
 sql
 sqlcode
 sqlerror
@@ -755,6 +808,7 @@ stderr
 stdlib
 stdout
 stepic
+stemmer
 stmt
 strictfp
 stringifier
@@ -772,8 +826,10 @@ submodule
 submodules
 subpackage
 subpackages
+subpage
 subpartition
 subpartitions
+subpixel
 subscripting
 subsequence
 subsequences
@@ -839,6 +895,7 @@ typeof
 uast
 ubuntu
 unary
+unboxed
 unboxing
 unbuffered
 uncheck
@@ -856,8 +913,10 @@ ungroup
 ungrouped
 ungrouping
 unhandled
+uninject
 uninstall
 uniques
+unmarshal
 unmerged
 unpivot
 unprotect
@@ -867,6 +926,7 @@ upsource
 urlencoded
 urowid
 username
+userprofile
 utf
 util
 utils
@@ -885,6 +945,7 @@ vectorcall
 verdana
 versa
 vertices
+vertx
 viewlet
 viewport
 viewports
@@ -909,6 +970,7 @@ wildcards
 wildfly
 wordwrap
 workflow
+workgroup
 writeln
 wsdl
 xcode
@@ -926,4 +988,4 @@ yaml
 youtube
 zend
 zerofill
-zygomorphism  
+zygomorphism

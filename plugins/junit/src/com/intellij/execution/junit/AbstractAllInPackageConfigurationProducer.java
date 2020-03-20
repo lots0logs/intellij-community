@@ -1,14 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.junit;
 
 import com.intellij.execution.actions.ConfigurationContext;
 import com.intellij.execution.actions.ConfigurationFromContext;
 import com.intellij.execution.configurations.ConfigurationType;
 import com.intellij.execution.junit2.info.LocationUtil;
+import com.intellij.execution.testframework.AbstractJavaTestConfigurationProducer;
 import com.intellij.openapi.util.Ref;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiPackage;
 import com.siyeh.ig.junit.JUnitCommonClassNames;
+import org.jetbrains.annotations.NotNull;
 
 public abstract class AbstractAllInPackageConfigurationProducer extends JUnitConfigurationProducer {
   /**
@@ -28,10 +30,10 @@ public abstract class AbstractAllInPackageConfigurationProducer extends JUnitCon
   }
 
   @Override
-  protected boolean setupConfigurationFromContext(JUnitConfiguration configuration,
-                                                  ConfigurationContext context,
-                                                  Ref<PsiElement> sourceElement) {
-    PsiPackage psiPackage = JavaRuntimeConfigurationProducerBase.checkPackage(context.getPsiLocation());
+  protected boolean setupConfigurationFromContext(@NotNull JUnitConfiguration configuration,
+                                                  @NotNull ConfigurationContext context,
+                                                  @NotNull Ref<PsiElement> sourceElement) {
+    PsiPackage psiPackage = AbstractJavaTestConfigurationProducer.checkPackage(context.getPsiLocation());
     if (psiPackage == null) return false;
     sourceElement.set(psiPackage);
     if (!LocationUtil.isJarAttached(context.getLocation(), psiPackage, JUnitUtil.TEST_CASE_CLASS, JUnitUtil.TEST5_ANNOTATION,

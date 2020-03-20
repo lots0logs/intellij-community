@@ -1,4 +1,4 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.codeStyle.javadoc;
 
 import com.intellij.application.options.CodeStyle;
@@ -19,9 +19,9 @@ import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * @author max
- */
+import java.util.Arrays;
+import java.util.stream.Collectors;
+
 public class CommentFormatter {
   private static final Logger LOG = Logger.getInstance(CommentFormatter.class);
 
@@ -83,12 +83,7 @@ public class CommentFormatter {
 
   private static String stripSpaces(String text) {
     String[] lines = LineTokenizer.tokenize(text.toCharArray(), false);
-    StringBuilder buf = new StringBuilder(text.length());
-    for (int i = 0; i < lines.length; i++) {
-      if (i > 0) buf.append('\n');
-      buf.append(rTrim(lines[i]));
-    }
-    return buf.toString();
+    return Arrays.stream(lines).map(CommentFormatter::rTrim).collect(Collectors.joining("\n"));
   }
 
   private static String rTrim(String text) {

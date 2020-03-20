@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.refactoring.introduce.field;
 
 import com.intellij.codeInsight.TestFrameworks;
@@ -26,9 +12,8 @@ import com.intellij.refactoring.introduceField.IntroduceFieldHandler;
 import com.intellij.refactoring.ui.NameSuggestionsField;
 import com.intellij.refactoring.util.RadioUpDownListener;
 import com.intellij.ui.components.JBRadioButton;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.groovy.GroovyFileType;
@@ -101,7 +86,7 @@ public class GrIntroduceFieldDialog extends DialogWrapper implements GrIntroduce
     initVisibility();
 
     ButtonGroup initialization = new ButtonGroup();
-    ArrayList<JRadioButton> inits = ContainerUtil.newArrayList();
+    ArrayList<JRadioButton> inits = new ArrayList<>();
 
     inits.add(myCurrentMethodRadioButton);
     inits.add(myFieldDeclarationRadioButton);
@@ -188,7 +173,7 @@ public class GrIntroduceFieldDialog extends DialogWrapper implements GrIntroduce
                                           isAlwaysInvokedConstructor((PsiMethod)container, clazz);
     hasLHSUsages = hasLhsUsages(myContext);
 
-    setTitle(IntroduceFieldHandler.REFACTORING_NAME);
+    setTitle(IntroduceFieldHandler.getRefactoringNameText());
     init();
     checkErrors();
   }
@@ -259,7 +244,7 @@ public class GrIntroduceFieldDialog extends DialogWrapper implements GrIntroduce
     return true;
   }
 
-  private static boolean allOccurrencesInOneMethod(@NotNull PsiElement[] occurrences, PsiElement scope) {
+  private static boolean allOccurrencesInOneMethod(PsiElement @NotNull [] occurrences, PsiElement scope) {
     if (occurrences.length == 0) return true;
     GrMember container = GrIntroduceFieldHandler.getContainer(occurrences[0], scope);
     if (container == null) return false;
@@ -297,8 +282,8 @@ public class GrIntroduceFieldDialog extends DialogWrapper implements GrIntroduce
     if (var != null) {
       list.add(var.getName());
     }
-    ContainerUtil.addAll(list, suggestNames());
-    myNameField = new NameSuggestionsField(ArrayUtil.toStringArray(list), myContext.getProject(), GroovyFileType.GROOVY_FILE_TYPE);
+    list.addAll(suggestNames());
+    myNameField = new NameSuggestionsField(ArrayUtilRt.toStringArray(list), myContext.getProject(), GroovyFileType.GROOVY_FILE_TYPE);
 
     if (expression != null) {
       myTypeComboBox = GrTypeComboBox.createTypeComboBoxFromExpression(expression);
@@ -455,7 +440,7 @@ public class GrIntroduceFieldDialog extends DialogWrapper implements GrIntroduce
     final String name = getName();
     String message = RefactoringBundle.message("field.exists", name, clazz.getQualifiedName());
     if (clazz.findFieldByName(name, true) != null &&
-        Messages.showYesNoDialog(myContext.getProject(), message, IntroduceFieldHandler.REFACTORING_NAME, Messages.getWarningIcon()) != Messages.YES) {
+        Messages.showYesNoDialog(myContext.getProject(), message, IntroduceFieldHandler.getRefactoringNameText(), Messages.getWarningIcon()) != Messages.YES) {
       return;
     }
     super.doOKAction();

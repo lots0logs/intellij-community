@@ -9,6 +9,7 @@ import com.intellij.dvcs.DvcsRememberedInputs;
 import com.intellij.ide.passwordSafe.PasswordSafe;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.diagnostic.ControlFlowException;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.Project;
@@ -20,6 +21,8 @@ import com.intellij.util.UriUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.io.URLUtil;
 import git4idea.DialogManager;
+import git4idea.config.GitConfigUtil;
+import git4idea.config.GitVcsApplicationSettings;
 import git4idea.remote.GitHttpAuthDataProvider;
 import git4idea.remote.GitRememberedInputs;
 import git4idea.remote.GitRepositoryHostingService;
@@ -27,6 +30,7 @@ import git4idea.remote.InteractiveGitHttpAuthDataProvider;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
 import java.util.*;
 import java.util.function.Function;
 
@@ -49,17 +53,21 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
 
   @NotNull private final Project myProject;
   @Nullable private final String myPresetUrl; //taken from GitHandler, used if git does not provide url
+  @NotNull private final File myWorkingDirectory;
   @NotNull private final GitAuthenticationGate myAuthenticationGate;
   @NotNull private final GitAuthenticationMode myAuthenticationMode;
 
-  @Nullable private ProviderAndData myProviderAndData = null;
+  @Nullable private volatile ProviderAndData myProviderAndData = null;
+  private volatile boolean myCredentialHelperShouldBeUsed = false;
 
   GitHttpGuiAuthenticator(@NotNull Project project,
                           @NotNull Collection<String> urls,
+                          @NotNull File workingDirectory,
                           @NotNull GitAuthenticationGate authenticationGate,
                           @NotNull GitAuthenticationMode authenticationMode) {
     myProject = project;
     myPresetUrl = findFirstHttpUrl(urls);
+    myWorkingDirectory = workingDirectory;
     myAuthenticationGate = authenticationGate;
     myAuthenticationMode = authenticationMode;
   }
@@ -75,9 +83,10 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
   @Override
   @NotNull
   public String askPassword(@NotNull String url) {
-    if (myProviderAndData != null) {
+    ProviderAndData providerAndData = myProviderAndData;
+    if (providerAndData != null) {
       LOG.debug("askPassword. Data already filled in askUsername.");
-      return myProviderAndData.getPassword();
+      return providerAndData.getPassword();
     }
 
     Couple<String> usernameAndUrl = splitToUsernameAndUnifiedUrl(getRequiredUrl(url));
@@ -90,11 +99,12 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
     String unifiedUrl = usernameAndUrl.second;
     LOG.debug("askPassword. gitUrl=" + url + ", unifiedUrl=" + unifiedUrl);
 
-    myProviderAndData = acquireData(unifiedUrl, provider -> provider.getDataForKnownLogin(login));
+    ProviderAndData newData = acquireData(unifiedUrl, provider -> provider.getDataForKnownLogin(login));
 
-    if (myProviderAndData != null) {
-      LOG.debug("askPassword. " + myProviderAndData.toString());
-      return myProviderAndData.getPassword();
+    myProviderAndData = newData;
+    if (newData != null) {
+      LOG.debug("askPassword. " + newData.toString());
+      return newData.getPassword();
     }
     else {
       LOG.debug("askPassword. no data provided");
@@ -108,11 +118,12 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
     String unifiedUrl = splitToUsernameAndUnifiedUrl(getRequiredUrl(url)).second;
     LOG.debug("askUsername. gitUrl=" + url + ", unifiedUrl=" + unifiedUrl);
 
-    myProviderAndData = acquireData(unifiedUrl, AuthDataProvider::getData);
+    ProviderAndData providerAndData = acquireData(unifiedUrl, AuthDataProvider::getData);
+    myProviderAndData = providerAndData;
 
-    if (myProviderAndData != null) {
-      LOG.debug("askUsername. " + myProviderAndData.toString());
-      return myProviderAndData.getLogin();
+    if (providerAndData != null) {
+      LOG.debug("askUsername. " + providerAndData.toString());
+      return providerAndData.getLogin();
     }
     else {
       LOG.debug("askUsername. no data provided");
@@ -121,7 +132,7 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
   }
 
   @Nullable
-  private ProviderAndData acquireData(@NotNull String unifiedUrl, @NotNull Function<AuthDataProvider, AuthData> dataAcquirer) {
+  private ProviderAndData acquireData(@NotNull String unifiedUrl, @NotNull Function<? super AuthDataProvider, ? extends AuthData> dataAcquirer) {
     return myAuthenticationGate.waitAndCompute(() -> {
       try {
         for (AuthDataProvider provider : getProviders(unifiedUrl)) {
@@ -136,22 +147,40 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
         myAuthenticationGate.cancel();
         return new ProviderAndData(new CancelledProvider(unifiedUrl), "", "");
       }
+      catch (CredentialHelperShouldBeUsedException e) {
+        myAuthenticationGate.cancel();
+        myCredentialHelperShouldBeUsed = true;
+        return null;
+      }
     });
   }
+
+  static class CredentialHelperShouldBeUsedException extends RuntimeException implements ControlFlowException {
+  }
+
 
   @NotNull
   private List<AuthDataProvider> getProviders(@NotNull String unifiedUrl) {
     List<AuthDataProvider> delegates = new ArrayList<>();
     PasswordSafeProvider passwordSafeProvider =
       new PasswordSafeProvider(unifiedUrl, GitRememberedInputs.getInstance(), PasswordSafe.getInstance());
-    DialogProvider dialogProvider = new DialogProvider(unifiedUrl, myProject, passwordSafeProvider);
+
+    boolean showActionForGitHelper =  GitConfigUtil.isCredentialHelperUsed(myProject, myWorkingDirectory);
+
+    DialogProvider dialogProvider = new DialogProvider(unifiedUrl, myProject, passwordSafeProvider, showActionForGitHelper);
 
     if (myAuthenticationMode != GitAuthenticationMode.NONE) {
       delegates.add(passwordSafeProvider);
     }
-    if (myAuthenticationMode == GitAuthenticationMode.FULL) {
-      delegates.addAll(ContainerUtil.map(GitHttpAuthDataProvider.EP_NAME.getExtensions(),
-                                         (provider) -> new ExtensionAdapterProvider(unifiedUrl, myProject, provider)));
+    List<ExtensionAdapterProvider> extensionAdapterProviders = ContainerUtil.map(GitHttpAuthDataProvider.EP_NAME.getExtensions(),
+                                                                                 (provider) -> new ExtensionAdapterProvider(unifiedUrl,
+                                                                                                                            myProject,
+                                                                                                                            provider));
+    if (myAuthenticationMode == GitAuthenticationMode.SILENT) {
+      delegates.addAll(ContainerUtil.filter(extensionAdapterProviders, p -> p.myDelegate.isSilent()));
+    }
+    else if (myAuthenticationMode == GitAuthenticationMode.FULL) {
+      delegates.addAll(extensionAdapterProviders);
       delegates.add(dialogProvider);
     }
     return delegates;
@@ -159,23 +188,34 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
 
   @Override
   public void saveAuthData() {
-    if (myProviderAndData == null) return;
+    ProviderAndData providerAndData = myProviderAndData;
+    if (providerAndData == null) return;
 
-    LOG.debug("saveAuthData. " + myProviderAndData.toString());
-    myProviderAndData.getProvider().onAuthSuccess();
+    LOG.debug("saveAuthData. " + providerAndData.toString());
+    providerAndData.getProvider().onAuthSuccess();
   }
 
   @Override
   public void forgetPassword() {
-    if (myProviderAndData == null) return;
+    ProviderAndData providerAndData = myProviderAndData;
+    if (providerAndData == null) return;
 
-    LOG.debug("forgetPassword. " + myProviderAndData.toString());
-    myProviderAndData.getProvider().onAuthFailure();
+    LOG.debug("forgetPassword. " + providerAndData.toString());
+    providerAndData.getProvider().onAuthFailure();
   }
 
   @Override
   public boolean wasCancelled() {
-    return myProviderAndData != null && myProviderAndData.getProvider() instanceof CancelledProvider;
+    if (myCredentialHelperShouldBeUsed) {
+      return false;
+    }
+    ProviderAndData providerAndData = myProviderAndData;
+    return providerAndData != null && providerAndData.getProvider() instanceof CancelledProvider;
+  }
+
+  @Override
+  public boolean wasRequested() {
+    return myProviderAndData != null;
   }
 
   /**
@@ -276,13 +316,18 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
   private static class DialogProvider extends AuthDataProvider {
     @NotNull private final Project myProject;
     @NotNull private final PasswordSafeProvider myPasswordSafeDelegate;
+    private final boolean showActionForGitHelper;
     private boolean myCancelled;
     private boolean myDataForSession = false;
 
-    protected DialogProvider(@NotNull String url, @NotNull Project project, @NotNull PasswordSafeProvider passwordSafeDelegate) {
+    protected DialogProvider(@NotNull String url,
+                             @NotNull Project project,
+                             @NotNull PasswordSafeProvider passwordSafeDelegate,
+                             boolean showActionForGitHelper) {
       super(url);
       myProject = project;
       myPasswordSafeDelegate = passwordSafeDelegate;
+      this.showActionForGitHelper = showActionForGitHelper;
     }
 
     @NotNull
@@ -329,6 +374,11 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
       LOG.debug("Showed dialog:" + (dialog.isOK() ? "OK" : "Cancel"));
       if (!dialog.isOK()) {
         myCancelled = true;
+        if (dialog.getExitCode() == GitHttpLoginDialog.USE_CREDENTIAL_HELPER_CODE) {
+          LOG.debug("Credential helper is enabled");
+          GitVcsApplicationSettings.getInstance().setUseCredentialHelper(true);
+          throw new CredentialHelperShouldBeUsedException();
+        }
         throw new ProcessCanceledException();
       }
       myPasswordSafeDelegate.setRememberPassword(dialog.getRememberPassword());
@@ -353,7 +403,8 @@ class GitHttpGuiAuthenticator implements GitHttpAuthenticator {
       Ref<GitHttpLoginDialog> dialogRef = Ref.create();
       ApplicationManager.getApplication().invokeAndWait(() -> {
         GitHttpLoginDialog dialog =
-          new GitHttpLoginDialog(myProject, url, myPasswordSafeDelegate.isRememberPasswordByDefault(), username, editableUsername);
+          new GitHttpLoginDialog(myProject, url, myPasswordSafeDelegate.isRememberPasswordByDefault(), username, editableUsername,
+                                 showActionForGitHelper);
         dialog.setInteractiveDataProviders(interactiveProviders);
         dialogRef.set(dialog);
         DialogManager.show(dialog);

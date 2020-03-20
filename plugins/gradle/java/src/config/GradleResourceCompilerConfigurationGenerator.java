@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.config;
 
 import com.intellij.ProjectTopics;
@@ -51,6 +37,7 @@ import org.jetbrains.plugins.gradle.model.ExternalProject;
 import org.jetbrains.plugins.gradle.model.ExternalSourceDirectorySet;
 import org.jetbrains.plugins.gradle.model.ExternalSourceSet;
 import org.jetbrains.plugins.gradle.service.project.data.ExternalProjectDataCache;
+import org.jetbrains.plugins.gradle.util.GradleBundle;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
 
 import java.io.File;
@@ -79,7 +66,7 @@ public class GradleResourceCompilerConfigurationGenerator {
     externalProjectDataCache = ExternalProjectDataCache.getInstance(project);
     assert externalProjectDataCache != null;
 
-    project.getMessageBus().connect(project).subscribe(ProjectTopics.MODULES, new ModuleListener() {
+    project.getMessageBus().connect().subscribe(ProjectTopics.MODULES, new ModuleListener() {
       @Override
       public void moduleRemoved(@NotNull Project project, @NotNull Module module) {
         myModulesConfigurationHash.remove(module.getName());
@@ -173,7 +160,7 @@ public class GradleResourceCompilerConfigurationGenerator {
 
   @NotNull
   private Map<String, GradleModuleResourceConfiguration> generateAffectedGradleModulesConfiguration(@NotNull CompileContext context) {
-    final Map<String, GradleModuleResourceConfiguration> affectedGradleModuleConfigurations = ContainerUtil.newTroveMap();
+    final Map<String, GradleModuleResourceConfiguration> affectedGradleModuleConfigurations = new THashMap<>();
 
     final Map<String, ExternalProject> lazyExternalProjectMap = FactoryMap.create(
       gradleProjectPath1 -> externalProjectDataCache.getRootExternalProject(gradleProjectPath1));
@@ -188,10 +175,8 @@ public class GradleResourceCompilerConfigurationGenerator {
 
       final ExternalProject externalRootProject = lazyExternalProjectMap.get(gradleProjectPath);
       if (externalRootProject == null) {
-        context.addMessage(CompilerMessageCategory.WARNING,
-                           String.format("Unable to make the module: %s, related gradle configuration was not found. " +
-                                         "Please, re-import the Gradle project and try again.",
-                                         module.getName()), VfsUtilCore.pathToUrl(gradleProjectPath), -1, -1);
+        String message = GradleBundle.message("compiler.build.messages.gradle.configuration.not.found", module.getName());
+        context.addMessage(CompilerMessageCategory.WARNING, message, null, -1, -1);
         continue;
       }
 

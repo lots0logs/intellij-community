@@ -1,16 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.markup;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 import java.util.Collections;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -37,7 +37,7 @@ public class TextAttributesEffectsBuilder {
     .put(BOLD_DOTTED_LINE, UNDERLINE_SLOT)
     .build();
 
-  private final Map<EffectSlot, EffectDescriptor> myEffectsMap = ContainerUtilRt.newHashMap(EffectSlot.values().length);
+  private final Map<EffectSlot, EffectDescriptor> myEffectsMap = new HashMap<>(EffectSlot.values().length);
 
   private TextAttributesEffectsBuilder() {}
 
@@ -98,7 +98,7 @@ public class TextAttributesEffectsBuilder {
   @NotNull
   private TextAttributesEffectsBuilder mutateBuilder(@Nullable EffectType effectType,
                                                      @Nullable Color effectColor,
-                                                     @NotNull BiConsumer<EffectSlot, EffectDescriptor> slotMutator) {
+                                                     @NotNull BiConsumer<? super EffectSlot, ? super EffectDescriptor> slotMutator) {
     if (effectColor != null && effectType != null) {
       EffectSlot slot = EFFECT_SLOTS_MAP.get(effectType);
       if (slot != null) {
@@ -112,14 +112,6 @@ public class TextAttributesEffectsBuilder {
   }
 
   /**
-   * @return list of descriptors of current effects
-   */
-  @NotNull
-  List<EffectDescriptor> getDescriptorsList() {
-    return myEffectsMap.isEmpty() ? ContainerUtil.emptyList() : ContainerUtil.newArrayList(myEffectsMap.values());
-  }
-
-  /**
    * @return map of {@link EffectType} => {@link Color} representation of builder state
    */
   @NotNull
@@ -127,7 +119,7 @@ public class TextAttributesEffectsBuilder {
     if (myEffectsMap.isEmpty()) {
       return Collections.emptyMap();
     }
-    Map<EffectType, Color> result = ContainerUtil.newHashMap();
+    Map<EffectType, Color> result = new HashMap<>();
     myEffectsMap.forEach((key, val) -> {
       if (val != null) {
         result.put(val.effectType, val.effectColor);
@@ -140,22 +132,34 @@ public class TextAttributesEffectsBuilder {
    * Applies effects from the current state to the target attributes
    *
    * @param targetAttributes passed targetAttributes
+   * @apiNote this method is not a thread safe, builder can't be modified in some other thread when applying to something
    */
   @NotNull
   public TextAttributes applyTo(@NotNull final TextAttributes targetAttributes) {
-    List<EffectDescriptor> allEffects = getDescriptorsList();
-    if (allEffects.isEmpty()) {
+    Iterator<EffectDescriptor> effectsIterator = myEffectsMap.values().iterator();
+    if (!effectsIterator.hasNext()) {
       targetAttributes.setEffectColor(null);
-      targetAttributes.setEffectType(null);
+      targetAttributes.setEffectType(BOXED);
       targetAttributes.setAdditionalEffects(Collections.emptyMap());
     }
     else {
-      Map<EffectType, Color> effectsMap = ContainerUtil.newHashMap();
-      EffectDescriptor mainEffectDescriptor = allEffects.remove(0);
+      EffectDescriptor mainEffectDescriptor = effectsIterator.next();
       targetAttributes.setEffectType(mainEffectDescriptor.effectType);
       targetAttributes.setEffectColor(mainEffectDescriptor.effectColor);
-      allEffects.forEach(it -> effectsMap.put(it.effectType, it.effectColor));
-      targetAttributes.setAdditionalEffects(effectsMap);
+
+      int effectsLeft = myEffectsMap.size() - 1;
+      if (effectsLeft == 0) {
+        targetAttributes.setAdditionalEffects(Collections.emptyMap());
+      }
+      else if (effectsLeft == 1) {
+        EffectDescriptor additionalEffect = effectsIterator.next();
+        targetAttributes.setAdditionalEffects(Collections.singletonMap(additionalEffect.effectType, additionalEffect.effectColor));
+      }
+      else {
+        Map<EffectType, Color> effectsMap = new HashMap<>(effectsLeft);
+        effectsIterator.forEachRemaining(it -> effectsMap.put(it.effectType, it.effectColor));
+        targetAttributes.setAdditionalEffects(effectsMap);
+      }
     }
     return targetAttributes;
   }

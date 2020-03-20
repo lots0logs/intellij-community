@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.ui.tree.render;
 
 import com.intellij.debugger.engine.evaluation.*;
@@ -7,9 +7,8 @@ import com.intellij.debugger.ui.tree.ValueDescriptor;
 import com.sun.jdi.ArrayReference;
 import com.sun.jdi.Value;
 
-/**
- * @author egor
- */
+import java.nio.charset.StandardCharsets;
+
 final class ByteArrayAsStringRenderer extends CompoundReferenceRenderer {
   ByteArrayAsStringRenderer() {
     super("String", null, null);
@@ -24,7 +23,7 @@ final class ByteArrayAsStringRenderer extends CompoundReferenceRenderer {
             // TODO: read charset from the target vm
             byte[] bytes = DebuggerUtilsImpl.readBytesArray(value);
             if (bytes != null) {
-              return new String(bytes);
+              return new String(bytes, StandardCharsets.UTF_8);
             }
           }
         }

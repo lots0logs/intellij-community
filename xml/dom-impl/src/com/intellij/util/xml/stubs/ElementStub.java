@@ -17,8 +17,8 @@ package com.intellij.util.xml.stubs;
 
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.stubs.ObjectStubSerializer;
+import com.intellij.psi.stubs.Stub;
 import com.intellij.util.SmartList;
-import com.intellij.util.io.StringRef;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,20 +29,20 @@ import java.util.List;
  */
 public class ElementStub extends DomStub {
 
-  private final List<DomStub> myChildren = new SmartList<>();
+  private final List<Stub> myChildren = new SmartList<>();
   private final int myIndex;
   private final boolean myCustom;
 
   @Nullable
-  private final StringRef myElementClass;
+  private final String myElementClass;
   private final String myValue;
 
   public ElementStub(@Nullable ElementStub parent,
-                     @NotNull StringRef name,
-                     @Nullable StringRef namespace,
+                     @NotNull String name,
+                     @Nullable String namespace,
                      int index,
                      boolean custom,
-                     @Nullable StringRef elementClass,
+                     @Nullable String elementClass,
                      @NotNull String value) {
     super(parent, name, namespace);
     myIndex = index;
@@ -51,19 +51,19 @@ public class ElementStub extends DomStub {
     myValue = value;
   }
 
-  void addChild(DomStub child) {
+  void addChild(Stub child) {
     myChildren.add(child);
   }
 
   @NotNull
   @Override
-  public List<DomStub> getChildrenStubs() {
+  public List<? extends Stub> getChildrenStubs() {
     return myChildren;
   }
 
   @Override
-  public ObjectStubSerializer getStubType() {
-    return ElementStubSerializer.INSTANCE;
+  public ObjectStubSerializer<?,?> getStubType() {
+    return DomElementTypeHolder.ElementStubSerializer;
   }
 
   @Override
@@ -85,7 +85,7 @@ public class ElementStub extends DomStub {
 
   @Nullable
   String getElementClass() {
-    return myElementClass == null ? null : myElementClass.getString();
+    return myElementClass;
   }
 
   @NotNull

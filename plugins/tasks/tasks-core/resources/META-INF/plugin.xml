@@ -1,17 +1,22 @@
 <!--
-  ~ Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+  ~ Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
   -->
 
 <idea-plugin>
   <id>com.intellij.tasks</id>
   <name>Task Management</name>
+  <category>Other Tools</category>
   <description>Enables task and context management</description>
   <vendor>JetBrains</vendor>
 
   <!--fake dependency for Web IDE-->
   <depends>com.intellij.modules.xml</depends>
   <depends optional="true" config-file="java-contexts.xml">com.intellij.modules.java</depends>
-  <!-- Optional dependency on XPath plugin for syntax highlighting in GenericRepository configuration dialog -->
+  <!--
+    Optional dependency on XPath plugin for syntax highlighting in GenericRepository configuration dialog
+    see com.intellij.tasks.generic.ResponseType.XML
+  -->
+  <!--suppress PluginXmlValidity -->
   <depends optional="true">XPathView</depends>
 
   <project-components>
@@ -90,13 +95,19 @@
   <extensionPoints>
     <extensionPoint name="repositoryType" interface="com.intellij.tasks.TaskRepositoryType"/>
     <extensionPoint name="dialogPanelProvider" interface="com.intellij.tasks.ui.TaskDialogPanelProvider"/>
-    <extensionPoint name="commitPlaceholderProvider" interface="com.intellij.tasks.CommitPlaceholderProvider"/>
+    <extensionPoint name="commitPlaceholderProvider" interface="com.intellij.tasks.CommitPlaceholderProvider" dynamic="true"/>
   </extensionPoints>
 
   <extensions defaultExtensionNs="com.intellij">
 
-    <projectConfigurable groupId="tools" instance="com.intellij.tasks.config.TaskConfigurable" id="tasks" displayName="Tasks" nonDefaultProject="true">
-      <configurable instance="com.intellij.tasks.config.TaskRepositoriesConfigurable" displayName="Servers" id="tasks.servers"/>
+    <projectConfigurable groupId="tools" instance="com.intellij.tasks.config.TaskConfigurable" id="tasks"
+                         bundle="messages.TaskBundle"
+                         key="configurable.TaskConfigurable.display.name"
+                         nonDefaultProject="true">
+      <configurable instance="com.intellij.tasks.config.TaskRepositoriesConfigurable"
+                    bundle="messages.TaskBundle"
+                    key="configurable.TaskRepositoriesConfigurable.display.name"
+                    id="tasks.servers"/>
     </projectConfigurable>
     <tasks.dialogPanelProvider implementation="com.intellij.tasks.actions.vcs.VcsTaskDialogPanelProvider"/>
 
@@ -124,7 +135,7 @@
     <tasks.repositoryType implementation="com.intellij.tasks.bugzilla.BugzillaRepositoryType"/>
 
     <!-- JQL support -->
-    <fileTypeFactory implementation="com.intellij.tasks.jira.jql.JqlFileTypeFactory"/>
+    <fileType name="JQL" implementationClass="com.intellij.tasks.jira.jql.JqlFileType" fieldName="INSTANCE" language="JQL" extensions="jql" />
     <lang.parserDefinition language="JQL"
                            implementationClass="com.intellij.tasks.jira.jql.JqlParserDefinition"/>
     <lang.syntaxHighlighterFactory language="JQL" implementationClass="com.intellij.tasks.jira.jql.JqlHighlighterFactory"/>

@@ -31,18 +31,15 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
-/**
- * @author nik
- */
 public class JpsArtifactUtil {
   public static boolean processPackagingElements(@NotNull JpsPackagingElement element,
-                                                 @NotNull Processor<JpsPackagingElement> processor) {
+                                                 @NotNull Processor<? super JpsPackagingElement> processor) {
     return processPackagingElements(element, processor, new HashSet<>());
   }
 
   private static boolean processPackagingElements(@NotNull JpsPackagingElement element,
-                                                 @NotNull Processor<JpsPackagingElement> processor,
-                                                 final Set<JpsPackagingElement> processed) {
+                                                 @NotNull Processor<? super JpsPackagingElement> processor,
+                                                 final Set<? super JpsPackagingElement> processed) {
     if (!processed.add(element)) {
       return false;
     }

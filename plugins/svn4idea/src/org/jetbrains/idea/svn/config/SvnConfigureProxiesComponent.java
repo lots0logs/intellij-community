@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.config;
 
 import com.intellij.openapi.actionSystem.AnAction;
@@ -11,7 +11,6 @@ import com.intellij.openapi.ui.MasterDetailsComponent;
 import com.intellij.openapi.util.Ref;
 import com.intellij.util.IconUtil;
 import com.intellij.util.PlatformIcons;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.idea.svn.SvnBundle;
@@ -54,7 +53,7 @@ public class SvnConfigureProxiesComponent extends MasterDetailsComponent {
 
   @Override
   public String getDisplayName() {
-    return "HTTP Proxies Configuration";
+    return SvnBundle.message("configurable.SvnConfigureProxiesComponent.display.name");
   }
 
   @Override
@@ -69,7 +68,7 @@ public class SvnConfigureProxiesComponent extends MasterDetailsComponent {
   private void addGroup(final ProxyGroup template) {
     final ProxyGroup group;
     if (template == null) {
-      group = new ProxyGroup(getNewName(), "", ContainerUtil.newHashMap());
+      group = new ProxyGroup(getNewName(), "", new HashMap<>());
     } else {
       group = new ProxyGroup(getNewName(), template.getPatterns(), template.getProperties());
     }
@@ -136,7 +135,9 @@ public class SvnConfigureProxiesComponent extends MasterDetailsComponent {
   @Override
   protected ArrayList<AnAction> createActions(final boolean fromPopup) {
     ArrayList<AnAction> result = new ArrayList<>();
-    result.add(new DumbAwareAction("Add", "Add", IconUtil.getAddIcon()) {
+    result.add(new DumbAwareAction(SvnBundle.messagePointer("action.DumbAware.SvnConfigureProxiesComponent.text.add"),
+                                   SvnBundle.messagePointer("action.DumbAware.SvnConfigureProxiesComponent.description.add"),
+                                   IconUtil.getAddIcon()) {
         {
             registerCustomShortcutSet(CommonShortcuts.INSERT, myTree);
         }
@@ -174,7 +175,9 @@ public class SvnConfigureProxiesComponent extends MasterDetailsComponent {
       }
     });
 
-    result.add(new DumbAwareAction("Copy", "Copy", PlatformIcons.COPY_ICON) {
+    result.add(new DumbAwareAction(SvnBundle.messagePointer("action.DumbAware.SvnConfigureProxiesComponent.text.copy"),
+                                   SvnBundle.messagePointer("action.DumbAware.SvnConfigureProxiesComponent.description.copy"),
+      PlatformIcons.COPY_ICON) {
         {
             registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_MASK)), myTree);
         }

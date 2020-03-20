@@ -16,21 +16,26 @@
 package org.jetbrains.idea.maven.server;
 
 import com.intellij.openapi.util.SystemInfoRt;
+import com.intellij.util.ExceptionUtilRt;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.TestOnly;
+import org.jetbrains.idea.maven.server.security.MavenToken;
+import org.jetbrains.idea.maven.server.security.TokenReader;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 public class MavenServerUtil {
   private static final Properties mySystemPropertiesCache;
+  private static MavenToken ourToken;
+
+
 
   static {
     Properties res = new Properties();
     res.putAll((Properties)System.getProperties().clone());
-    
+
     for (Iterator<Object> itr = res.keySet().iterator(); itr.hasNext(); ) {
       String propertyName = itr.next().toString();
       if (propertyName.startsWith("idea.")) {
@@ -44,7 +49,7 @@ public class MavenServerUtil {
       if (isMagicalProperty(key)) continue;
 
       if (SystemInfoRt.isWindows) {
-        key = key.toUpperCase();
+        key = key.toUpperCase(Locale.ENGLISH);
       }
 
       res.setProperty("env." + key, entry.getValue());
@@ -82,5 +87,33 @@ public class MavenServerUtil {
 
   public static void registerShutdownTask(Runnable task) {
     Runtime.getRuntime().addShutdownHook(new Thread(task, "Maven-server-shutdown-hook"));
+  }
+
+  @TestOnly
+  public static void addProperty(String propertyName, String value) {
+    mySystemPropertiesCache.setProperty(propertyName, value);
+  }
+
+  @TestOnly
+  public static void removeProperty(String propertyName) {
+    mySystemPropertiesCache.remove(propertyName);
+  }
+
+  public static void checkToken(MavenToken token) throws SecurityException {
+    if (ourToken == null || !ourToken.equals(token)) {
+      throw new SecurityException();
+    }
+  }
+
+  public static MavenToken getToken() {
+    return ourToken;
+  }
+
+  public static void readToken() {
+    try {
+      ourToken = new TokenReader(new Scanner(System.in), 10000).getToken();
+    } catch (Throwable e) {
+      ExceptionUtilRt.rethrowUnchecked(e);
+    }
   }
 }

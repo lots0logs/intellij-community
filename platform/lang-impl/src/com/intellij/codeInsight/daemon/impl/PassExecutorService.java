@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.daemon.impl;
 
@@ -50,8 +50,8 @@ import java.util.regex.Pattern;
 /**
  * @author cdr
  */
-class PassExecutorService implements Disposable {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.impl.PassExecutorService");
+final class PassExecutorService implements Disposable {
+  private static final Logger LOG = Logger.getInstance(PassExecutorService.class);
   private static final boolean CHECK_CONSISTENCY = ApplicationManager.getApplication().isUnitTestMode();
 
   private final Map<ScheduledPass, Job<Void>> mySubmittedPasses = new ConcurrentHashMap<>();
@@ -75,23 +75,24 @@ class PassExecutorService implements Disposable {
     for (Job<Void> submittedPass : mySubmittedPasses.values()) {
       submittedPass.cancel();
     }
-    if (waitForTermination) {
-      try {
+    try {
+      if (waitForTermination) {
         while (!waitFor(50)) {
           int i = 0;
         }
       }
-      catch (ProcessCanceledException ignored) {
-
-      }
-      catch (Error | RuntimeException e) {
-        throw e;
-      }
-      catch (Throwable throwable) {
-        LOG.error(throwable);
-      }
     }
-    mySubmittedPasses.clear();
+    catch (ProcessCanceledException ignored) {
+    }
+    catch (Error | RuntimeException e) {
+      throw e;
+    }
+    catch (Throwable throwable) {
+      LOG.error(throwable);
+    }
+    finally {
+      mySubmittedPasses.clear();
+    }
   }
 
   void submitPasses(@NotNull Map<FileEditor, HighlightingPass[]> passesMap, @NotNull DaemonProgressIndicator updateProgress) {
@@ -188,7 +189,7 @@ class PassExecutorService implements Disposable {
     log(updateProgress, null, vFiles + " ----- starting " + threadsToStartCountdown.get(), freePasses);
 
     for (ScheduledPass dependentPass : dependentPasses) {
-      mySubmittedPasses.put(dependentPass, Job.NULL_JOB);
+      mySubmittedPasses.put(dependentPass, Job.nullJob());
     }
     for (ScheduledPass freePass : freePasses) {
       submit(freePass);
@@ -270,6 +271,10 @@ class PassExecutorService implements Disposable {
   private FileEditor getPreferredFileEditor(Document document, @NotNull Collection<? extends FileEditor> fileEditors) {
     assert !fileEditors.isEmpty();
     if (document != null) {
+      FileEditor focusedEditor = ContainerUtil.find(fileEditors, it -> it instanceof TextEditor &&
+                                                                       ((TextEditor)it).getEditor().getContentComponent().isFocusOwner());
+      if (focusedEditor != null) return focusedEditor;
+
       final VirtualFile file = FileDocumentManager.getInstance().getFile(document);
       if (file != null) {
         final FileEditor selected = FileEditorManager.getInstance(myProject).getSelectedEditor(file);
@@ -321,7 +326,7 @@ class PassExecutorService implements Disposable {
 
     if (pass.isRunIntentionPassAfter() && fileEditor instanceof TextEditor) {
       Editor editor = ((TextEditor)fileEditor).getEditor();
-      ShowIntentionsPass ip = new ShowIntentionsPass(myProject, editor, -1);
+      ShowIntentionsPass ip = new ShowIntentionsPass(myProject, editor, false);
       ip.setId(nextPassId.incrementAndGet());
       ip.setCompletionPredecessorIds(new int[]{scheduledPass.myPass.getId()});
 
@@ -485,7 +490,7 @@ class PassExecutorService implements Disposable {
                                               @NotNull final AtomicInteger threadsToStartCountdown,
                                               @NotNull Runnable callbackOnApplied) {
     ApplicationManager.getApplication().invokeLater(() -> {
-      if (isDisposed() || myProject.isDisposed() || !fileEditor.isValid()) {
+      if (isDisposed() || !fileEditor.isValid()) {
         updateProgress.cancel();
       }
       if (updateProgress.isCanceled()) {
@@ -519,6 +524,7 @@ class PassExecutorService implements Disposable {
         HighlightingSessionImpl.waitForAllSessionsHighlightInfosApplied(updateProgress);
         log(updateProgress, pass, "Stopping ");
         updateProgress.stopIfRunning();
+        clearStaleEntries();
       }
       else {
         log(updateProgress, pass, "Finished but there are passes in the queue: " + threadsToStartCountdown.get());
@@ -527,14 +533,18 @@ class PassExecutorService implements Disposable {
     }, updateProgress.getModalityState());
   }
 
+  private void clearStaleEntries() {
+    mySubmittedPasses.keySet().removeIf(pass -> pass.myUpdateProgress.isCanceled());
+  }
+
   private void repaintErrorStripeAndIcon(@NotNull FileEditor fileEditor) {
     if (fileEditor instanceof TextEditor) {
       DefaultHighlightInfoProcessor.repaintErrorStripeAndIcon(((TextEditor)fileEditor).getEditor(), myProject);
     }
   }
 
-  protected boolean isDisposed() {
-    return isDisposed;
+  private boolean isDisposed() {
+    return isDisposed || myProject.isDisposed();
   }
 
   @NotNull
@@ -559,7 +569,7 @@ class PassExecutorService implements Disposable {
     return StringUtil.parseInt(num, 0);
   }
 
-  static void log(ProgressIndicator progressIndicator, TextEditorHighlightingPass pass, @NonNls @NotNull Object... info) {
+  static void log(ProgressIndicator progressIndicator, TextEditorHighlightingPass pass, @NonNls Object @NotNull ... info) {
     if (LOG.isDebugEnabled()) {
       CharSequence docText = pass == null || pass.getDocument() == null ? "" : ": '" + StringUtil.first(pass.getDocument().getCharsSequence(), 10, true)+ "'";
       synchronized (PassExecutorService.class) {

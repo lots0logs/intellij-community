@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.debugger;
 
 import com.google.common.cache.CacheBuilder;
@@ -17,19 +17,18 @@ import com.intellij.openapi.vfs.newvfs.FileAttribute;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.ProjectScope;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
+import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.psi.PyClass;
 import com.jetbrains.python.psi.PyFunction;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-/**
- * @author traff
- */
 public class PySignatureCacheManagerImpl extends PySignatureCacheManager {
   protected static final Logger LOG = Logger.getInstance(PySignatureCacheManagerImpl.class.getName());
 
@@ -72,7 +71,7 @@ public class PySignatureCacheManagerImpl extends PySignatureCacheManager {
       lines = dataString.split("\n");
     }
     else {
-      lines = ArrayUtil.EMPTY_STRING_ARRAY;
+      lines = ArrayUtilRt.EMPTY_STRING_ARRAY;
     }
 
     boolean found = false;
@@ -119,7 +118,7 @@ public class PySignatureCacheManagerImpl extends PySignatureCacheManager {
 
   private static void writeAttributeToAFile(@NotNull VirtualFile file, @NotNull String attrString) {
     try {
-      CALL_SIGNATURES_ATTRIBUTE.writeAttributeBytes(file, attrString.getBytes());
+      CALL_SIGNATURES_ATTRIBUTE.writeAttributeBytes(file, attrString.getBytes(StandardCharsets.UTF_8));
     }
     catch (IOException e) {
       LOG.warn("Can't write attribute " + file.getCanonicalPath() + " " + attrString);
@@ -206,7 +205,7 @@ public class PySignatureCacheManagerImpl extends PySignatureCacheManager {
 
     String content;
     if (data != null && data.length > 0) {
-      content = new String(data);
+      content = new String(data, StandardCharsets.UTF_8);
     }
     else {
       content = null;
@@ -270,7 +269,7 @@ public class PySignatureCacheManagerImpl extends PySignatureCacheManager {
           return false;
         }
         return true;
-      }), "Cleaning the Cache of Dynamically Collected Types", true, myProject);
+      }), PyBundle.message("debugger.cleaning.signature.cache"), true, myProject);
 
 
     String message;
@@ -280,6 +279,6 @@ public class PySignatureCacheManagerImpl extends PySignatureCacheManager {
     else {
       message = "Nothing to delete";
     }
-    Messages.showInfoMessage(myProject, message, "Delete Cache");
+    Messages.showInfoMessage(myProject, message, PyBundle.message("debugger.delete.signature.cache"));
   }
 }

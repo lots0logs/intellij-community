@@ -24,15 +24,10 @@ final class SearchableOptionPreloader extends PreloadingActivity {
                              @Nullable String configurableDisplayName,
                              boolean applyStemming) {
         Set<String> words = applyStemming ? registrar.getProcessedWords(text) : registrar.getProcessedWordsWithoutStemming(text);
-        for (String word : words) {
-          registrar.addOption(word, path, hit, configurableId, configurableDisplayName);
-        }
+        registrar.addOptions(words, path, hit, configurableId, configurableDisplayName);
       }
     };
 
-    for (SearchableOptionContributor contributor : SearchableOptionContributor.EP_NAME.getExtensionList()) {
-      indicator.checkCanceled();
-      contributor.processOptions(processor);
-    }
+    SearchableOptionContributor.EP_NAME.forEachExtensionSafe(contributor -> contributor.processOptions(processor));
   }
 }

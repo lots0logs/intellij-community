@@ -1,36 +1,30 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.dvcs.branch;
 
 import com.intellij.dvcs.repo.Repository;
+import com.intellij.openapi.progress.util.BackgroundTaskUtil;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.messages.Topic;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 public abstract class DvcsBranchManager {
   @NotNull private final DvcsBranchSettings myBranchSettings;
-  @NotNull private final Map<BranchType, Collection<String>> myPredefinedFavoriteBranches = ContainerUtil.newHashMap();
+  @NotNull private final Map<BranchType, Collection<String>> myPredefinedFavoriteBranches = new HashMap<>();
+  @NotNull private final Project myProject;
 
-  protected DvcsBranchManager(@NotNull DvcsBranchSettings settings,
-                              @NotNull BranchType[] branchTypes) {
+  @NotNull public static final Topic<DvcsBranchManagerListener> DVCS_BRANCH_SETTINGS_CHANGED =
+    Topic.create("Branch settings changed", DvcsBranchManagerListener.class);
+
+  protected DvcsBranchManager(@NotNull Project project, @NotNull DvcsBranchSettings settings,
+                              BranchType @NotNull [] branchTypes) {
+    myProject = project;
     myBranchSettings = settings;
     for (BranchType type : branchTypes) {
       String defaultBranchName = getDefaultBranchName(type);
@@ -74,5 +68,16 @@ public abstract class DvcsBranchManager {
         myBranchSettings.getExcludedFavorites().add(branchTypeName, repository, branchName);
       }
     }
+    notifySettingsChanged();
+  }
+
+  private void notifySettingsChanged() {
+    BackgroundTaskUtil.runUnderDisposeAwareIndicator(myProject, () -> {
+      myProject.getMessageBus().syncPublisher(DVCS_BRANCH_SETTINGS_CHANGED).branchSettingsChanged();
+    });
+  }
+
+  public interface DvcsBranchManagerListener {
+    void branchSettingsChanged();
   }
 }

@@ -1,21 +1,9 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem;
 
+import com.intellij.openapi.util.NlsActions;
 import com.intellij.util.ReflectionUtil;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -25,20 +13,24 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Supplier;
+
+import static com.intellij.openapi.util.NlsActions.*;
 
 /**
  * Represents a group of actions.
  *
  * @see com.intellij.openapi.actionSystem.DefaultActionGroup
  * @see com.intellij.openapi.actionSystem.ComputableActionGroup
+ * @see com.intellij.openapi.actionSystem.CheckedActionGroup
+ * @see com.intellij.openapi.actionSystem.CompactActionGroup
  */
 public abstract class ActionGroup extends AnAction {
   private boolean myPopup;
   private final PropertyChangeSupport myChangeSupport = new PropertyChangeSupport(this);
   public static final ActionGroup EMPTY_GROUP = new ActionGroup() {
-    @NotNull
     @Override
-    public AnAction[] getChildren(@Nullable AnActionEvent e) {
+    public AnAction @NotNull [] getChildren(@Nullable AnActionEvent e) {
       return EMPTY_ARRAY;
     }
   };
@@ -54,9 +46,9 @@ public abstract class ActionGroup extends AnAction {
 
   /**
    * Creates a new {@code ActionGroup} with shortName set to {@code null} and
-   * popup set to false.
+   * popup set to {@code false}.
    */
-  public ActionGroup(){
+  public ActionGroup() {
     // avoid eagerly creating template presentation
   }
 
@@ -69,24 +61,34 @@ public abstract class ActionGroup extends AnAction {
    * @param popup {@code true} if this group is a popup, {@code false}
    *  otherwise
    */
-  public ActionGroup(String shortName, boolean popup){
+  public ActionGroup(@Nls @ActionText String shortName, boolean popup){
+    this(() -> shortName, popup);
+  }
+
+  public ActionGroup(@NotNull Supplier<String> shortName, boolean popup){
     super(shortName);
     setPopup(popup);
   }
 
-  public ActionGroup(String text, String description, Icon icon) {
+  public ActionGroup(@Nls @ActionText String text,
+                     @Nls @ActionDescription String description,
+                     Icon icon) {
     super(text, description, icon);
   }
 
+  public ActionGroup(@NotNull Supplier<String> dynamicText, @NotNull Supplier<String> dynamicDescription, Icon icon) {
+    super(dynamicText, dynamicDescription, icon);
+  }
+
   /**
-   * This method can be called in popup menus if {@link #canBePerformed(DataContext)} is true
+   * This method can be called in popup menus if {@link #canBePerformed(DataContext)} is {@code true}.
    */
   @Override
   public void actionPerformed(@NotNull AnActionEvent e){
   }
 
   /**
-   * @return true if {@link #actionPerformed(AnActionEvent)} should be called
+   * @return {@code true} if {@link #actionPerformed(AnActionEvent)} should be called.
    */
   public boolean canBePerformed(@NotNull DataContext context) {
     return false;
@@ -101,10 +103,14 @@ public abstract class ActionGroup extends AnAction {
     return myPopup;
   }
 
+  public boolean isPopup(@NotNull String place) {
+    return isPopup();
+  }
+
   /**
    * Sets the type of the group.
    *
-   * @param popup If {@code true} the group will be shown as a popup in menus
+   * @param popup If {@code true} the group will be shown as a popup in menus.
    */
   public final void setPopup(boolean popup){
     boolean oldPopup = myPopup;
@@ -129,8 +135,11 @@ public abstract class ActionGroup extends AnAction {
    *
    * @return An array representing children of this group. All returned children must be not {@code null}.
    */
-  @NotNull
-  public abstract AnAction[] getChildren(@Nullable AnActionEvent e);
+  public abstract AnAction @NotNull [] getChildren(@Nullable AnActionEvent e);
+
+  public AnAction @NotNull [] getChildren(@Nullable AnActionEvent e, @NotNull ActionManager actionManager) {
+    return getChildren(null);
+  }
 
   final void setAsPrimary(@NotNull AnAction action, boolean isPrimary) {
     if (isPrimary) {

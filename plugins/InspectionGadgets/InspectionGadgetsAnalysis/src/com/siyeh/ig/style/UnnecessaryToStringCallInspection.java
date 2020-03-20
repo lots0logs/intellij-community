@@ -34,17 +34,9 @@ import org.jetbrains.annotations.*;
 public class UnnecessaryToStringCallInspection extends BaseInspection implements CleanupLocalInspectionTool {
 
   @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("unnecessary.tostring.call.display.name");
-  }
-
-  @Override
   @NotNull
   protected String buildErrorString(Object... infos) {
-    final String text = (String)infos[0];
-    return InspectionGadgetsBundle.message("unnecessary.tostring.call.problem.descriptor", text);
+    return InspectionGadgetsBundle.message("unnecessary.tostring.call.problem.descriptor");
   }
 
   @Override
@@ -55,16 +47,18 @@ public class UnnecessaryToStringCallInspection extends BaseInspection implements
   }
 
   private static class UnnecessaryToStringCallFix extends InspectionGadgetsFix {
+    private final @Nullable String replacementText;
 
-    private final String replacementText;
-
-    private UnnecessaryToStringCallFix(String replacementText) {
+    private UnnecessaryToStringCallFix(@Nullable String replacementText) {
       this.replacementText = replacementText;
     }
 
     @Override
     @NotNull
     public String getName() {
+      if (replacementText == null) {
+        return InspectionGadgetsBundle.message("inspection.redundant.string.remove.fix.name", "toString");
+      }
       return CommonQuickFixBundle.message("fix.replace.with.x", replacementText);
     }
 
@@ -80,7 +74,12 @@ public class UnnecessaryToStringCallInspection extends BaseInspection implements
         ObjectUtils.tryCast(descriptor.getPsiElement().getParent().getParent(), PsiMethodCallExpression.class);
       if (!isRedundantToString(call)) return;
       final PsiReferenceExpression methodExpression = call.getMethodExpression();
-      final PsiExpression qualifier = ExpressionUtils.getQualifierOrThis(methodExpression);
+      final PsiExpression qualifier = ExpressionUtils.getEffectiveQualifier(methodExpression);
+      if (qualifier == null) {
+        // Should not happen normally as toString() should always resolve to the innermost class
+        // Probably may happen only if SDK is broken (e.g. no java.lang.Object found)
+        return;
+      } 
       new CommentTracker().replaceAndRestoreComments(call, qualifier);
     }
   }
@@ -98,8 +97,9 @@ public class UnnecessaryToStringCallInspection extends BaseInspection implements
       final PsiReferenceExpression methodExpression = call.getMethodExpression();
       PsiElement referenceNameElement = methodExpression.getReferenceNameElement();
       if (referenceNameElement == null) return;
-      registerError(referenceNameElement, ProblemHighlightType.LIKE_UNUSED_SYMBOL,
-                    ExpressionUtils.getQualifierOrThis(methodExpression).getText());
+      PsiExpression qualifier = ExpressionUtils.getEffectiveQualifier(methodExpression);
+      if (qualifier == null) return;
+      registerError(referenceNameElement, ProblemHighlightType.LIKE_UNUSED_SYMBOL, qualifier.isPhysical() ? null : qualifier.getText());
     }
   }
 
@@ -109,8 +109,8 @@ public class UnnecessaryToStringCallInspection extends BaseInspection implements
     PsiReferenceExpression methodExpression = call.getMethodExpression();
     @NonNls final String referenceName = methodExpression.getReferenceName();
     if (!"toString".equals(referenceName) || !call.getArgumentList().isEmpty()) return false;
-    final PsiExpression qualifier = ExpressionUtils.getQualifierOrThis(methodExpression);
-    if (qualifier.getType() instanceof PsiArrayType) {
+    final PsiExpression qualifier = ExpressionUtils.getEffectiveQualifier(methodExpression);
+    if (qualifier == null || qualifier.getType() instanceof PsiArrayType) {
       // do not warn on nonsensical code
       return false;
     }

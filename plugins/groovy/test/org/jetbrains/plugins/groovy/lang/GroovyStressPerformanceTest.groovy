@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang
 
 import com.intellij.openapi.command.WriteCommandAction
@@ -22,6 +22,7 @@ import org.jetbrains.plugins.groovy.dsl.GroovyDslFileIndex
 import org.jetbrains.plugins.groovy.lang.psi.GrReferenceElement
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrAssignmentExpression
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrExpression
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrReferenceExpression
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMethod
 import org.jetbrains.plugins.groovy.lang.psi.impl.GroovyPsiManager
@@ -48,7 +49,7 @@ class GroovyStressPerformanceTest extends LightGroovyTestCase {
   }
 
   void testDontWalkLongInferenceChain() throws Exception {
-    //RecursionManager.assertOnRecursionPrevention(testRootDisposable)
+    RecursionManager.disableMissedCacheAssertions(testRootDisposable)
     Map<Integer, PsiClass> classes = [:]
     myFixture.addFileToProject "Foo0.groovy", """class Foo0 {
       def foo() { return 0 }
@@ -221,7 +222,7 @@ def foo(List<String> list, SomeClass sc) {
   List<String> result
   for (s in list) {
 ${
-'''
+      '''
     bar(s, result)
     bar2(s, result, sc)
     bar3(foo:s, bar:result, sc)
@@ -239,7 +240,7 @@ class SomeClass {
   void someMethod(String s) {}
 }
 """
-    measureHighlighting(text, 14_000)
+    measureHighlighting(text, 7_000)
   }
 
   void "test constructor call's"() {
@@ -590,5 +591,29 @@ def a = new Node()
     def file = (GroovyFile)fixture.configureByText('_.groovy', text.toString())
     def last = (GrReferenceExpression)file.statements.last()
     assert last.resolve() instanceof GrBindingVariable
+  }
+
+  void 'test method processing does not depend on the number of other methods'() {
+    RecursionManager.disableMissedCacheAssertions(testRootDisposable)
+    StringBuilder builder = new StringBuilder()
+    def n = 1000
+    builder.append("def foo0 (a) { a }\n")
+    for (i in 1..n) {
+      builder.append("""
+def foo$i (a) {
+    a +  (foo${i - 1}(1))
+}
+
+""")
+    }
+    builder.append("""
+foo${n}(a) {
+    foo${n - 1}(1)
+}""")
+    def file = fixture.configureByText('_.groovy', builder.toString()) as GroovyFile
+    IdeaTestUtil.startPerformanceTest(getTestName(false), 2000, {
+      myFixture.psiManager.dropPsiCaches()
+      (file.methods.last().block.statements.last() as GrExpression).type
+    }).attempts(5).assertTiming()
   }
 }

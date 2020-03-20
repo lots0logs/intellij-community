@@ -1,16 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins;
 
 import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.extensions.PluginId;
-import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.LightColors;
 import com.intellij.util.text.DateFormatUtil;
 import com.intellij.util.ui.ColumnInfo;
 import com.intellij.util.ui.UIUtil;
-import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -39,12 +37,10 @@ public class PluginManagerColumnInfo extends ColumnInfo<IdeaPluginDescriptor, St
   private static final InstalledPluginsState ourState = InstalledPluginsState.getInstance();
 
   private final int columnIdx;
-  private final PluginTableModel myModel;
 
-  public PluginManagerColumnInfo(int columnIdx, PluginTableModel model) {
+  public PluginManagerColumnInfo(int columnIdx) {
     super(COLUMNS[columnIdx]);
     this.columnIdx = columnIdx;
-    myModel = model;
   }
 
   @Override
@@ -78,104 +74,13 @@ public class PluginManagerColumnInfo extends ColumnInfo<IdeaPluginDescriptor, St
     }
   }
 
-  protected boolean isSortByName() {
-    return !isSortByDate() && !isSortByDownloads() && !isSortByStatus();
-  }
-
-  protected boolean isSortByDownloads() {
-    return myModel.isSortByDownloads();
-  }
-
-  protected boolean isSortByDate() {
-    return myModel.isSortByUpdated();
-  }
-
-  protected boolean isSortByStatus() {
-    return myModel.isSortByStatus();
-  }
-
-  public static boolean isDownloaded(@NotNull PluginNode node) {
-    if (node.getStatus() == PluginNode.STATUS_DOWNLOADED) return true;
-    final PluginId pluginId = node.getPluginId();
-    if (PluginManager.isPluginInstalled(pluginId)) {
-      return false;
-    }
-    return ourState.wasInstalled(pluginId);
-  }
-
   @Override
   public Comparator<IdeaPluginDescriptor> getComparator() {
-    final Comparator<IdeaPluginDescriptor> comparator = getColumnComparator();
-    if (isSortByStatus()) {
-      final RowSorter.SortKey defaultSortKey = myModel.getDefaultSortKey();
-      final int up = defaultSortKey != null && defaultSortKey.getSortOrder() == SortOrder.ASCENDING ? -1 : 1;
-      return (o1, o2) -> {
-        if (o1 instanceof PluginNode && o2 instanceof PluginNode) {
-          final int status1 = ((PluginNode)o1).getStatus();
-          final int status2 = ((PluginNode)o2).getStatus();
-          if (isDownloaded((PluginNode)o1)){
-            if (!isDownloaded((PluginNode)o2)) return up;
-            return comparator.compare(o1, o2);
-          }
-          if (isDownloaded((PluginNode)o2)) return -up;
-
-          if (status1 == PluginNode.STATUS_DELETED) {
-            if (status2 != PluginNode.STATUS_DELETED) return up;
-            return comparator.compare(o1, o2);
-          }
-          if (status2 == PluginNode.STATUS_DELETED) return -up;
-
-          if (status1 == PluginNode.STATUS_INSTALLED) {
-            if (status2 !=PluginNode.STATUS_INSTALLED) return up;
-            final boolean hasNewerVersion1 = ourState.hasNewerVersion(o1.getPluginId());
-            final boolean hasNewerVersion2 = ourState.hasNewerVersion(o2.getPluginId());
-            if (hasNewerVersion1 != hasNewerVersion2) {
-              if (hasNewerVersion1) return up;
-              return -up;
-            }
-            return comparator.compare(o1, o2);
-          }
-          if (status2 == PluginNode.STATUS_INSTALLED) {
-            return -up;
-          }
-        }
-        return comparator.compare(o1, o2);
-      };
-    }
-
-    return comparator;
+    return getColumnComparator();
   }
 
   protected Comparator<IdeaPluginDescriptor> getColumnComparator() {
     return (o1, o2) -> {
-      if (myModel.isSortByRating()) {
-        final String rating1 = ((PluginNode)o1).getRating();
-        final String rating2 = ((PluginNode)o2).getRating();
-        final int compare = Comparing.compare(rating2, rating1);
-        if (compare != 0) {
-          return compare;
-        }
-      }
-
-      if (isSortByDate()) {
-        long date1 = (o1 instanceof PluginNode) ? ((PluginNode)o1).getDate() : 0;
-        long date2 = (o2 instanceof PluginNode) ? ((PluginNode)o2).getDate() : 0;
-        date1 /= 60 * 1000;
-        date2 /= 60 * 1000;
-        if (date2 != date1) {
-          return date2 - date1 > 0L ? 1 : -1;
-        }
-      }
-
-      if (isSortByDownloads()) {
-        String d1 = o1 instanceof PluginNode ? ((PluginNode)o1).getDownloads() : null;
-        String d2 = o2 instanceof PluginNode ? ((PluginNode)o2).getDownloads() : null;
-        Long count1 = d1 == null ? 0 : Long.valueOf(d1);
-        Long count2 = d2 == null ? 0 : Long.valueOf(d2);
-        int result = count2.compareTo(count1);
-        if (result != 0) return result;
-      }
-
       return StringUtil.compare(o1.getName(), o2.getName(), true);
     };
   }
@@ -188,7 +93,7 @@ public class PluginManagerColumnInfo extends ColumnInfo<IdeaPluginDescriptor, St
   }
 
   @Override
-  public Class getColumnClass() {
+  public Class<?> getColumnClass() {
     return columnIdx == COLUMN_DOWNLOADS ? Integer.class : String.class;
   }
 
@@ -232,12 +137,12 @@ public class PluginManagerColumnInfo extends ColumnInfo<IdeaPluginDescriptor, St
 
       if (column == COLUMN_DATE) {
         long date = myPluginNode.getDate();
-        myLabel.setText(date != 0 && date != Long.MAX_VALUE ? DateFormatUtil.formatDate(date) : "n/a");
+        myLabel.setText(date != 0 && date != Long.MAX_VALUE ? DateFormatUtil.formatDate(date) : IdeBundle.message("label.category.n.a"));
         myLabel.setHorizontalAlignment(SwingConstants.RIGHT);
       }
       else if (column == COLUMN_DOWNLOADS) {
         String downloads = myPluginNode.getDownloads();
-        myLabel.setText(!StringUtil.isEmpty(downloads) ? downloads : "n/a");
+        myLabel.setText(!StringUtil.isEmpty(downloads) ? downloads : IdeBundle.message("label.category.n.a"));
         myLabel.setHorizontalAlignment(SwingConstants.RIGHT);
       }
       else if (column == COLUMN_CATEGORY) {
@@ -245,9 +150,9 @@ public class PluginManagerColumnInfo extends ColumnInfo<IdeaPluginDescriptor, St
         if (StringUtil.isEmpty(category)) {
           category = myPluginNode.getRepositoryName();
         }
-        myLabel.setText(!StringUtil.isEmpty(category) ? category : "n/a");
+        myLabel.setText(!StringUtil.isEmpty(category) ? category : IdeBundle.message("label.category.n.a"));
       }
-      if (myPluginNode.getStatus() == PluginNode.STATUS_INSTALLED) {
+      if (myPluginNode.getStatus() == PluginNode.Status.INSTALLED) {
         PluginId pluginId = myPluginNode.getPluginId();
         final boolean hasNewerVersion = ourState.hasNewerVersion(pluginId);
         if (hasNewerVersion) {

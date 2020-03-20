@@ -15,6 +15,7 @@
  */
 package com.intellij.jarFinder;
 
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.application.WriteAction;
@@ -123,7 +124,7 @@ public class InternetAttachSourceProvider extends AbstractAttachSourceProvider {
 
       @Override
       public ActionCallback perform(List<LibraryOrderEntry> orderEntriesContainingFile) {
-        final Task task = new Task.Modal(psiFile.getProject(), "Searching source...", true) {
+        final Task task = new Task.Modal(psiFile.getProject(), JavaUiBundle.message("progress.title.searching.source"), true) {
           @Override
           public void run(@NotNull final ProgressIndicator indicator) {
             String artifactUrl = null;
@@ -192,7 +193,7 @@ public class InternetAttachSourceProvider extends AbstractAttachSourceProvider {
     return true;
   }
 
-  public static void attachSourceJar(@NotNull File sourceJar, @NotNull Collection<Library> libraries) {
+  public static void attachSourceJar(@NotNull File sourceJar, @NotNull Collection<? extends Library> libraries) {
     VirtualFile srcFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(sourceJar);
     if (srcFile == null) return;
 
@@ -207,7 +208,7 @@ public class InternetAttachSourceProvider extends AbstractAttachSourceProvider {
     doAttachSourceJars(libraries, roots);
   }
 
-  private static void doAttachSourceJars(@NotNull Collection<Library> libraries, VirtualFile[] roots) {
+  private static void doAttachSourceJars(@NotNull Collection<? extends Library> libraries, VirtualFile[] roots) {
     WriteAction.run(() -> {
       for (Library library : libraries) {
         Library.ModifiableModel model = library.getModifiableModel();

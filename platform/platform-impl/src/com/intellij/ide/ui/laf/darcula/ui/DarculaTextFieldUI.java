@@ -1,10 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui.laf.darcula.ui;
 
+import com.intellij.ui.ComponentUtil;
 import com.intellij.util.ui.JBInsets;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.MacUIUtil;
-import com.intellij.util.ui.UIUtil;
 
 import javax.swing.*;
 import javax.swing.plaf.ComponentUI;
@@ -28,8 +27,9 @@ public class DarculaTextFieldUI extends TextFieldWithPopupHandlerUI {
     Insets i = getComponent().getInsets();
     JComponent c = getComponent();
     int minHeight = (isCompact(c) ? COMPACT_HEIGHT.get() : MINIMUM_HEIGHT.get()) + i.top + i.bottom;
-    return DarculaEditorTextFieldBorder.isComboBoxEditor(c) || UIUtil.getParentOfType(JSpinner.class, c) != null ?
-              textHeight : minHeight;
+    return DarculaEditorTextFieldBorder.isComboBoxEditor(c) || ComponentUtil.getParentOfType((Class<? extends JSpinner>)JSpinner.class,
+                                                                                             (Component)c) != null ?
+           textHeight : minHeight;
   }
 
   @Override
@@ -49,7 +49,8 @@ public class DarculaTextFieldUI extends TextFieldWithPopupHandlerUI {
 
       if (component.getBorder() instanceof DarculaTextBorder && !isTableCellEditor(component)) {
         paintDarculaBackground(g, component);
-      } else if (component.isOpaque()) {
+      }
+      else if (component.isOpaque()) {
         super.paintBackground(g);
       }
     }
@@ -74,7 +75,8 @@ public class DarculaTextFieldUI extends TextFieldWithPopupHandlerUI {
         g2.setColor(component.getBackground());
         g2.fill(new RoundRectangle2D.Float(bw, bw, r.width - bw * 2, r.height - bw * 2, arc, arc));
       }
-    } finally {
+    }
+    finally {
       g2.dispose();
     }
   }
@@ -82,7 +84,7 @@ public class DarculaTextFieldUI extends TextFieldWithPopupHandlerUI {
   @Override
   protected Insets getDefaultMargins() {
     Component c = getComponent();
-    return isCompact(c) || isTableCellEditor(c) ? JBUI.insets(0, 3) : JBUI.insets(2, 5);
+    return isCompact(c) || isTableCellEditor(c) ? JBInsets.create(0, 3) : JBInsets.create(2, 6);
   }
 
   protected float bw() {

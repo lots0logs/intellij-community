@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.ant.config.actions;
 
 import com.intellij.lang.ant.config.*;
@@ -30,13 +16,11 @@ public final class AntBuildGroup extends ActionGroup implements DumbAware {
   public void update(@NotNull AnActionEvent e) {
     Project project = e.getProject();
     Presentation presentation = e.getPresentation();
-    presentation.setEnabled(project != null);
-    presentation.setVisible(project != null);
+    presentation.setEnabledAndVisible(project != null);
   }
 
   @Override
-  @NotNull
-  public AnAction[] getChildren(@Nullable AnActionEvent e) {
+  public AnAction @NotNull [] getChildren(@Nullable AnActionEvent e) {
     if (e == null) return AnAction.EMPTY_ARRAY;
     Project project = e.getProject();
     if (project == null) return AnAction.EMPTY_ARRAY;
@@ -62,7 +46,7 @@ public final class AntBuildGroup extends ActionGroup implements DumbAware {
     if (model.getDefaultTargetName() != null) {
       DefaultActionGroup subgroup = new DefaultActionGroup();
       subgroup.add(getOrCreateAction(
-        buildFile, TargetAction.DEFAULT_TARGET_NAME, Collections.singletonList(TargetAction.DEFAULT_TARGET_NAME), null, model.getDefaultTargetActionId())
+        buildFile, TargetAction.getDefaultTargetName(), Collections.singletonList(TargetAction.getDefaultTargetName()), null, model.getDefaultTargetActionId())
       );
       group.add(subgroup);
     }
@@ -74,7 +58,7 @@ public final class AntBuildGroup extends ActionGroup implements DumbAware {
 
   private static void addGroupOfTargets(final AntBuildFile buildFile,
                                         final AntBuildTarget[] targets,
-                                        final Set<String> addedTargetNames,
+                                        final Set<? super String> addedTargetNames,
                                         final DefaultActionGroup group) {
     final DefaultActionGroup subgroup = new DefaultActionGroup();
     for (final AntBuildTarget target : targets) {

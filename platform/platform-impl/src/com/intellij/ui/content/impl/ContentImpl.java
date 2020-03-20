@@ -1,19 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.content.impl;
 
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.ActionGroup;
-import com.intellij.openapi.util.BusyObject;
-import com.intellij.openapi.util.Computable;
-import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.UserDataHolderBase;
+import com.intellij.openapi.util.*;
 import com.intellij.ui.LayeredIcon;
 import com.intellij.ui.content.AlertIcon;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.ContentManager;
 import com.intellij.util.IconUtil;
-import com.intellij.util.ObjectUtils;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -46,19 +43,26 @@ public class ContentImpl extends UserDataHolderBase implements Content {
   private JComponent myActionsContextComponent;
   private JComponent mySearchComponent;
 
-  private Computable<JComponent> myFocusRequest;
+  private Computable<? extends JComponent> myFocusRequest;
   private BusyObject myBusyObject;
   private String mySeparator;
   private Icon myPopupIcon;
   private long myExecutionId;
   private String myHelpId;
 
-  public ContentImpl(JComponent component, String displayName, boolean isPinnable) {
+  private static final NotNullLazyValue<Icon> emptyPinIcon = AtomicNotNullLazyValue.createValue(() -> {
+    Icon icon = AllIcons.Nodes.TabPin;
+    int width = icon.getIconWidth();
+    return IconUtil.cropIcon(icon, new Rectangle(width / 2, 0, width - width / 2, icon.getIconHeight()));
+  });
+
+  public ContentImpl(JComponent component, @Nullable @Nls(capitalization = Nls.Capitalization.Title) String displayName, boolean isPinnable) {
     myComponent = component;
     myDisplayName = displayName;
     myPinnable = isPinnable;
   }
 
+  @NotNull
   @Override
   public JComponent getComponent() {
     return myComponent;
@@ -73,20 +77,29 @@ public class ContentImpl extends UserDataHolderBase implements Content {
 
   @Override
   public JComponent getPreferredFocusableComponent() {
-    if (myFocusRequest != null) return myFocusRequest.compute();
-    if (myComponent == null) return null;
+    if (myFocusRequest != null) {
+      return myFocusRequest.compute();
+    }
+    if (myComponent == null) {
+      return null;
+    }
+
     Container traversalRoot = myComponent.isFocusCycleRoot() ? myComponent : myComponent.getFocusCycleRootAncestor();
-    if (traversalRoot == null) return null;
-    return ObjectUtils.tryCast(traversalRoot.getFocusTraversalPolicy().getDefaultComponent(myComponent), JComponent.class);
+    if (traversalRoot == null) {
+      return null;
+    }
+
+    Component component = traversalRoot.getFocusTraversalPolicy().getDefaultComponent(myComponent);
+    return component instanceof JComponent ? (JComponent)component : null;
   }
 
   @Override
-  public void setPreferredFocusableComponent(final JComponent c) {
+  public void setPreferredFocusableComponent(JComponent c) {
     setPreferredFocusedComponent(() -> c);
   }
 
   @Override
-  public void setPreferredFocusedComponent(final Computable<JComponent> computable) {
+  public void setPreferredFocusedComponent(Computable<? extends JComponent> computable) {
     myFocusRequest = computable;
   }
 
@@ -101,25 +114,11 @@ public class ContentImpl extends UserDataHolderBase implements Content {
   @Override
   public Icon getIcon() {
     if (myIsLocked) {
-      return myIcon == null ? getEmptyPinIcon() : myLayeredIcon;
+      return myIcon == null ? emptyPinIcon.getValue() : myLayeredIcon;
     }
     else {
       return myIcon;
     }
-  }
-
-  private static class IconHolder {
-    private static final Icon ourEmptyPinIcon;
-    static {
-      Icon icon = AllIcons.Nodes.TabPin;
-      int width = icon.getIconWidth();
-      ourEmptyPinIcon = IconUtil.cropIcon(icon, new Rectangle(width / 2, 0, width - width / 2, icon.getIconHeight()));
-    }
-  }
-
-  @NotNull
-  private static Icon getEmptyPinIcon() {
-    return IconHolder.ourEmptyPinIcon;
   }
 
   @Override
@@ -152,12 +151,11 @@ public class ContentImpl extends UserDataHolderBase implements Content {
 
   @Override
   public String getToolwindowTitle() {
-    if (myToolwindowTitle != null) return myToolwindowTitle;
-    return myDisplayName;
+    return myToolwindowTitle == null ? myDisplayName : myToolwindowTitle;
   }
 
   @Override
-  public Disposable getDisposer() {
+  public @Nullable Disposable getDisposer() {
     return myDisposer;
   }
 
@@ -169,11 +167,6 @@ public class ContentImpl extends UserDataHolderBase implements Content {
   @Override
   public void setShouldDisposeContent(boolean value) {
     myShouldDisposeContent = value;
-  }
-
-  @Override
-  public boolean shouldDisposeContent() {
-    return myShouldDisposeContent;
   }
 
   @Override
@@ -198,7 +191,7 @@ public class ContentImpl extends UserDataHolderBase implements Content {
     myChangeSupport.removePropertyChangeListener(l);
   }
 
-  public void setManager(ContentManager manager) {
+  public void setManager(@Nullable ContentManager manager) {
     myManager = manager;
   }
 
@@ -217,7 +210,6 @@ public class ContentImpl extends UserDataHolderBase implements Content {
     Disposer.dispose(this);
   }
 
-  //TODO[anton,vova] investigate
   @Override
   public boolean isValid() {
     return myManager != null;
@@ -303,15 +295,13 @@ public class ContentImpl extends UserDataHolderBase implements Content {
       Disposer.dispose((Disposable)myComponent);
     }
 
-    myComponent = null;
-    myFocusRequest = null;
-    myManager = null;
-
-    clearUserData();
     if (myDisposer != null) {
       Disposer.dispose(myDisposer);
       myDisposer = null;
     }
+
+    myFocusRequest = null;
+    clearUserData();
   }
 
   @Override
@@ -361,7 +351,7 @@ public class ContentImpl extends UserDataHolderBase implements Content {
   }
 
   @Override
-  public void setSearchComponent(@Nullable final JComponent comp) {
+  public void setSearchComponent(@Nullable JComponent comp) {
     mySearchComponent = comp;
   }
 

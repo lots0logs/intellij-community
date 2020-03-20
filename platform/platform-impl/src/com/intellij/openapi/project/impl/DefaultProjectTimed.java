@@ -1,63 +1,54 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.project.impl;
 
-import com.intellij.ide.plugins.PluginManager;
-import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.TransactionGuard;
+import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.command.WriteCommandAction;
-import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.project.ex.ProjectEx;
+import com.intellij.ui.GuiUtils;
 import com.intellij.util.TimedReference;
 import org.jetbrains.annotations.NotNull;
 
-public class DefaultProjectTimed extends TimedReference<Project> {
-  private static final Logger LOG = Logger.getInstance(DefaultProjectTimed.class);
-  @NotNull private final Disposable myParentDisposable;
+public abstract class DefaultProjectTimed extends TimedReference<ProjectEx> {
+  @NotNull
+  private final DefaultProject myParentDisposable;
 
-  DefaultProjectTimed(@NotNull Disposable disposable) {
+  DefaultProjectTimed(@NotNull DefaultProject disposable) {
     super(disposable);
     myParentDisposable = disposable;
   }
 
   @NotNull
-  private static Project compute() {
-    LOG.assertTrue(!ApplicationManager.getApplication().isDisposeInProgress(), "Application is being disposed!");
-    ProjectEx[] project = new ProjectEx[1];
-    ProgressManager.getInstance().executeNonCancelableSection(() -> {
-      try {
-        project[0] = ProjectManagerImpl.createProject(null, "", true);
-        ProjectManagerImpl.initProject(project[0], null);
-      }
-      catch (Throwable t) {
-        PluginManager.processException(t);
-      }
-    });
-    return project[0];
-  }
+  abstract ProjectEx compute();
+
+  abstract void init(Project project);
 
   @NotNull
   @Override
-  public synchronized Project get() {
-    Project value = super.get();
+  public synchronized ProjectEx get() {
+    ProjectEx value = super.get();
     if (value == null) {
       value = compute();
       set(value);
+      init(value);
+      // disable "the only project" optimization since we have now more than one project.
+      // (even though the default project is not a real project, it can be used indirectly in e.g. "Settings|Code Style" code fragments PSI)
+      ((ProjectManagerImpl)ProjectManager.getInstance()).updateTheOnlyProjectField();
+
     }
     return value;
   }
 
   @Override
-  public synchronized void dispose() {
+  public void dispose() {
     // project must be disposed in EDT in write action
-    Runnable doDispose = () -> WriteCommandAction.runWriteCommandAction(null, () -> super.dispose());
-    if (ApplicationManager.getApplication().isDispatchThread()) {
-      doDispose.run();
-    }
-    else {
-      TransactionGuard.submitTransaction(myParentDisposable, doDispose);
-    }
+    Runnable doDispose = () -> {
+      if (!ApplicationManager.getApplication().isDisposed() && isCached()) {
+        WriteCommandAction.runWriteCommandAction(null, () -> super.dispose());
+      }
+    };
+    GuiUtils.invokeLaterIfNeeded(doDispose, ModalityState.NON_MODAL, myParentDisposable.getDisposed());
   }
 }

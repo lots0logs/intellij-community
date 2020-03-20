@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.template.postfix.settings;
 
 import com.intellij.codeInsight.template.postfix.templates.LanguagePostfixTemplate;
@@ -11,9 +11,9 @@ import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
-import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.util.SimpleModificationTracker;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import org.jdom.Element;
@@ -32,12 +32,11 @@ public class PostfixTemplateStorage extends SimpleModificationTracker implements
 
   private final Map<String, PostfixTemplateProvider> myTemplateProviders;
   private final MultiMap<String, PostfixTemplate> myTemplates = MultiMap.createSmart();
-  private final List<Element> myUnloadedTemplates = ContainerUtil.newSmartList();
+  private final List<Element> myUnloadedTemplates = new SmartList<>();
 
   public PostfixTemplateStorage() {
     myTemplateProviders = new HashMap<>();
-    LanguageExtensionPoint[] extensions = new ExtensionPointName<LanguageExtensionPoint>(LanguagePostfixTemplate.EP_NAME).getExtensions();
-    for (LanguageExtensionPoint extension : extensions) {
+    for (LanguageExtensionPoint extension : LanguagePostfixTemplate.EP_NAME.getExtensionList()) {
       Object provider = extension.getInstance();
       if (provider instanceof PostfixTemplateProvider) {
         myTemplateProviders.put(((PostfixTemplateProvider)provider).getId(), (PostfixTemplateProvider)provider);

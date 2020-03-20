@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.debugger.memory.tracking;
 
 import com.intellij.debugger.DebuggerManager;
@@ -11,8 +11,6 @@ import com.intellij.debugger.engine.events.DebuggerCommandImpl;
 import com.intellij.debugger.engine.events.SuspendContextCommandImpl;
 import com.intellij.debugger.impl.DebuggerUtilsEx;
 import com.intellij.debugger.memory.component.MemoryViewDebugProcessData;
-import com.intellij.xdebugger.memory.component.InstancesTracker;
-import com.intellij.xdebugger.memory.event.InstancesTrackerListener;
 import com.intellij.debugger.memory.utils.StackFrameItem;
 import com.intellij.debugger.settings.DebuggerSettings;
 import com.intellij.debugger.ui.breakpoints.JavaLineBreakpointType;
@@ -21,6 +19,8 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.Project;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebuggerManager;
+import com.intellij.xdebugger.memory.component.InstancesTracker;
+import com.intellij.xdebugger.memory.event.InstancesTrackerListener;
 import com.sun.jdi.Location;
 import com.sun.jdi.Method;
 import com.sun.jdi.ObjectReference;
@@ -113,7 +113,7 @@ public class ConstructorInstancesTracker implements TrackerForNewInstances, Disp
   @NotNull
   @Override
   public List<ObjectReference> getNewInstances() {
-    return myNewObjects == null ? Collections.EMPTY_LIST : new ArrayList<>(myNewObjects);
+    return myNewObjects == null ? Collections.emptyList() : new ArrayList<>(myNewObjects);
   }
 
   @Override
@@ -207,7 +207,7 @@ public class ConstructorInstancesTracker implements TrackerForNewInstances, Disp
     }
 
     @Override
-    public boolean processLocatableEvent(SuspendContextCommandImpl action, LocatableEvent event) {
+    public boolean processLocatableEvent(@NotNull SuspendContextCommandImpl action, LocatableEvent event) {
       if (myIsDeleted) {
         event.request().disable();
       }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight;
 
 import com.intellij.codeInspection.bytecodeAnalysis.ProjectBytecodeAnalysis;
@@ -28,8 +28,7 @@ public class DefaultInferredAnnotationProvider implements InferredAnnotationProv
   private static final Set<String> JB_INFERRED_ANNOTATIONS =
     ContainerUtil.set(ORG_JETBRAINS_ANNOTATIONS_CONTRACT, Mutability.UNMODIFIABLE_ANNOTATION,
                       Mutability.UNMODIFIABLE_VIEW_ANNOTATION);
-  private static final Set<String> EXPERIMENTAL_INFERRED_ANNOTATIONS =
-    ContainerUtil.set(Mutability.UNMODIFIABLE_ANNOTATION, Mutability.UNMODIFIABLE_VIEW_ANNOTATION);
+  private static final Set<String> EXPERIMENTAL_INFERRED_ANNOTATIONS = Collections.emptySet();
   private final Project myProject;
 
   // Could be added via external annotations, but there are many signatures to handle
@@ -66,9 +65,11 @@ public class DefaultInferredAnnotationProvider implements InferredAnnotationProv
       return null;
     }
 
-    PsiAnnotation fromBytecode = ProjectBytecodeAnalysis.getInstance(myProject).findInferredAnnotation(listOwner, annotationFQN);
-    if (fromBytecode != null) {
-      return fromBytecode;
+    if (canInferFromByteCode(listOwner)) {
+      PsiAnnotation fromBytecode = ProjectBytecodeAnalysis.getInstance(myProject).findInferredAnnotation(listOwner, annotationFQN);
+      if (fromBytecode != null) {
+        return fromBytecode;
+      }
     }
 
     if (isDefaultNullabilityAnnotation(annotationFQN)) {
@@ -234,11 +235,13 @@ public class DefaultInferredAnnotationProvider implements InferredAnnotationProv
   @Override
   public List<PsiAnnotation> findInferredAnnotations(@NotNull PsiModifierListOwner listOwner) {
     listOwner = PsiUtil.preferCompiledElement(listOwner);
-    List<PsiAnnotation> result = ContainerUtil.newArrayList();
-    PsiAnnotation[] fromBytecode = ProjectBytecodeAnalysis.getInstance(myProject).findInferredAnnotations(listOwner);
-    for (PsiAnnotation annotation : fromBytecode) {
-      if (!ignoreInference(listOwner, annotation.getQualifiedName())) {
-        result.add(annotation);
+    List<PsiAnnotation> result = new ArrayList<>();
+    if (canInferFromByteCode(listOwner)) {
+      PsiAnnotation[] fromBytecode = ProjectBytecodeAnalysis.getInstance(myProject).findInferredAnnotations(listOwner);
+      for (PsiAnnotation annotation : fromBytecode) {
+        if (!ignoreInference(listOwner, annotation.getQualifiedName())) {
+          result.add(annotation);
+        }
       }
     }
 
@@ -267,6 +270,21 @@ public class DefaultInferredAnnotationProvider implements InferredAnnotationProv
     ContainerUtil.addIfNotNull(result, getInferredMutabilityAnnotation(listOwner));
 
     return result;
+  }
+
+  private static boolean canInferFromByteCode(PsiModifierListOwner owner) {
+    if (!(owner instanceof PsiCompiledElement)) return false;
+    if (owner instanceof PsiField) {
+      return true;
+    }
+    if (owner instanceof PsiMethod) {
+      return !PsiUtil.canBeOverridden((PsiMethod)owner);
+    }
+    if (owner instanceof PsiParameter) {
+      PsiElement scope = ((PsiParameter)owner).getDeclarationScope();
+      return scope instanceof PsiMethod && !PsiUtil.canBeOverridden((PsiMethod)scope); 
+    }
+    return false;
   }
 
   public static boolean isExperimentalInferredAnnotation(@NotNull PsiAnnotation annotation) {

@@ -1,11 +1,10 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.updateSettings.impl;
 
 import com.intellij.openapi.application.ApplicationInfo;
 import com.intellij.openapi.components.*;
 import com.intellij.openapi.updateSettings.UpdateStrategyCustomization;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.net.NetUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -15,8 +14,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@State(name = "UpdatesConfigurable", storages = @Storage(value = "updates.xml", roamingType = RoamingType.DISABLED, exportable = true))
-public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
+@State(name = "UpdatesConfigurable", storages = @Storage(value = "updates.xml", roamingType = RoamingType.DISABLED, exportable = true), reportStatistic = true)
+public final class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
   public static UpdateSettings getInstance() {
     return ServiceManager.getService(UpdateSettings.class);
   }
@@ -68,14 +67,6 @@ public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
     return myState.getExternalUpdateChannels();
   }
 
-  public boolean isSecureConnection() {
-    return myState.isUseSecureConnection();
-  }
-
-  public void setSecureConnection(boolean value) {
-    myState.setUseSecureConnection(value);
-  }
-
   public long getLastTimeChecked() {
     return myState.getLastTimeChecked();
   }
@@ -120,6 +111,7 @@ public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
     }
 
     UpdateSettingsProviderHelper.addPluginRepositories(hosts);
+    ContainerUtil.removeDuplicates(hosts);
     return hosts;
   }
 
@@ -130,10 +122,6 @@ public class UpdateSettings implements PersistentStateComponent<UpdateOptions> {
   public void saveLastCheckedInfo() {
     myState.setLastTimeChecked(System.currentTimeMillis());
     myState.setLastBuildChecked(ApplicationInfo.getInstance().getBuild().asString());
-  }
-
-  public boolean canUseSecureConnection() {
-    return myState.isUseSecureConnection() && NetUtils.isSniEnabled();
   }
 
   public boolean isThirdPartyPluginsAllowed() {

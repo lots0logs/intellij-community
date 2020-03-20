@@ -17,9 +17,12 @@ package com.intellij.java.codeInsight.daemon.impl;
 
 import com.intellij.JavaTestUtil;
 import com.intellij.codeInsight.CodeInsightActionHandler;
+import com.intellij.codeInsight.daemon.GutterIconDescriptor;
 import com.intellij.codeInsight.daemon.LightDaemonAnalyzerTestCase;
 import com.intellij.codeInsight.daemon.LineMarkerInfo;
+import com.intellij.codeInsight.daemon.LineMarkerSettings;
 import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl;
+import com.intellij.codeInsight.daemon.impl.JavaLineMarkerProvider;
 import com.intellij.codeInsight.daemon.impl.MarkerType;
 import com.intellij.ide.DataManager;
 import com.intellij.lang.CodeInsightActions;
@@ -27,6 +30,7 @@ import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.keymap.KeymapUtil;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl;
@@ -58,6 +62,11 @@ public class JavaGotoSuperTest extends LightDaemonAnalyzerTestCase {
   }
 
   public void testLambdaMarker() {
+    GutterIconDescriptor.Option option = JavaLineMarkerProvider.LAMBDA_OPTION;
+    boolean isEnabled = LineMarkerSettings.getSettings().isEnabled(option);
+    LineMarkerSettings.getSettings().setEnabled(option, true);
+    Disposer.register(getTestRootDisposable(), () -> LineMarkerSettings.getSettings().setEnabled(option, isEnabled));
+
     configureByFile(getBasePath() + getTestName(false) + ".java");
 
     doHighlighting();
@@ -89,12 +98,12 @@ public class JavaGotoSuperTest extends LightDaemonAnalyzerTestCase {
     assertEquals("run", aRun.getName());
     doHighlighting();
     Document document = getEditor().getDocument();
-    List<LineMarkerInfo> markers = DaemonCodeAnalyzerImpl.getLineMarkers(document, getProject());
+    List<LineMarkerInfo<?>> markers = DaemonCodeAnalyzerImpl.getLineMarkers(document, getProject());
     assertTrue(markers.size() >= 2);
-    LineMarkerInfo iMarker = findMarkerWithElement(markers, iRun.getNameIdentifier());
+    LineMarkerInfo<?> iMarker = findMarkerWithElement(markers, iRun.getNameIdentifier());
     assertSame(MarkerType.OVERRIDDEN_METHOD.getNavigationHandler(), iMarker.getNavigationHandler());
 
-    LineMarkerInfo aMarker = findMarkerWithElement(markers, aRun.getNameIdentifier());
+    LineMarkerInfo<?> aMarker = findMarkerWithElement(markers, aRun.getNameIdentifier());
     assertSame(MarkerType.SIBLING_OVERRIDING_METHOD.getNavigationHandler(), aMarker.getNavigationHandler());
   }
   public void testSiblingInheritanceLineMarkersEvenIfMethodIsFinal() {
@@ -108,17 +117,17 @@ public class JavaGotoSuperTest extends LightDaemonAnalyzerTestCase {
     assertEquals("run", aRun.getName());
     doHighlighting();
     Document document = getEditor().getDocument();
-    List<LineMarkerInfo> markers = DaemonCodeAnalyzerImpl.getLineMarkers(document, getProject());
+    List<LineMarkerInfo<?>> markers = DaemonCodeAnalyzerImpl.getLineMarkers(document, getProject());
     assertTrue(markers.size() >= 2);
-    LineMarkerInfo iMarker = findMarkerWithElement(markers, iRun.getNameIdentifier());
+    LineMarkerInfo<?> iMarker = findMarkerWithElement(markers, iRun.getNameIdentifier());
     assertSame(MarkerType.OVERRIDDEN_METHOD.getNavigationHandler(), iMarker.getNavigationHandler());
 
-    LineMarkerInfo aMarker = findMarkerWithElement(markers, aRun.getNameIdentifier());
+    LineMarkerInfo<?> aMarker = findMarkerWithElement(markers, aRun.getNameIdentifier());
     assertSame(MarkerType.SIBLING_OVERRIDING_METHOD.getNavigationHandler(), aMarker.getNavigationHandler());
   }
 
-  private static LineMarkerInfo findMarkerWithElement(List<LineMarkerInfo> markers, PsiElement psiMethod) {
-    LineMarkerInfo marker = ContainerUtil.find(markers, info -> info.getElement().equals(psiMethod));
+  private static LineMarkerInfo<?> findMarkerWithElement(List<LineMarkerInfo<?>> markers, PsiElement psiMethod) {
+    LineMarkerInfo<?> marker = ContainerUtil.find(markers, info -> info.getElement().equals(psiMethod));
     assertNotNull(markers.toString(), marker);
     return marker;
   }
@@ -152,13 +161,13 @@ public class JavaGotoSuperTest extends LightDaemonAnalyzerTestCase {
 
     doHighlighting();
     Document document = getEditor().getDocument();
-    List<LineMarkerInfo> markers = DaemonCodeAnalyzerImpl.getLineMarkers(document, getProject());
-    List<LineMarkerInfo> inMyClass = ContainerUtil.filter(markers, info -> OCBaseLanguageFileType.getTextRange().containsRange(info.startOffset, info.endOffset));
+    List<LineMarkerInfo<?>> markers = DaemonCodeAnalyzerImpl.getLineMarkers(document, getProject());
+    List<LineMarkerInfo<?>> inMyClass = ContainerUtil.filter(markers, info -> OCBaseLanguageFileType.getTextRange().containsRange(info.startOffset, info.endOffset));
     assertEquals(inMyClass.toString(), 2, inMyClass.size());
-    LineMarkerInfo iMarker = findMarkerWithElement(inMyClass, getName.getNameIdentifier());
+    LineMarkerInfo<?> iMarker = findMarkerWithElement(inMyClass, getName.getNameIdentifier());
     assertSame(MarkerType.OVERRIDING_METHOD.getNavigationHandler(), iMarker.getNavigationHandler());
 
-    LineMarkerInfo aMarker = findMarkerWithElement(inMyClass, OCBaseLanguageFileType.getNameIdentifier());
+    LineMarkerInfo<?> aMarker = findMarkerWithElement(inMyClass, OCBaseLanguageFileType.getNameIdentifier());
     assertSame(MarkerType.SUBCLASSED_CLASS.getNavigationHandler(), aMarker.getNavigationHandler());
   }
 

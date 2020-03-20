@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.editorActions;
 
@@ -14,34 +14,15 @@ import com.intellij.psi.FileViewProvider;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.StringEscapesTokenTypes;
-import com.intellij.util.ArrayUtil;
 import com.intellij.util.Processor;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.LinkedList;
 import java.util.List;
 
-/**
- * @author Mike
- */
 public class SelectWordUtil {
-  private static ExtendWordSelectionHandler[] SELECTIONERS = new ExtendWordSelectionHandler[]{
-  };
-
-  private static boolean ourExtensionsLoaded = false;
-
   private SelectWordUtil() {
-  }
-
-  static ExtendWordSelectionHandler[] getExtendWordSelectionHandlers() {
-    if (!ourExtensionsLoaded) {
-      ourExtensionsLoaded = true;
-      for (ExtendWordSelectionHandler handler : ExtendWordSelectionHandler.EP_NAME.getExtensionList()) {
-        SELECTIONERS = ArrayUtil.append(SELECTIONERS, handler);
-      }
-    }
-    return SELECTIONERS;
   }
 
   public static final CharCondition JAVA_IDENTIFIER_PART_CONDITION = ch -> Character.isJavaIdentifierPart(ch);
@@ -216,9 +197,9 @@ public class SelectWordUtil {
                                         @NotNull CharSequence text,
                                         int cursorOffset,
                                         @NotNull Editor editor) {
-    ExtendWordSelectionHandler[] extendWordSelectionHandlers = getExtendWordSelectionHandlers();
+    ExtendWordSelectionHandler[] extendWordSelectionHandlers = ExtendWordSelectionHandler.EP_NAME.getExtensions();
     int minimalTextRangeLength = 0;
-    List<ExtendWordSelectionHandler> availableSelectioners = ContainerUtil.newLinkedList();
+    List<ExtendWordSelectionHandler> availableSelectioners = new LinkedList<>();
     for (ExtendWordSelectionHandler selectioner : extendWordSelectionHandlers) {
       if (selectioner.canSelect(element)) {
         int selectionerMinimalTextRange = selectioner instanceof ExtendWordSelectionHandlerBase

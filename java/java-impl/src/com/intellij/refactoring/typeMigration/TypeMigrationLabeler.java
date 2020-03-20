@@ -3,6 +3,7 @@ package com.intellij.refactoring.typeMigration;
 
 import com.intellij.codeInsight.generation.GenerateMembersUtil;
 import com.intellij.codeInsight.generation.GetterSetterPrototypeProvider;
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.lang.java.JavaLanguage;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
@@ -47,7 +48,7 @@ import java.util.*;
  * @author db
  */
 public class TypeMigrationLabeler {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.typeMigration.TypeMigrationLabeler");
+  private static final Logger LOG = Logger.getInstance(TypeMigrationLabeler.class);
   private boolean myShowWarning = true;
   private volatile MigrateException myException;
   private final Semaphore myDialogSemaphore = new Semaphore();
@@ -82,7 +83,7 @@ public class TypeMigrationLabeler {
 
   public TypeMigrationLabeler(TypeMigrationRules rules,
                               Function<PsiElement, PsiType> migrationRootTypeFunction,
-                              @Nullable("any root accepted if null") PsiElement[] allowedRoots,
+                              PsiElement @Nullable("any root accepted if null") [] allowedRoots,
                               Project project) {
     myRules = rules;
     myMigrationRootTypeFunction = migrationRootTypeFunction;
@@ -131,8 +132,7 @@ public class TypeMigrationLabeler {
     return map2Usages(myFailedConversions.keySet());
   }
 
-  @NotNull
-  private static UsageInfo[] map2Usages(Collection<? extends Pair<SmartPsiElementPointer<PsiExpression>, PsiType>> usages) {
+  private static UsageInfo @NotNull [] map2Usages(Collection<? extends Pair<SmartPsiElementPointer<PsiExpression>, PsiType>> usages) {
     return ContainerUtil
       .map2Array(usages, new UsageInfo[usages.size()], pair -> {
         final PsiExpression expr = pair.getFirst().getElement();
@@ -658,7 +658,7 @@ public class TypeMigrationLabeler {
           final String newMethodName = isMethodNameCanBeChanged(method);
           if (newMethodName != null) {
             final MigrateGetterNameSetting migrateGetterNameSetting = myRules.getConversionSettings(MigrateGetterNameSetting.class);
-            migrateGetterNameSetting.askUserIfNeed(overriddenUsageInfo, newMethodName, myTypeEvaluator.getType(myCurrentRoot));
+            migrateGetterNameSetting.askUserIfNeeded(overriddenUsageInfo, newMethodName, myTypeEvaluator.getType(myCurrentRoot));
           }
         }
         else {
@@ -806,7 +806,7 @@ public class TypeMigrationLabeler {
       myDialogSemaphore.down();
       try {
         final Runnable checkTimeToStopRunnable = () -> {
-          if (Messages.showYesNoCancelDialog("Found more than 10 roots to migrate. Do you want to preview?", "Type Migration",
+          if (Messages.showYesNoCancelDialog(JavaRefactoringBundle.message("type.migration.preview.warning.text"), JavaRefactoringBundle.message("type.migration.action.name"),
                                              Messages.getWarningIcon()) == Messages.YES) {
             myException = new MigrateException();
           }
@@ -964,14 +964,8 @@ public class TypeMigrationLabeler {
 
   private static PsiExpression getContainingCondition(PsiElement root, PsiStatement statement) {
     PsiExpression condition = null;
-    if (statement instanceof PsiWhileStatement) {
-      condition = ((PsiWhileStatement)statement).getCondition();
-    }
-    else if (statement instanceof PsiDoWhileStatement) {
-      condition = ((PsiDoWhileStatement)statement).getCondition();
-    }
-    else if (statement instanceof PsiForStatement) {
-      condition = ((PsiForStatement)statement).getCondition();
+    if (statement instanceof PsiConditionalLoopStatement) {
+      condition = ((PsiConditionalLoopStatement)statement).getCondition();
     }
     else if (statement instanceof PsiIfStatement) {
       condition = ((PsiIfStatement)statement).getCondition();
@@ -1091,11 +1085,6 @@ public class TypeMigrationLabeler {
 
     myDialogSemaphore.waitFor();
     checkInterrupted();
-  }
-
-  @NotNull
-  private PsiReference[] findReferences(PsiElement element) {
-    return ReferencesSearch.search(element, myRules.getSearchScope(), false).toArray(PsiReference.EMPTY_ARRAY);
   }
 
   public TypeEvaluator getTypeEvaluator() {

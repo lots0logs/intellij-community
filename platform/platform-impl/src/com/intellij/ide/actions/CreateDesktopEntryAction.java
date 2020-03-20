@@ -5,6 +5,7 @@ import com.intellij.execution.ExecutionException;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.process.ProcessOutput;
 import com.intellij.execution.util.ExecUtil;
+import com.intellij.ide.IdeBundle;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
@@ -19,47 +20,28 @@ import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.updateSettings.impl.ExternalUpdateManager;
-import com.intellij.openapi.util.AtomicNullableLazyValue;
-import com.intellij.openapi.util.NullableLazyValue;
 import com.intellij.openapi.util.SystemInfo;
-import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.AppUIUtil;
 import com.intellij.util.ExceptionUtil;
+import com.intellij.util.Restarter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
-import java.util.Locale;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 
 import static com.intellij.openapi.util.Pair.pair;
 import static com.intellij.util.containers.ContainerUtil.newHashMap;
 
 public class CreateDesktopEntryAction extends DumbAwareAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.actions.CreateDesktopEntryAction");
-
-  private static final NullableLazyValue<String> ourScript = new AtomicNullableLazyValue<String>() {
-    @Nullable
-    @Override
-    protected String compute() {
-      String binPath = PathManager.getBinPath();
-      ApplicationNamesInfo names = ApplicationNamesInfo.getInstance();
-
-      String execPath = binPath + '/' + names.getProductName() + ".sh";
-      if (new File(execPath).canExecute()) return execPath;
-
-      execPath = binPath + '/' + names.getProductName().toLowerCase(Locale.US) + ".sh";
-      if (new File(execPath).canExecute()) return execPath;
-
-      execPath = binPath + '/' + names.getScriptName() + ".sh";
-      if (new File(execPath).canExecute()) return execPath;
-
-      return null;
-    }
-  };
+  private static final Logger LOG = Logger.getInstance(CreateDesktopEntryAction.class);
 
   public static boolean isAvailable() {
     return SystemInfo.isXWindow && !ExternalUpdateManager.isRoaming() && SystemInfo.hasXdgOpen();
@@ -90,7 +72,7 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
 
           String message = ApplicationBundle.message("desktop.entry.success", ApplicationNamesInfo.getInstance().getProductName());
           Notifications.Bus.notify(
-            new Notification(Notifications.SYSTEM_MESSAGES_GROUP_ID, "Desktop Entry Created", message, NotificationType.INFORMATION),
+            new Notification(Notifications.SYSTEM_MESSAGES_GROUP_ID, IdeBundle.message("notification.title.desktop.entry.created"), message, NotificationType.INFORMATION),
             getProject());
         }
         catch (Exception e) {
@@ -103,7 +85,7 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
   public static void createDesktopEntry(boolean globalEntry) throws Exception {
     if (!isAvailable()) return;
 
-    File entry = null;
+    Path entry = null;
     try {
       check();
       entry = prepare();
@@ -111,7 +93,7 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
     }
     finally {
       if (entry != null) {
-        FileUtil.delete(entry);
+        Files.delete(entry);
       }
     }
   }
@@ -120,7 +102,7 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
     LOG.warn(e);
     final String message = ExceptionUtil.getNonEmptyMessage(e, "Internal error");
     Notifications.Bus.notify(
-      new Notification(Notifications.SYSTEM_MESSAGES_GROUP_ID, "Desktop Entry Creation Failed", message, NotificationType.ERROR),
+      new Notification(Notifications.SYSTEM_MESSAGES_GROUP_ID, IdeBundle.message("notification.title.desktop.entry.creation.failed"), message, NotificationType.ERROR),
       project);
   }
 
@@ -129,7 +111,7 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
     if (result != 0) throw new RuntimeException(ApplicationBundle.message("desktop.entry.xdg.missing"));
   }
 
-  private static File prepare() throws IOException {
+  private static Path prepare() throws IOException {
     String binPath = PathManager.getBinPath();
     assert new File(binPath).isDirectory() : "Invalid bin path: '" + binPath + "'";
 
@@ -138,16 +120,16 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
       throw new RuntimeException(ApplicationBundle.message("desktop.entry.icon.missing", binPath));
     }
 
-    String execPath = ourScript.getValue();
-    if (execPath == null) {
+    File starter = Restarter.getIdeStarter();
+    if (starter == null) {
       throw new RuntimeException(ApplicationBundle.message("desktop.entry.script.missing", binPath));
     }
-    execPath = StringUtil.wrapWithDoubleQuote(execPath);
+    String execPath = StringUtil.wrapWithDoubleQuote(starter.getPath());
 
     ApplicationNamesInfo names = ApplicationNamesInfo.getInstance();
 
     String name = names.getFullProductNameWithEdition();
-    String comment = names.getMotto();
+    String comment = StringUtil.notNullize(names.getMotto(), name);
     String wmClass = AppUIUtil.getFrameClass();
     Map<String, String> vars = newHashMap(pair("$NAME$", name),
                                           pair("$SCRIPT$", execPath),
@@ -155,26 +137,26 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
                                           pair("$COMMENT$", comment),
                                           pair("$WM_CLASS$", wmClass));
     String content = ExecUtil.loadTemplate(CreateDesktopEntryAction.class.getClassLoader(), "entry.desktop", vars);
-    File entryFile = new File(FileUtil.getTempDirectory(), wmClass + ".desktop");
-    FileUtil.writeToFile(entryFile, content);
+    Path entryFile = Paths.get(PathManager.getTempPath(), wmClass + ".desktop");
+    Files.write(entryFile, content.getBytes(StandardCharsets.UTF_8));
     return entryFile;
   }
 
-  private static void install(File entryFile, boolean globalEntry) throws IOException, ExecutionException {
+  private static void install(Path entryFile, boolean globalEntry) throws IOException, ExecutionException {
     if (globalEntry) {
       File script = ExecUtil.createTempExecutableScript(
         "create_desktop_entry_", ".sh",
         "#!/bin/sh\n" +
-        "xdg-desktop-menu install --mode system '" + entryFile.getAbsolutePath() + "' && xdg-desktop-menu forceupdate --mode system\n");
+        "xdg-desktop-menu install --mode system '" + entryFile + "' && xdg-desktop-menu forceupdate --mode system\n");
       try {
         exec(new GeneralCommandLine(script.getPath()), ApplicationBundle.message("desktop.entry.sudo.prompt"));
       }
       finally {
-        FileUtil.delete(script);
+        Files.delete(script.toPath());
       }
     }
     else {
-      exec(new GeneralCommandLine("xdg-desktop-menu", "install", "--mode", "user", entryFile.getAbsolutePath()), null);
+      exec(new GeneralCommandLine("xdg-desktop-menu", "install", "--mode", "user", entryFile.toString()), null);
       exec(new GeneralCommandLine("xdg-desktop-menu", "forceupdate", "--mode", "user"), null);
     }
   }
@@ -207,10 +189,5 @@ public class CreateDesktopEntryAction extends DumbAwareAction {
     protected JComponent createCenterPanel() {
       return myContentPane;
     }
-  }
-
-  @Nullable
-  public static String getLauncherScript() {
-    return ourScript.getValue();
   }
 }

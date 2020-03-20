@@ -24,9 +24,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 
-/**
- * @author nik
- */
 public class ComplexElementSubstitutionParameters {
   private final Set<ComplexPackagingElementType<?>> myTypesToSubstitute = new HashSet<>();
   private final Set<ComplexPackagingElement<?>> mySubstituted = new HashSet<>();
@@ -85,7 +82,7 @@ public class ComplexElementSubstitutionParameters {
     return myTypesToSubstitute.isEmpty() && mySubstituted.isEmpty();
   }
 
-  public void setTypesToShowContent(Collection<ComplexPackagingElementType<?>> types) {
+  public void setTypesToShowContent(Collection<? extends ComplexPackagingElementType<?>> types) {
     myTypesToSubstitute.clear();
     myTypesToSubstitute.addAll(types);
   }

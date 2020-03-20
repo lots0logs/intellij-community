@@ -13,6 +13,7 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.containers.ContainerUtil;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.PyNames;
+import com.jetbrains.python.PyStringFormatParser;
 import com.jetbrains.python.codeInsight.PySubstitutionChunkReference;
 import com.jetbrains.python.inspections.quickfix.PyAddSpecifierToFormatQuickFix;
 import com.jetbrains.python.psi.*;
@@ -28,20 +29,13 @@ import java.math.BigInteger;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.jetbrains.python.inspections.PyStringFormatParser.*;
+import static com.jetbrains.python.PyStringFormatParser.*;
 import static com.jetbrains.python.psi.PyUtil.as;
 
 /**
  * @author Alexey.Ivanov
  */
 public class PyStringFormatInspection extends PyInspection {
-
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.str.format");
-  }
 
   @NotNull
   @Override
@@ -92,7 +86,7 @@ public class PyStringFormatInspection extends PyInspection {
           PyLiteralExpression.class, PySubscriptionExpression.class, PyBinaryExpression.class, PyConditionalExpression.class
         };
         final PyBuiltinCache builtinCache = PyBuiltinCache.getInstance(problemTarget);
-        final PyResolveContext resolveContext = PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext);
+        final PyResolveContext resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext);
 
         final String s = myFormatSpec.get("1");
         if (PsiTreeUtil.instanceOf(rightExpression, SIMPLE_RHS_EXPRESSIONS)) {
@@ -110,7 +104,7 @@ public class PyStringFormatInspection extends PyInspection {
           return 1;
         }
         else if (rightExpression instanceof PyReferenceExpression) {
-          if (PyNames.DICT.equals(rightExpression.getName())) return -1;
+          if (PyNames.DUNDER_DICT.equals(rightExpression.getName())) return -1;
 
           final List<QualifiedRatedResolveResult> resolveResults =
             ((PyReferenceExpression)rightExpression).multiFollowAssignmentsChain(resolveContext);
@@ -254,7 +248,7 @@ public class PyStringFormatInspection extends PyInspection {
           additionalExpressions = addSubscriptions(rightExpression.getContainingFile(),
                                                    rightExpression.getText());
           pyElement = ((PyReferenceExpression)rightExpression).followAssignmentsChain(
-            PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext)).getElement();
+            PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext)).getElement();
         }
         else {
           additionalExpressions = new HashMap<>();

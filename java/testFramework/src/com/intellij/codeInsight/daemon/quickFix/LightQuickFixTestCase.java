@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.daemon.quickFix;
 
 import com.intellij.codeInsight.daemon.LightDaemonAnalyzerTestCase;
@@ -11,11 +11,8 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiUtil;
-import com.intellij.testFramework.LightPlatformCodeInsightTestCase;
-import com.intellij.testFramework.LightPlatformTestCase;
 import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.ObjectUtils;
@@ -25,6 +22,7 @@ import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase {
@@ -49,7 +47,7 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
     final File testFile = new File(testFullPath);
     CommandProcessor.getInstance().executeCommand(quickFixTestCase.getProject(), () -> {
       try {
-        String contents = StringUtil.convertLineSeparators(FileUtil.loadFile(testFile, CharsetToolkit.UTF8_CHARSET));
+        String contents = StringUtil.convertLineSeparators(FileUtil.loadFile(testFile, StandardCharsets.UTF_8));
         quickFixTestCase.configureFromFileText(testFile.getName(), contents);
         quickFixTestCase.bringRealEditorBack();
         final ActionHint actionHint = quickFixTestCase.parseActionHintImpl(quickFixTestCase.getFile(), contents);
@@ -80,10 +78,10 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
   protected void beforeActionStarted(final String testName, final String contents) {
   }
 
-  public static void doAction(@NotNull ActionHint actionHint,
-                              String testFullPath,
-                              String testName,
-                              QuickFixTestCase quickFix) throws Exception {
+  public void doAction(@NotNull ActionHint actionHint,
+                              @NotNull String testFullPath,
+                              @NotNull String testName,
+                              @NotNull QuickFixTestCase quickFix) throws Exception {
     IntentionAction action = actionHint.findAndCheck(quickFix.getAvailableActions(),
                                                      () -> getTestInfo(testFullPath, quickFix));
     if (action != null) {
@@ -108,7 +106,7 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
     }
   }
 
-  private static String getTestInfo(String testFullPath, QuickFixTestCase quickFix) {
+  private String getTestInfo(@NotNull String testFullPath, @NotNull QuickFixTestCase quickFix) {
     String infos = StreamEx.of(quickFix.doHighlighting())
       .filter(info -> info.getSeverity() != HighlightInfoType.SYMBOL_TYPE_SEVERITY)
       .map(info -> {
@@ -131,7 +129,7 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
            "Infos: " + infos;
   }
 
-  protected void doAction(@NotNull ActionHint actionHint, final String testFullPath, final String testName)
+  protected void doAction(@NotNull ActionHint actionHint, @NotNull String testFullPath, @NotNull String testName)
     throws Exception {
     doAction(actionHint, testFullPath, testName, myWrapper);
   }
@@ -143,8 +141,8 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
     invoke(action);
   }
 
-  protected static void invoke(@NotNull IntentionAction action) throws IncorrectOperationException {
-    CodeInsightTestFixtureImpl.invokeIntention(action, getFile(), getEditor(), action.getText());
+  protected void invoke(@NotNull IntentionAction action) throws IncorrectOperationException {
+    CodeInsightTestFixtureImpl.invokeIntention(action, getFile(), getEditor());
   }
 
   protected IntentionAction findActionAndCheck(@NotNull ActionHint hint, String testFullPath) {
@@ -182,8 +180,7 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
     }
   }
 
-  @NotNull
-  public static File[] getBeforeTestFiles(@NotNull QuickFixTestCase testCase) {
+  public static File @NotNull [] getBeforeTestFiles(@NotNull QuickFixTestCase testCase) {
     assertNotNull("getBasePath() should not return null!", testCase.getBasePath());
 
     final String testDirPath = testCase.getTestDataPath().replace(File.separatorChar, '/') + testCase.getBasePath();
@@ -270,7 +267,7 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
 
       @Override
       public void invoke(@NotNull IntentionAction action) {
-        LightQuickFixTestCase.invoke(action);
+        LightQuickFixTestCase.this.invoke(action);
       }
 
       @NotNull
@@ -287,22 +284,22 @@ public abstract class LightQuickFixTestCase extends LightDaemonAnalyzerTestCase 
 
       @Override
       public void configureFromFileText(@NotNull String name, @NotNull String contents) {
-        LightPlatformCodeInsightTestCase.configureFromFileText(name, contents, true);
+        LightQuickFixTestCase.this.configureFromFileText(name, contents, true);
       }
 
       @Override
       public PsiFile getFile() {
-        return LightPlatformCodeInsightTestCase.getFile();
+        return LightQuickFixTestCase.this.getFile();
       }
 
       @Override
       public Project getProject() {
-        return LightPlatformTestCase.getProject();
+        return LightQuickFixTestCase.this.getProject();
       }
 
       @Override
       public void bringRealEditorBack() {
-        LightPlatformCodeInsightTestCase.bringRealEditorBack();
+        LightQuickFixTestCase.this.bringRealEditorBack();
       }
     };
   }

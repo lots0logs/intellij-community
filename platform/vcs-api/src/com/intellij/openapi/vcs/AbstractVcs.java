@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs;
 
 import com.intellij.openapi.diff.impl.patch.formove.FilePathComparator;
@@ -29,20 +15,20 @@ import com.intellij.openapi.vcs.diff.DiffProvider;
 import com.intellij.openapi.vcs.diff.RevisionSelector;
 import com.intellij.openapi.vcs.history.VcsHistoryProvider;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
+import com.intellij.openapi.vcs.impl.VcsDescriptor;
+import com.intellij.openapi.vcs.impl.projectlevelman.AllVcsesI;
 import com.intellij.openapi.vcs.merge.MergeProvider;
 import com.intellij.openapi.vcs.rollback.RollbackEnvironment;
 import com.intellij.openapi.vcs.update.UpdateEnvironment;
 import com.intellij.openapi.vcs.versionBrowser.CommittedChangeList;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.ThreeState;
-import com.intellij.util.ThrowableRunnable;
 import com.intellij.util.ui.VcsSynchronousProgressWrapper;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -52,15 +38,13 @@ import java.util.function.Function;
  *
  * @see ProjectLevelVcsManager
  */
-public abstract class AbstractVcs<ComList extends CommittedChangeList> extends StartedActivated {
+public abstract class AbstractVcs extends StartedActivated {
   @NonNls protected static final String ourIntegerPattern = "\\d+";
 
   @NotNull
   protected final Project myProject;
   private final String myName;
   private final VcsKey myKey;
-  private VcsShowSettingOption myUpdateOption;
-  private VcsShowSettingOption myStatusOption;
 
   private CheckinEnvironment myCheckinEnvironment;
   private UpdateEnvironment myUpdateEnvironment;
@@ -153,9 +137,6 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   }
 
   /**
-   * !!! concrete VCS should define {@link #createCheckinEnvironment} method
-   * this method wraps created environment with a listener
-   *
    * Returns the interface for performing checkin / commit / submit operations.
    *
    * @return the checkin interface, or null if checkins are not supported by the VCS.
@@ -174,9 +155,6 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   }
 
   /**
-   * !!! concrete VCS should define {@link #createRollbackEnvironment()} method
-   * this method wraps created environment with a listener
-   *
    * @return the rollback interface, or null if rollbacks are not supported by the VCS.
    */
   @Nullable
@@ -207,9 +185,6 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   }
 
   /**
-   * !!! concrete VCS should define {@link #createUpdateEnvironment()} method
-   * this method wraps created environment with a listener
-   *
    * @return the update interface, or null if the updates are not supported by the VCS.
    */
   @Nullable
@@ -223,7 +198,9 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
    *
    * @param filePath the path to check.
    * @return true if the path is managed by this VCS, false otherwise.
+   * @deprecated Use {@link VcsRootChecker} instead.
    */
+  @Deprecated
   public boolean fileIsUnderVcs(FilePath filePath) {
     return true;
   }
@@ -253,7 +230,7 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   public void enableIntegration() {
     ProjectLevelVcsManager vcsManager = ProjectLevelVcsManager.getInstance(myProject);
     if (vcsManager != null) {
-      vcsManager.setDirectoryMappings(Arrays.asList(new VcsDirectoryMapping("", getName())));
+      vcsManager.setDirectoryMappings(Collections.singletonList(VcsDirectoryMapping.createDefault(getName())));
     }
   }
 
@@ -309,24 +286,15 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
     return null;
   }
 
-  public VcsShowSettingOption getUpdateOptions() {
-    return myUpdateOption;
-  }
-
-
-  public VcsShowSettingOption getStatusOptions() {
-    return myStatusOption;
-  }
-
   public void loadSettings() {
     final ProjectLevelVcsManager vcsManager = ProjectLevelVcsManager.getInstance(myProject);
 
     if (getUpdateEnvironment() != null) {
-      myUpdateOption = vcsManager.getStandardOption(VcsConfiguration.StandardOption.UPDATE, this);
+      vcsManager.getStandardOption(VcsConfiguration.StandardOption.UPDATE, this);
     }
 
     if (getStatusEnvironment() != null) {
-      myStatusOption = vcsManager.getStandardOption(VcsConfiguration.StandardOption.STATUS, this);
+      vcsManager.getStandardOption(VcsConfiguration.StandardOption.STATUS, this);
     }
   }
 
@@ -406,7 +374,9 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
    *
    * @param dir the directory to check.
    * @return {@code true} if directory is managed by this VCS
+   * @deprecated Use {@link VcsRootChecker} instead.
    */
+  @Deprecated
   public boolean isVersionedDirectory(VirtualFile dir) {
     return false;
   }
@@ -441,6 +411,31 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   }
 
   /**
+   * This switch disables platform support for "default mapping" aka "&lt;Project&gt;".
+   * <p>
+   * If enabled, platform will do nothing. All roots from {@link com.intellij.openapi.vcs.impl.DefaultVcsRootPolicy} will be registered as vcs root.
+   * Vcs can try using {@link RootsConvertor} to process roots itself.
+   * <p>
+   * If disabled, platform will use {@link VcsRootChecker} or {@link com.intellij.openapi.vcs.impl.VcsEP#administrativeAreaName} to find actual vcs roots.
+   * If vcs does not implement these EP, no vcs roots will be registered for "default mapping".
+   *
+   * @see ProjectLevelVcsManager
+   * @see com.intellij.openapi.vcs.impl.projectlevelman.NewMappings
+   */
+  public boolean needsLegacyDefaultMappings() {
+    if (getCustomConvertor() != null) return true;
+
+    for (VcsRootChecker checker : VcsRootChecker.EXTENSION_POINT_NAME.getExtensionList()) {
+      if (checker.getSupportedVcs().equals(getKeyInstanceMethod())) return false;
+    }
+
+    VcsDescriptor descriptor = AllVcsesI.getInstance(myProject).getDescriptor(myName);
+    if (descriptor != null && descriptor.hasVcsDirPattern()) return false;
+
+    return true;
+  }
+
+  /**
    * Returns the implementation of the merge provider which is used to load the revisions to be merged
    * for a particular file.
    *
@@ -456,16 +451,11 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   }
 
   @NotNull
-  public <S> List<S> filterUniqueRoots(@NotNull List<S> in, @NotNull Function<S, VirtualFile> convertor) {
-    new FilterDescendantVirtualFileConvertible<>(convertor, FilePathComparator.getInstance()).doFilter(in);
-    return in;
-  }
-
-  @NotNull
-  public static <S> List<S> filterUniqueRootsDefault(@NotNull List<S> in, @NotNull Function<? super S, ? extends VirtualFile> convertor) {
-    FilterDescendantVirtualFileConvertible<S> convertible =
-      new FilterDescendantVirtualFileConvertible<>(convertor, FilePathComparator.getInstance());
-    convertible.doFilter(in);
+  @Deprecated
+  public <S> List<S> filterUniqueRoots(@NotNull List<S> in, @NotNull Function<? super S, ? extends VirtualFile> convertor) {
+    if (!allowsNestedRoots()) {
+      new FilterDescendantVirtualFileConvertible<>(convertor, FilePathComparator.getInstance()).doFilter(in);
+    }
     return in;
   }
 
@@ -492,12 +482,12 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   }
 
   @Nullable
-  protected VcsOutgoingChangesProvider<ComList> getOutgoingProviderImpl() {
+  protected VcsOutgoingChangesProvider<CommittedChangeList> getOutgoingProviderImpl() {
     return null;
   }
 
   @Nullable
-  public final VcsOutgoingChangesProvider<ComList> getOutgoingChangesProvider() {
+  public final VcsOutgoingChangesProvider<CommittedChangeList> getOutgoingChangesProvider() {
     return VcsType.centralized.equals(getType()) ? null : getOutgoingProviderImpl();
   }
 
@@ -558,16 +548,11 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   }
 
   @Nullable
-  public CommittedChangeList loadRevisions(final VirtualFile vf, final VcsRevisionNumber number) {
-    final CommittedChangeList[] list = new CommittedChangeList[1];
-    final ThrowableRunnable<VcsException> runnable = () -> {
-      final Pair<CommittedChangeList, FilePath> pair =
-        getCommittedChangesProvider().getOneList(vf, number);
-      if (pair != null) {
-        list[0] = pair.getFirst();
-      }
-    };
-    return VcsSynchronousProgressWrapper.wrap(runnable, getProject(), "Load revision contents") ? list[0] : null;
+  public CommittedChangeList loadRevisions(VirtualFile vf, @NotNull VcsRevisionNumber number) {
+    return VcsSynchronousProgressWrapper.compute(() -> {
+      final Pair<CommittedChangeList, FilePath> pair = getCommittedChangesProvider().getOneList(vf, number);
+      return pair != null ? pair.getFirst() : null;
+    }, getProject(), VcsBundle.message("title.load.revision.contents"));
   }
 
   @Override
@@ -602,6 +587,10 @@ public abstract class AbstractVcs<ComList extends CommittedChangeList> extends S
   @Override
   public String toString() {
     return getName();
+  }
+
+  public boolean needsCaseSensitiveDirtyScope() {
+    return false;
   }
 }
 

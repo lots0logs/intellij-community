@@ -1,15 +1,16 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.browsers;
 
 import com.intellij.ide.GeneralSettings;
-import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.CollectionComboBoxModel;
+import com.intellij.ui.IdeBorderFactory;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.ui.TitledSeparator;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.util.Function;
@@ -17,15 +18,13 @@ import com.intellij.util.PathUtil;
 import com.intellij.util.ui.ColumnInfo;
 import com.intellij.util.ui.ListTableModel;
 import com.intellij.util.ui.LocalPathCellEditor;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.table.IconTableCellRenderer;
 import com.intellij.util.ui.table.TableModelEditor;
-import org.jdesktop.swingx.combobox.ListComboBoxModel;
+import com.intellij.xml.XmlBundle;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import javax.swing.event.TableModelEvent;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
@@ -40,7 +39,7 @@ final class BrowserSettingsPanel {
   private static final FileChooserDescriptor APP_FILE_CHOOSER_DESCRIPTOR = FileChooserDescriptorFactory.createSingleFileOrExecutableAppDescriptor();
 
   private static final EditableColumnInfo<ConfigurableWebBrowser, String> PATH_COLUMN_INFO =
-    new EditableColumnInfo<ConfigurableWebBrowser, String>("Path") {
+    new EditableColumnInfo<ConfigurableWebBrowser, String>(XmlBundle.message("settings.browsers.column.path")) {
       @Override
       public String valueOf(ConfigurableWebBrowser item) {
         return PathUtil.toSystemDependentName(item.getPath());
@@ -76,7 +75,7 @@ final class BrowserSettingsPanel {
   };
 
   private static final ColumnInfo[] COLUMNS = {ACTIVE_COLUMN_INFO,
-    new EditableColumnInfo<ConfigurableWebBrowser, String>("Name") {
+    new EditableColumnInfo<ConfigurableWebBrowser, String>(XmlBundle.message("settings.browsers.column.name")) {
       @Override
       public String valueOf(ConfigurableWebBrowser item) {
         return item.getName();
@@ -87,7 +86,7 @@ final class BrowserSettingsPanel {
         item.setName(value);
       }
     },
-    new ColumnInfo<ConfigurableWebBrowser, BrowserFamily>("Family") {
+    new ColumnInfo<ConfigurableWebBrowser, BrowserFamily>(XmlBundle.message("settings.browsers.column.family")) {
       @Override
       public Class getColumnClass() {
         return BrowserFamily.class;
@@ -126,15 +125,17 @@ final class BrowserSettingsPanel {
   @SuppressWarnings("UnusedDeclaration")
   private JComponent browsersTable;
 
-  private ComboBox defaultBrowserPolicyComboBox;
+  private ComboBox<DefaultBrowserPolicy> defaultBrowserPolicyComboBox;
   private JBCheckBox showBrowserHover;
+  private JBCheckBox showBrowserHoverXml;
+  private JPanel browserPopupPanel;
 
   private TableModelEditor<ConfigurableWebBrowser> browsersEditor;
 
   private String customPathValue;
 
   BrowserSettingsPanel() {
-    alternativeBrowserPathField.addBrowseFolderListener(IdeBundle.message("title.select.path.to.browser"), null, null, APP_FILE_CHOOSER_DESCRIPTOR);
+    alternativeBrowserPathField.addBrowseFolderListener(XmlBundle.message("title.select.path.to.browser"), null, null, APP_FILE_CHOOSER_DESCRIPTOR);
     defaultBrowserPanel.setBorder(TitledSeparator.createEmptyBorder());
 
     ArrayList<DefaultBrowserPolicy> defaultBrowserPolicies = new ArrayList<>();
@@ -144,8 +145,7 @@ final class BrowserSettingsPanel {
     defaultBrowserPolicies.add(DefaultBrowserPolicy.FIRST);
     defaultBrowserPolicies.add(DefaultBrowserPolicy.ALTERNATIVE);
 
-    // noinspection unchecked
-    defaultBrowserPolicyComboBox.setModel(new ListComboBoxModel<>(defaultBrowserPolicies));
+    defaultBrowserPolicyComboBox.setModel(new CollectionComboBoxModel<>(defaultBrowserPolicies));
     defaultBrowserPolicyComboBox.addItemListener(new ItemListener() {
       @Override
       public void itemStateChanged(@NotNull ItemEvent e) {
@@ -162,31 +162,16 @@ final class BrowserSettingsPanel {
       }
     });
 
-    defaultBrowserPolicyComboBox.setRenderer(new ListCellRendererWrapper<DefaultBrowserPolicy>() {
-      @Override
-      public void customize(JList list, DefaultBrowserPolicy value, int index, boolean selected, boolean hasFocus) {
-        String name;
-        switch (value) {
-          case SYSTEM:
-            name = "System default";
-            break;
-          case FIRST:
-            name = "First listed";
-            break;
-          case ALTERNATIVE:
-            name = "Custom path";
-            break;
-          default:
-            throw new IllegalStateException();
-        }
+    defaultBrowserPolicyComboBox.setRenderer(SimpleListCellRenderer.create("", value -> {
+      String text = value == DefaultBrowserPolicy.SYSTEM ? XmlBundle.message("settings.browsers.system.default") :
+                    value == DefaultBrowserPolicy.FIRST ? XmlBundle.message("settings.browsers.first.listed") :
+                    value == DefaultBrowserPolicy.ALTERNATIVE ? XmlBundle.message("settings.browsers.custom.path") :
+                    null;
+      if (text == null) throw new IllegalStateException(String.valueOf(value));
+      return text;
+    }));
 
-        setText(name);
-      }
-    });
-
-    if (UIUtil.isUnderAquaLookAndFeel()) {
-      defaultBrowserPolicyComboBox.setBorder(new EmptyBorder(3, 0, 0, 0));
-    }
+    browserPopupPanel.setBorder(IdeBorderFactory.createTitledBorder(XmlBundle.message("settings.browsers.show.browser.popup.in.the.editor")));
   }
 
   private void updateCustomPathTextFieldValue(@NotNull DefaultBrowserPolicy browser) {
@@ -252,7 +237,7 @@ final class BrowserSettingsPanel {
         return !WebBrowserManager.getInstance().isPredefinedBrowser(item);
       }
     };
-    browsersEditor = new TableModelEditor<>(COLUMNS, itemEditor, "No web browsers configured")
+    browsersEditor = new TableModelEditor<>(COLUMNS, itemEditor, XmlBundle.message("settings.browsers.no.web.browsers.configured"))
       .modelListener(new TableModelEditor.DataChangedListener<ConfigurableWebBrowser>() {
         @Override
         public void tableChanged(@NotNull TableModelEvent event) {
@@ -299,7 +284,8 @@ final class BrowserSettingsPanel {
 
     DefaultBrowserPolicy defaultBrowserPolicy = getDefaultBrowser();
     if (getDefaultBrowserPolicy(browserManager) != defaultBrowserPolicy ||
-        browserManager.isShowBrowserHover() != showBrowserHover.isSelected()) {
+        browserManager.isShowBrowserHover() != showBrowserHover.isSelected() ||
+        browserManager.isShowBrowserHoverXml() != showBrowserHoverXml.isSelected()) {
       return true;
     }
 
@@ -322,6 +308,7 @@ final class BrowserSettingsPanel {
 
     WebBrowserManager browserManager = WebBrowserManager.getInstance();
     browserManager.setShowBrowserHover(showBrowserHover.isSelected());
+    browserManager.setShowBrowserHoverXml(showBrowserHoverXml.isSelected());
     browserManager.defaultBrowserPolicy = getDefaultBrowser();
     browserManager.setList(browsersEditor.apply());
   }
@@ -337,6 +324,7 @@ final class BrowserSettingsPanel {
 
     GeneralSettings settings = GeneralSettings.getInstance();
     showBrowserHover.setSelected(browserManager.isShowBrowserHover());
+    showBrowserHoverXml.setSelected(browserManager.isShowBrowserHoverXml());
     browsersEditor.reset(browserManager.getList());
 
     customPathValue = settings.getBrowserPath();

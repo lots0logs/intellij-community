@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui;
 
 import com.intellij.CommonBundle;
@@ -24,10 +24,12 @@ import com.intellij.ui.navigation.Place;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.PlatformIcons;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.nls.NlsContexts;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import com.intellij.util.xmlb.XmlSerializerUtil;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -42,7 +44,7 @@ import java.util.*;
  * @author anna
  */
 public abstract class MasterDetailsComponent implements Configurable, DetailsComponent.Facade, MasterDetails {
-  protected static final Logger LOG = Logger.getInstance("#com.intellij.openapi.ui.MasterDetailsComponent");
+  protected static final Logger LOG = Logger.getInstance(MasterDetailsComponent.class);
 
   protected static final Icon COPY_ICON = PlatformIcons.COPY_ICON;
 
@@ -54,16 +56,11 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
 
   protected History myHistory = new History(new Place.Navigator() {
     @Override
-    public void setHistory(final History history) {
+    public void setHistory(History history) {
       myHistory = history;
     }
-
-    @Override
-    @Nullable
-    public ActionCallback navigateTo(@Nullable final Place place, final boolean requestFocus) {
-      return null;
-    }
   });
+
   private JComponent myMaster;
 
   public void setHistory(final History history) {
@@ -119,11 +116,12 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
     mySplitter.setHonorComponentsMinimumSize(true);
 
     installAutoScroll();
-    reInitWholePanelIfNeeded();
   }
 
   protected void reInitWholePanelIfNeeded() {
-    if (!myToReInitWholePanel) return;
+    if (!myToReInitWholePanel) {
+      return;
+    }
 
     myWholePanel = new NonOpaquePanel(new BorderLayout()) {
       @Override
@@ -155,13 +153,16 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
       }
     };
 
-    ToolbarDecorator decorator = ToolbarDecorator.createDecorator(myTree);
+    ToolbarDecorator decorator = ToolbarDecorator.createDecorator(myTree)
+      .setToolbarPosition(ActionToolbarPosition.TOP)
+      .setPanelBorder(JBUI.Borders.empty())
+      .setScrollPaneBorder(JBUI.Borders.empty());
     DefaultActionGroup group = createToolbarActionGroup();
     if (group != null) {
       decorator.setActionGroup(group);
     }
     //left.add(myNorthPanel, BorderLayout.NORTH);
-    myMaster = decorator.setAsUsualTopToolbar().setPanelBorder(JBUI.Borders.empty()).createPanel();
+    myMaster = decorator.createPanel();
     myNorthPanel.setVisible(false);
     left.add(myMaster, BorderLayout.CENTER);
     mySplitter.setFirstComponent(left);
@@ -348,7 +349,7 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
       }
     }
     if (!selected) {
-      TreeUtil.selectFirstNode(myTree);
+      TreeUtil.promiseSelectFirst(myTree);
     }
 
     //'updateSelectionFromTree' initializes 'details' components and it may take some time, so if the component isn't showing now
@@ -442,7 +443,6 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
     ((DefaultTreeModel)myTree.getModel()).setRoot(myRoot);
     myTree.setRootVisible(false);
     myTree.setShowsRootHandles(true);
-    UIUtil.setLineStyleAngled(myTree);
     TreeUtil.installActions(myTree);
     myTree.setCellRenderer(new ColoredTreeCellRenderer() {
       @Override
@@ -654,6 +654,7 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
     return null;
   }
 
+  @Nls @NlsContexts.StatusText
   @Nullable
   protected String getEmptySelectionString() {
     return null;
@@ -682,14 +683,14 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
         final String name = scopeConfigurable.getDisplayName();
         if (name.trim().isEmpty()) {
           selectNodeInTree(node);
-          throw new ConfigurationException("Name should contain non-space characters");
+          throw new ConfigurationException(UIBundle.message("master.detail.err.empty.name"));
         }
         if (names.contains(name)) {
           final NamedConfigurable selectedConfigurable = getSelectedConfigurable();
           if (selectedConfigurable == null || !Comparing.strEqual(selectedConfigurable.getDisplayName(), name)) {
             selectNodeInTree(node);
           }
-          throw new ConfigurationException(CommonBundle.message("smth.already.exist.error.message", prefix, name), title);
+          throw new ConfigurationException(UIBundle.message("master.detail.err.duplicate", prefix, name), title);
         }
         names.add(name);
       }
@@ -712,7 +713,7 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
     removeNodes(nodes);
   }
 
-  protected void removeNodes(final List<MyNode> nodes) {
+  protected void removeNodes(final List<? extends MyNode> nodes) {
     MyNode parentNode = null;
     int idx = -1;
     for (MyNode node : nodes) {
@@ -757,7 +758,7 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
         }
       }
       else {
-        TreeUtil.selectFirstNode(myTree);
+        TreeUtil.promiseSelectFirst(myTree);
       }
     }
   }
@@ -773,7 +774,7 @@ public abstract class MasterDetailsComponent implements Configurable, DetailsCom
     }
 
     public MyDeleteAction(Condition<Object[]> availableCondition) {
-      super(CommonBundle.message("button.delete"), CommonBundle.message("button.delete"), PlatformIcons.DELETE_ICON);
+      super(CommonBundle.messagePointer("button.delete"), CommonBundle.messagePointer("button.delete"), PlatformIcons.DELETE_ICON);
       registerCustomShortcutSet(CommonActionsPanel.getCommonShortcut(CommonActionsPanel.Buttons.REMOVE), myTree);
       myCondition = availableCondition;
     }

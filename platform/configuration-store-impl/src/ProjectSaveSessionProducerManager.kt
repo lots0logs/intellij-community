@@ -3,16 +3,18 @@ package com.intellij.configurationStore
 
 import com.intellij.notification.Notifications
 import com.intellij.notification.NotificationsManager
-import com.intellij.openapi.application.runUndoTransparentWriteAction
+import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.components.impl.stores.SaveSessionAndFile
+import com.intellij.openapi.components.serviceIfCreated
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.impl.ProjectManagerImpl.UnableToSaveProjectNotification
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.SmartList
 import com.intellij.util.containers.mapSmart
-import kotlinx.coroutines.withContext
+import org.jetbrains.annotations.ApiStatus
 
-internal class ProjectSaveSessionProducerManager(private val project: Project) : SaveSessionProducerManager() {
+@ApiStatus.Internal
+open class ProjectSaveSessionProducerManager(private val project: Project) : SaveSessionProducerManager() {
   suspend fun saveWithAdditionalSaveSessions(extraSessions: List<SaveSession>): SaveResult {
     val saveSessions = SmartList<SaveSession>()
     collectSaveSessions(saveSessions)
@@ -20,8 +22,8 @@ internal class ProjectSaveSessionProducerManager(private val project: Project) :
       return SaveResult.EMPTY
     }
 
-    val saveResult = withContext(createStoreEdtCoroutineContext(listOf(InTransactionRule(project)))) {
-      runUndoTransparentWriteAction {
+    val saveResult = withEdtContext(project) {
+      runWriteAction {
         val r = SaveResult()
         saveSessions(extraSessions, r)
         saveSessions(saveSessions, r)
@@ -40,7 +42,7 @@ internal class ProjectSaveSessionProducerManager(private val project: Project) :
       return
     }
 
-    if (!notifications.isEmpty()) {
+    if (notifications.isNotEmpty()) {
       throw UnresolvedReadOnlyFilesException(readonlyFiles.mapSmart { it.file })
     }
 
@@ -54,8 +56,8 @@ internal class ProjectSaveSessionProducerManager(private val project: Project) :
 
     val oldList = readonlyFiles.toTypedArray()
     readonlyFiles.clear()
-    withContext(storeEdtCoroutineContext) {
-      runUndoTransparentWriteAction {
+    withEdtContext(project) {
+      runWriteAction {
         val r = SaveResult()
         for (entry in oldList) {
           executeSave(entry.session, r)
@@ -64,7 +66,7 @@ internal class ProjectSaveSessionProducerManager(private val project: Project) :
       }
     }.appendTo(saveResult)
 
-    if (!readonlyFiles.isEmpty()) {
+    if (readonlyFiles.isNotEmpty()) {
       dropUnableToSaveProjectNotification(project, getFilesList(readonlyFiles))
       saveResult.addError(UnresolvedReadOnlyFilesException(readonlyFiles.mapSmart { it.file }))
     }
@@ -81,8 +83,8 @@ internal class ProjectSaveSessionProducerManager(private val project: Project) :
   }
 
   private fun getUnableToSaveNotifications(): Array<out UnableToSaveProjectNotification> {
-    return NotificationsManager.getNotificationsManager()
-      .getNotificationsOfType(UnableToSaveProjectNotification::class.java, project)
+    val notificationManager = serviceIfCreated<NotificationsManager>() ?: return emptyArray()
+    return notificationManager.getNotificationsOfType(UnableToSaveProjectNotification::class.java, project)
   }
 }
 

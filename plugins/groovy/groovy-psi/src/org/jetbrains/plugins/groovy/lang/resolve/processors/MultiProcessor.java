@@ -1,19 +1,17 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.resolve.processors;
 
 import com.intellij.psi.scope.PsiScopeProcessor;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-
 import static java.util.Collections.singletonList;
-import static org.jetbrains.annotations.ApiStatus.Experimental;
 
-@Experimental
+@ApiStatus.Internal
 public interface MultiProcessor extends PsiScopeProcessor {
 
   @NotNull
-  Collection<? extends PsiScopeProcessor> getProcessors();
+  Iterable<? extends PsiScopeProcessor> getProcessors();
 
   @NotNull
   static Iterable<? extends PsiScopeProcessor> allProcessors(@NotNull PsiScopeProcessor processor) {

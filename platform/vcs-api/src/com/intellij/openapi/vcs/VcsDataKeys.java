@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.openapi.vcs;
 
@@ -13,6 +13,8 @@ import com.intellij.openapi.vcs.history.VcsHistorySession;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
+import com.intellij.vcs.commit.CommitWorkflowHandler;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 
 import java.io.File;
@@ -32,7 +34,7 @@ public interface VcsDataKeys {
   DataKey<VcsFileRevision[]> VCS_FILE_REVISIONS = DataKey.create("VCS_FILE_REVISIONS");
   DataKey<VirtualFile> VCS_VIRTUAL_FILE = DataKey.create("VCS_VIRTUAL_FILE");
   DataKey<FilePath> FILE_PATH = DataKey.create("FILE_PATH");
-  DataKey<FilePath[]> FILE_PATH_ARRAY = DataKey.create("FILE_PATH_ARRAY");
+  @ApiStatus.Internal DataKey<Stream<FilePath>> FILE_PATH_STREAM = DataKey.create("FILE_PATH_STREAM");
   DataKey<Object> FILE_HISTORY_PANEL = DataKey.create("FILE_HISTORY_PANEL");
   DataKey<ChangeList[]> CHANGE_LISTS = DataKey.create("vcs.ChangeList");
   DataKey<Change> CURRENT_CHANGE = DataKey.create("vcs.CurrentChange");
@@ -52,6 +54,7 @@ public interface VcsDataKeys {
   DataKey<Object> LABEL_AFTER = DataKey.create("LABEL_AFTER");
   DataKey<String> PRESET_COMMIT_MESSAGE = DataKey.create("PRESET_COMMIT_MESSAGE");
   DataKey<CommitMessageI> COMMIT_MESSAGE_CONTROL = DataKey.create("COMMIT_MESSAGE_CONTROL");
+  DataKey<CommitWorkflowHandler> COMMIT_WORKFLOW_HANDLER = DataKey.create("Vcs.CommitWorkflowHandler");
   DataKey<Consumer<String>> REMOTE_HISTORY_CHANGED_LISTENER = DataKey.create("REMOTE_HISTORY_CHANGED_LISTENER");
   DataKey<RepositoryLocation> REMOTE_HISTORY_LOCATION = DataKey.create("REMOTE_HISTORY_LOCATION");
   DataKey<VcsRevisionNumber> VCS_REVISION_NUMBER = DataKey.create("VCS_REVISION_NUMBER");

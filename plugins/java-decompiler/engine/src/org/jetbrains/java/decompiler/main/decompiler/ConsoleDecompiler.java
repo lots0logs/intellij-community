@@ -72,18 +72,18 @@ public class ConsoleDecompiler implements IBytecodeProvider, IResultSaver {
     PrintStreamLogger logger = new PrintStreamLogger(System.out);
     ConsoleDecompiler decompiler = new ConsoleDecompiler(destination, mapOptions, logger);
 
-    for (File source : sources) {
-      decompiler.addSource(source);
-    }
     for (File library : libraries) {
       decompiler.addLibrary(library);
+    }
+    for (File source : sources) {
+      decompiler.addSource(source);
     }
 
     decompiler.decompileContext();
   }
 
   @SuppressWarnings("UseOfSystemOutOrSystemErr")
-  private static void addPath(List<File> list, String path) {
+  private static void addPath(List<? super File> list, String path) {
     File file = new File(path);
     if (file.exists()) {
       list.add(file);

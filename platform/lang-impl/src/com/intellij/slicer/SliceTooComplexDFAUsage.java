@@ -33,17 +33,17 @@ public class SliceTooComplexDFAUsage extends SliceUsage {
   }
 
   @Override
-  public void processChildren(@NotNull Processor<SliceUsage> processor) {
+  public void processChildren(@NotNull Processor<? super SliceUsage> processor) {
     // no children
   }
 
   @Override
-  protected void processUsagesFlownFromThe(PsiElement element, Processor<SliceUsage> uniqueProcessor) {
+  protected void processUsagesFlownFromThe(PsiElement element, Processor<? super SliceUsage> uniqueProcessor) {
     // no children
   }
 
   @Override
-  protected void processUsagesFlownDownTo(PsiElement element, Processor<SliceUsage> uniqueProcessor) {
+  protected void processUsagesFlownDownTo(PsiElement element, Processor<? super SliceUsage> uniqueProcessor) {
     // no children
   }
 
@@ -59,8 +59,7 @@ public class SliceTooComplexDFAUsage extends SliceUsage {
     final UsagePresentation presentation = super.getPresentation();
     return new UsagePresentation() {
       @Override
-      @NotNull
-      public TextChunk[] getText() {
+      public TextChunk @NotNull [] getText() {
         return new TextChunk[]{
           new TextChunk(new TextAttributes(JBColor.RED, null, null, EffectType.WAVE_UNDERSCORE, Font.PLAIN), getTooltipText())
         };

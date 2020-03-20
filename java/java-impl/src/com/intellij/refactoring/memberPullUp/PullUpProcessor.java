@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.refactoring.memberPullUp;
 
@@ -59,7 +45,7 @@ public class PullUpProcessor extends BaseRefactoringProcessor implements PullUpD
   private final DocCommentPolicy myJavaDocPolicy;
   private Set<PsiMember> myMembersAfterMove;
   private Set<PsiMember> myMovedMembers;
-  private final Map<Language, PullUpHelper<MemberInfo>> myProcessors = ContainerUtil.newHashMap();
+  private final Map<Language, PullUpHelper<MemberInfo>> myProcessors = new HashMap<>();
 
   public PullUpProcessor(@NotNull PsiClass sourceClass, PsiClass targetSuperClass, MemberInfo[] membersToMove, DocCommentPolicy javaDocPolicy) {
     super(sourceClass.getProject());
@@ -71,13 +57,12 @@ public class PullUpProcessor extends BaseRefactoringProcessor implements PullUpD
 
   @Override
   @NotNull
-  protected UsageViewDescriptor createUsageViewDescriptor(@NotNull UsageInfo[] usages) {
+  protected UsageViewDescriptor createUsageViewDescriptor(UsageInfo @NotNull [] usages) {
     return new PullUpUsageViewDescriptor();
   }
 
   @Override
-  @NotNull
-  protected UsageInfo[] findUsages() {
+  protected UsageInfo @NotNull [] findUsages() {
     final List<UsageInfo> result = new ArrayList<>();
     for (MemberInfo memberInfo : myMembersToMove) {
       final PsiMember member = memberInfo.getMember();
@@ -107,14 +92,14 @@ public class PullUpProcessor extends BaseRefactoringProcessor implements PullUpD
 
   @Nullable
   @Override
-  protected RefactoringEventData getAfterData(@NotNull UsageInfo[] usages) {
+  protected RefactoringEventData getAfterData(UsageInfo @NotNull [] usages) {
     final RefactoringEventData data = new RefactoringEventData();
     data.addElement(myTargetSuperClass);
     return data;
   }
 
   @Override
-  protected void performRefactoring(@NotNull UsageInfo[] usages) {
+  protected void performRefactoring(UsageInfo @NotNull [] usages) {
     moveMembersToBase();
     moveFieldInitializations();
     for (UsageInfo usage : usages) {
@@ -151,7 +136,7 @@ public class PullUpProcessor extends BaseRefactoringProcessor implements PullUpD
       }
 
       MethodDuplicatesHandler.invokeOnScope(myProject, methodsToSearchDuplicates, new AnalysisScope(myProject, hierarchyFiles), true);
-    }), MethodDuplicatesHandler.REFACTORING_NAME, true, myProject);
+    }), MethodDuplicatesHandler.getRefactoringName(), true, myProject);
   }
 
   @NotNull
@@ -161,8 +146,8 @@ public class PullUpProcessor extends BaseRefactoringProcessor implements PullUpD
   }
 
   public void moveMembersToBase() throws IncorrectOperationException {
-    myMovedMembers = ContainerUtil.newLinkedHashSet();
-    myMembersAfterMove = ContainerUtil.newLinkedHashSet();
+    myMovedMembers = new LinkedHashSet<>();
+    myMembersAfterMove = new LinkedHashSet<>();
 
     // build aux sets
     for (MemberInfo info : myMembersToMove) {
@@ -313,8 +298,7 @@ public class PullUpProcessor extends BaseRefactoringProcessor implements PullUpD
     }
 
     @Override
-    @NotNull
-    public PsiElement[] getElements() {
+    public PsiElement @NotNull [] getElements() {
       return ContainerUtil.map(myMembersToMove, info -> info.getMember(), PsiElement.EMPTY_ARRAY);
     }
 
@@ -322,11 +306,6 @@ public class PullUpProcessor extends BaseRefactoringProcessor implements PullUpD
     @Override
     public String getCodeReferencesText(int usagesCount, int filesCount) {
       return "Class to pull up members to \"" + RefactoringUIUtil.getDescription(myTargetSuperClass, true) + "\"";
-    }
-
-    @Override
-    public String getCommentReferencesText(int usagesCount, int filesCount) {
-      return null;
     }
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.lang.resolve.processors
 
 import com.intellij.psi.PsiElement
@@ -19,6 +19,10 @@ open class KindsResolverProcessor(
     NameHint,
     GroovyResolveKind.Hint {
 
+  companion object {
+    private val propertyKinds = setOf(GroovyResolveKind.VARIABLE, GroovyResolveKind.BINDING, GroovyResolveKind.FIELD, GroovyResolveKind.PROPERTY)
+  }
+
   init {
     @Suppress("LeakingThis") hint(NameHint.KEY, this)
     @Suppress("LeakingThis") hint(GroovyResolveKind.HINT_KEY, this)
@@ -26,18 +30,18 @@ open class KindsResolverProcessor(
 
   final override fun getName(state: ResolveState): String? = name
 
-  final override fun shouldProcess(kind: GroovyResolveKind): Boolean = kind in kinds
+  override fun shouldProcess(kind: GroovyResolveKind): Boolean = kind in kinds && kind !in candidates
 
   private val candidates = enumMapOf<GroovyResolveKind, GroovyResolveResult>()
 
-  final override fun execute(element: PsiElement, state: ResolveState): Boolean {
-    if (element !is PsiNamedElement) return true
+  private fun executeInner(element: PsiElement, state: ResolveState) {
+    if (element !is PsiNamedElement) return
     require(element.isValid) {
       "Invalid element. ${elementInfo(element)}"
     }
 
     val elementName = getName(state, element)
-    if (name != elementName) return true
+    if (name != elementName) return
 
     val kind = getResolveKind(element)
     if (kind == null) {
@@ -49,9 +53,16 @@ open class KindsResolverProcessor(
       }
     }
     else if (kind !in candidates) {
-      candidates[kind] = BaseGroovyResolveResult(element, place, state)
+      val invokedOnProperty = kind in propertyKinds
+      candidates[kind] = object : BaseGroovyResolveResult<PsiElement>(element, place, state) {
+        override fun isInvokedOnProperty(): Boolean = invokedOnProperty
+      }
     }
-    return true
+  }
+
+  final override fun execute(element: PsiElement, state: ResolveState): Boolean {
+    executeInner(element, state)
+    return kinds.any { it !in candidates }
   }
 
   fun getCandidate(kind: GroovyResolveKind): GroovyResolveResult? = candidates[kind]

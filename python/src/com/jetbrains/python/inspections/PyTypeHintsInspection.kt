@@ -10,6 +10,7 @@ import com.intellij.psi.PsiElementVisitor
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.QualifiedName
+import com.jetbrains.python.PyBundle
 import com.jetbrains.python.PyNames
 import com.jetbrains.python.codeInsight.controlflow.ControlFlowCache
 import com.jetbrains.python.codeInsight.controlflow.ReadWriteInstruction
@@ -24,10 +25,7 @@ import com.jetbrains.python.psi.impl.PyEvaluator
 import com.jetbrains.python.psi.impl.PyPsiUtils
 import com.jetbrains.python.psi.resolve.PyResolveContext
 import com.jetbrains.python.psi.resolve.PyResolveUtil
-import com.jetbrains.python.psi.types.PyCollectionType
-import com.jetbrains.python.psi.types.PyGenericType
-import com.jetbrains.python.psi.types.PyInstantiableType
-import com.jetbrains.python.psi.types.PyTypeChecker
+import com.jetbrains.python.psi.types.*
 
 class PyTypeHintsInspection : PyInspection() {
 
@@ -64,7 +62,7 @@ class PyTypeHintsInspection : PyInspection() {
       super.visitPyClass(node)
 
       if (node != null) {
-        val superClassExpressions = node.superClassExpressions.toList()
+        val superClassExpressions = node.superClassExpressions.asList()
 
         checkPlainGenericInheritance(superClassExpressions)
         checkGenericDuplication(superClassExpressions)
@@ -86,6 +84,16 @@ class PyTypeHintsInspection : PyInspection() {
         if (typeName != null && typeName != PyNames.CANONICAL_SELF) {
           registerProblem(node, "Invalid type 'self'", ProblemHighlightType.GENERIC_ERROR, null, ReplaceWithTypeNameQuickFix(typeName))
         }
+      }
+
+      if ((node.parent is PyAnnotation || node.parent is PyExpressionStatement && node.parent.parent is PyDocstringFile) &&
+          node.multiFollowAssignmentsChain(resolveContext, this::followNotTypingOpaque)
+            .asSequence()
+            .mapNotNull { it.element }
+            .filterIsInstance<PyQualifiedNameOwner>()
+            .mapNotNull { it.qualifiedName }
+            .any { it == PyTypingTypeProvider.LITERAL || it == PyTypingTypeProvider.LITERAL_EXT }) {
+        registerProblem(node, "'Literal' must have at least one parameter")
       }
     }
 
@@ -124,6 +132,12 @@ class PyTypeHintsInspection : PyInspection() {
       checkTypeCommentAndParameters(node)
     }
 
+    override fun visitPyTargetExpression(node: PyTargetExpression) {
+      super.visitPyTargetExpression(node)
+
+      checkAnnotatedNonSelfAttribute(node)
+    }
+
     private fun checkTypeVarPlacement(call: PyCallExpression, target: PyExpression?) {
       if (target == null) {
         registerProblem(call, "A 'TypeVar()' expression must always directly be assigned to a variable")
@@ -152,7 +166,7 @@ class PyTypeHintsInspection : PyInspection() {
     }
 
     private fun checkTypeVarArguments(call: PyCallExpression, target: PyExpression?) {
-      val resolveContext = PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext)
+      val resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext)
       var covariant = false
       var contravariant = false
       var bound: PyExpression? = null
@@ -246,7 +260,11 @@ class PyTypeHintsInspection : PyInspection() {
               PyTypingTypeProvider.GENERIC,
               PyTypingTypeProvider.OPTIONAL,
               PyTypingTypeProvider.CLASS_VAR,
-              PyTypingTypeProvider.NO_RETURN ->
+              PyTypingTypeProvider.NO_RETURN,
+              PyTypingTypeProvider.FINAL,
+              PyTypingTypeProvider.FINAL_EXT,
+              PyTypingTypeProvider.LITERAL,
+              PyTypingTypeProvider.LITERAL_EXT ->
                 registerProblem(base,
                                 "'${it.substringAfterLast('.')}' cannot be used with instance and class checks",
                                 ProblemHighlightType.GENERIC_ERROR)
@@ -275,14 +293,14 @@ class PyTypeHintsInspection : PyInspection() {
               val qName = it.qualifiedName
 
               when (qName) {
-                PyTypingTypeProvider.GENERIC -> {
-                  registerProblem(base, "'Generic' cannot be used with instance and class checks", ProblemHighlightType.GENERIC_ERROR)
-                  return@forEach
-                }
-
+                PyTypingTypeProvider.GENERIC,
                 PyTypingTypeProvider.UNION,
                 PyTypingTypeProvider.OPTIONAL,
-                PyTypingTypeProvider.CLASS_VAR -> {
+                PyTypingTypeProvider.CLASS_VAR,
+                PyTypingTypeProvider.FINAL,
+                PyTypingTypeProvider.FINAL_EXT,
+                PyTypingTypeProvider.LITERAL,
+                PyTypingTypeProvider.LITERAL_EXT -> {
                   registerProblem(base,
                                   "'${qName.substringAfterLast('.')}' cannot be used with instance and class checks",
                                   ProblemHighlightType.GENERIC_ERROR)
@@ -441,6 +459,8 @@ class PyTypeHintsInspection : PyInspection() {
       val index = node.indexExpression ?: return
 
       val callableQName = QualifiedName.fromDottedString(PyTypingTypeProvider.CALLABLE)
+      val literalQName = QualifiedName.fromDottedString(PyTypingTypeProvider.LITERAL)
+      val literalExtQName = QualifiedName.fromDottedString(PyTypingTypeProvider.LITERAL_EXT)
       val qNames = PyResolveUtil.resolveImportedElementQNameLocally(operand)
 
       var typingOnly = true
@@ -449,6 +469,7 @@ class PyTypeHintsInspection : PyInspection() {
       qNames.forEach {
         when (it) {
           genericQName -> checkGenericParameters(index)
+          literalQName, literalExtQName -> checkLiteralParameter(index)
           callableQName -> {
             callableExists = true
             checkCallableParameters(index)
@@ -460,6 +481,24 @@ class PyTypeHintsInspection : PyInspection() {
 
       if (qNames.isNotEmpty() && typingOnly) {
         checkTypingMemberParameters(index, callableExists)
+      }
+    }
+
+    private fun checkLiteralParameter(index: PyExpression) {
+      val subParameter = if (index is PySubscriptionExpression) index.operand else null
+      if (subParameter is PyReferenceExpression &&
+          PyResolveUtil
+            .resolveImportedElementQNameLocally(subParameter)
+            .any { qName -> qName.toString().let { it == PyTypingTypeProvider.LITERAL || it == PyTypingTypeProvider.LITERAL_EXT} }) {
+        // if `index` is like `typing.Literal[...]` and has invalid form,
+        // outer `typing.Literal[...]` won't be highlighted
+        return
+      }
+
+      if (PyLiteralType.fromLiteralParameter(index, myTypeEvalContext) == null) {
+        registerProblem(index,
+                        "'Literal' may be parameterized with literal ints, byte and unicode strings, bools, Enum values, None, " +
+                        "other literal types, or type aliases to other literal types")
       }
     }
 
@@ -597,6 +636,23 @@ class PyTypeHintsInspection : PyInspection() {
       }
     }
 
+    private fun checkAnnotatedNonSelfAttribute(node: PyTargetExpression) {
+      val qualifier = node.qualifier ?: return
+      if (node.annotation == null && node.typeComment == null) return
+
+      val scopeOwner = ScopeUtil.getScopeOwner(node)
+      if (scopeOwner !is PyFunction) {
+        registerProblem(node, "Non-self attribute could not be type hinted")
+        return
+      }
+
+      val self = scopeOwner.parameterList.parameters.firstOrNull()?.takeIf { it.isSelf }
+      if (self == null ||
+          PyUtil.multiResolveTopPriority(qualifier, resolveContext).let { it.isNotEmpty() && it.all { e -> e != self }}) {
+        registerProblem(node, "Non-self attribute could not be type hinted")
+      }
+    }
+
     private fun followNotTypingOpaque(target: PyTargetExpression): Boolean {
       return !PyTypingTypeProvider.OPAQUE_NAMES.contains(target.qualifiedName)
     }
@@ -607,7 +663,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private fun multiFollowAssignmentsChain(referenceExpression: PyReferenceExpression,
                                             follow: (PyTargetExpression) -> Boolean = this::followNotTypingOpaque): List<PsiElement> {
-      val resolveContext = PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext)
+      val resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(myTypeEvalContext)
       return referenceExpression.multiFollowAssignmentsChain(resolveContext, follow).mapNotNull { it.element }
     }
   }
@@ -615,7 +671,7 @@ class PyTypeHintsInspection : PyInspection() {
   companion object {
     private class ReplaceWithTypeNameQuickFix(private val typeName: String) : LocalQuickFix {
 
-      override fun getFamilyName() = "Replace with type name"
+      override fun getFamilyName() = PyBundle.message("QFIX.replace.with.type.name")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val element = descriptor.psiElement as? PyReferenceExpression ?: return
@@ -631,7 +687,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class RemoveFunctionAnnotations : LocalQuickFix {
 
-      override fun getFamilyName() = "Remove function annotations"
+      override fun getFamilyName() = PyBundle.message("QFIX.remove.function.annotations")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val function = (descriptor.psiElement.parent as? PyFunction) ?: return
@@ -648,7 +704,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class ReplaceWithTargetNameQuickFix(private val targetName: String) : LocalQuickFix {
 
-      override fun getFamilyName() = "Replace with target name"
+      override fun getFamilyName() = PyBundle.message("QFIX.replace.with.target.name")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val old = descriptor.psiElement as? PyStringLiteralExpression ?: return
@@ -660,7 +716,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class RemoveGenericParametersQuickFix : LocalQuickFix {
 
-      override fun getFamilyName() = "Remove generic parameter(s)"
+      override fun getFamilyName() = PyBundle.message("QFIX.remove.generic.parameters")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val old = descriptor.psiElement as? PySubscriptionExpression ?: return
@@ -671,7 +727,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class ReplaceWithSubscriptionQuickFix : LocalQuickFix {
 
-      override fun getFamilyName() = "Replace with square brackets"
+      override fun getFamilyName() = PyBundle.message("QFIX.replace.with.square.brackets")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val element = descriptor.psiElement as? PyCallExpression ?: return
@@ -694,7 +750,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class SurroundElementsWithSquareBracketsQuickFix : LocalQuickFix {
 
-      override fun getFamilyName() = "Surround with square brackets"
+      override fun getFamilyName() = PyBundle.message("QFIX.surround.with.square.brackets")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val element = descriptor.psiElement as? PyTupleExpression ?: return
@@ -710,7 +766,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class SurroundElementWithSquareBracketsQuickFix : LocalQuickFix {
 
-      override fun getFamilyName() = "Surround with square brackets"
+      override fun getFamilyName() = PyBundle.message("QFIX.surround.with.square.brackets")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val element = descriptor.psiElement
@@ -724,7 +780,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class ReplaceWithListQuickFix : LocalQuickFix {
 
-      override fun getFamilyName() = "Replace with square brackets"
+      override fun getFamilyName() = PyBundle.message("QFIX.replace.with.square.brackets")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val element = descriptor.psiElement
@@ -740,7 +796,7 @@ class PyTypeHintsInspection : PyInspection() {
 
     private class RemoveSquareBracketsQuickFix : LocalQuickFix {
 
-      override fun getFamilyName() = "Remove square brackets"
+      override fun getFamilyName() = PyBundle.message("QFIX.remove.square.brackets")
 
       override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val element = descriptor.psiElement as? PyListLiteralExpression ?: return

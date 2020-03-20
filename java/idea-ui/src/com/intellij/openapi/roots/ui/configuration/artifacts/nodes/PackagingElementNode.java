@@ -36,9 +36,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/**
- * @author nik
- */
 public class PackagingElementNode<E extends PackagingElement<?>> extends ArtifactsTreeNode {
   private final List<E> myPackagingElements;
   private final Map<PackagingElement<?>, CompositePackagingElement<?>> myParentElements = new HashMap<>(1);
@@ -79,9 +76,8 @@ public class PackagingElementNode<E extends PackagingElement<?>> extends Artifac
     return myPackagingElements.size() == 1 ? myPackagingElements.get(0) : null;
   }
 
-  @NotNull
   @Override
-  public Object[] getEqualityObjects() {
+  public Object @NotNull [] getEqualityObjects() {
     return ArrayUtil.toObjectArray(myPackagingElements);
   }
 
@@ -121,7 +117,7 @@ public class PackagingElementNode<E extends PackagingElement<?>> extends Artifac
     return SimpleTextAttributes.fromTextAttributes(textAttributes);
   }
 
-  void addElement(PackagingElement<?> element, CompositePackagingElement parentElement, Collection<PackagingNodeSource> nodeSource) {
+  void addElement(PackagingElement<?> element, CompositePackagingElement parentElement, Collection<? extends PackagingNodeSource> nodeSource) {
     doAddElement((E)element);
     myParentElements.put(element, parentElement);
     myNodeSources.putAll(element, nodeSource);
@@ -142,22 +138,8 @@ public class PackagingElementNode<E extends PackagingElement<?>> extends Artifac
     return myContext;
   }
 
-  @Nullable
-  public CompositePackagingElementNode findCompositeChild(@NotNull String name) {
-    final SimpleNode[] children = getChildren();
-    for (SimpleNode child : children) {
-      if (child instanceof CompositePackagingElementNode) {
-        final CompositePackagingElementNode composite = (CompositePackagingElementNode)child;
-        if (name.equals(composite.getFirstElement().getName())) {
-          return composite;
-        }
-      }
-    }
-    return null;
-  }
 
-
-  public List<PackagingElementNode<?>> getNodesByPath(List<PackagingElement<?>> pathToPlace) {
+  public List<PackagingElementNode<?>> getNodesByPath(List<? extends PackagingElement<?>> pathToPlace) {
     List<PackagingElementNode<?>> result = new ArrayList<>();
     PackagingElementNode<?> current = this;
     int i = 0;

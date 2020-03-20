@@ -50,12 +50,12 @@ import org.junit.runners.Suite;
   StreamApiMigrationInspectionTestSuite.SummingTest.class,
   StreamApiMigrationInspectionTestSuite.Java9Test.class,
   StreamApiMigrationInspectionTestSuite.Java10Test.class,
+  StreamApiMigrationInspectionTestSuite.Java14Test.class,
 })
 public class StreamApiMigrationInspectionTestSuite {
   public static abstract class StreamApiMigrationInspectionBaseTest extends LightQuickFixParameterizedTestCase {
-    @NotNull
     @Override
-    protected LocalInspectionTool[] configureLocalInspectionTools() {
+    protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
       StreamApiMigrationInspection inspection = new StreamApiMigrationInspection();
       inspection.SUGGEST_FOREACH = true;
       return new LocalInspectionTool[]{
@@ -69,7 +69,7 @@ public class StreamApiMigrationInspectionTestSuite {
     }
 
       @Override
-    protected void doAction(@NotNull ActionHint actionHint, String testFullPath, String testName) throws Exception {
+    protected void doAction(@NotNull ActionHint actionHint, @NotNull String testFullPath, @NotNull String testName) throws Exception {
       ((IntentionManagerImpl)IntentionManager.getInstance())
         .withDisabledIntentions(() -> super.doAction(actionHint, testFullPath, testName));
     }
@@ -227,6 +227,13 @@ public class StreamApiMigrationInspectionTestSuite {
     @Override
     String getFolder() {
       return "java10";
+    }
+  }
+
+  public static class Java14Test extends StreamApiMigrationInspectionBaseTest {
+    @Override
+    String getFolder() {
+      return "java14";
     }
   }
 }

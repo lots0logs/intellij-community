@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.actions;
 
 import com.intellij.openapi.actionSystem.*;
@@ -12,8 +12,6 @@ import org.jetbrains.annotations.NotNull;
  * @author ven
  */
 public class RenameFileAction extends AnAction {
-  public static final String RENAME_FILE = "Rename File...";
-
   @Override
   public void actionPerformed(@NotNull final AnActionEvent e) {
     final PsiFile file = e.getData(CommonDataKeys.PSI_FILE);
@@ -26,11 +24,6 @@ public class RenameFileAction extends AnAction {
   }
 
   @Override
-  public boolean startInTransaction() {
-    return true;
-  }
-
-  @Override
   public void update(@NotNull AnActionEvent e) {
     PsiFile file = e.getData(CommonDataKeys.PSI_FILE);
     Presentation presentation = e.getPresentation();
@@ -38,19 +31,10 @@ public class RenameFileAction extends AnAction {
     boolean enabled = file != null &&
                       (enabledInProjectView(file) || !ActionPlaces.PROJECT_VIEW_POPUP.equals(place)) &&
                       place != ActionPlaces.EDITOR_POPUP && e.getData(CommonDataKeys.PROJECT) != null;
-    presentation.setEnabled(enabled);
-    presentation.setVisible(enabled);
-    if (enabled) {
-      presentation.setText(RENAME_FILE);
-      presentation.setDescription("Rename selected file");
-    }
+    presentation.setEnabledAndVisible(enabled);
   }
 
   protected boolean enabledInProjectView(@NotNull PsiFile file) {
-    for (RenameFileActionProvider provider : RenameFileActionProvider.EP_NAME.getExtensionList()) {
-      if (provider.enabledInProjectView(file)) return true;
-    }
-
-    return false;
+    return RenameFileActionProvider.EP_NAME.getExtensionList().stream().anyMatch(provider -> provider.enabledInProjectView(file));
   }
 }

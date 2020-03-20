@@ -2,9 +2,9 @@
 package com.intellij.spellchecker.inspection;
 
 import com.intellij.openapi.application.PluginPathManager;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 
-public class JavaSpellcheckerInspectionTest extends LightCodeInsightFixtureTestCase {
+public class JavaSpellcheckerInspectionTest extends LightJavaCodeInsightFixtureTestCase {
   @Override
   protected String getBasePath() {
     return PluginPathManager.getPluginHomePathRelative("java-i18n") + "/testData/inspections/spellchecker";
@@ -28,6 +28,7 @@ public class JavaSpellcheckerInspectionTest extends LightCodeInsightFixtureTestC
   public void testClassName() { doTest(); }
   public void testFieldName() { doTest(); }
   public void testMethodName() { doTest(); }
+  public void testConstructorIgnored() { doTest();}
   public void testLocalVariableName() { doTest(); }
   public void testDocComment() { doTest(); }
   public void testStringLiteral() { doTest(); }

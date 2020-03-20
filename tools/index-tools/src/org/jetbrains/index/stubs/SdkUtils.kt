@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.index.stubs
 
 import com.intellij.openapi.application.ApplicationManager
@@ -14,10 +14,6 @@ import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.testFramework.PlatformTestUtil
 import com.intellij.util.ui.UIUtil
 import java.io.File
-
-/**
- * @author traff
- */
 
 fun openProjectWithSdk(projectPath: String,
                        moduleTypeId: String,
@@ -60,7 +56,7 @@ fun getOrCreateModule(project: Project, projectPath: String, moduleTypeId: Strin
       Computable<Module> { ModuleManager.getInstance(project).newModule(projectPath, moduleTypeId) }
     )
 
-    val root = VfsUtil.findFileByIoFile(File(projectPath), true)!!
+    val root = VfsUtil.findFileByIoFile(File(projectPath), true) ?: throw AssertionError("Can't find $projectPath")
 
     ModuleRootModificationUtil.updateModel(module, { t ->
       val e = t.addContentEntry(root)

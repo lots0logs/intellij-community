@@ -69,7 +69,7 @@ import java.util.regex.Pattern;
  * @author cdr
  */
 public class UsagePreviewPanel extends UsageContextPanelBase implements DataProvider {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.usages.impl.UsagePreviewPanel");
+  private static final Logger LOG = Logger.getInstance(UsagePreviewPanel.class);
   private Editor myEditor;
   private final boolean myIsEditor;
   private int myLineHeight;
@@ -118,7 +118,7 @@ public class UsagePreviewPanel extends UsageContextPanelBase implements DataProv
     @NotNull
     @Override
     public String getTabTitle() {
-      return "Preview";
+      return UsageViewBundle.message("tab.title.preview");
     }
   }
 
@@ -173,7 +173,7 @@ public class UsagePreviewPanel extends UsageContextPanelBase implements DataProv
                                @NotNull final Project project,
                                boolean highlightOnlyNameElements,
                                int highlightLayer) {
-    LOG.assertTrue(!PsiDocumentManager.getInstance(project).hasUncommitedDocuments());
+    LOG.assertTrue(PsiDocumentManager.getInstance(project).isCommitted(editor.getDocument()));
 
     MarkupModel markupModel = editor.getMarkupModel();
     for (RangeHighlighter highlighter : markupModel.getAllHighlighters()) {
@@ -352,9 +352,7 @@ public class UsagePreviewPanel extends UsageContextPanelBase implements DataProv
     }
     PsiFile psiFile = null;
     for (UsageInfo info : infos) {
-      PsiElement element = info.getElement();
-      if (element == null) continue;
-      PsiFile file = element.getContainingFile();
+      PsiFile file = info.getFile();
       if (psiFile == null) {
         psiFile = file;
       } else {

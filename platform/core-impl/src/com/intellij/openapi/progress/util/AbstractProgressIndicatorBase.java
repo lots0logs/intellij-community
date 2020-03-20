@@ -29,7 +29,7 @@ import java.util.Optional;
 import java.util.Set;
 
 public class AbstractProgressIndicatorBase extends UserDataHolderBase implements ProgressIndicator {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.progress.util.ProgressIndicatorBase");
+  private static final Logger LOG = Logger.getInstance(AbstractProgressIndicatorBase.class);
 
   private volatile String myText;
   private volatile double myFraction;
@@ -47,7 +47,7 @@ public class AbstractProgressIndicatorBase extends UserDataHolderBase implements
   private TDoubleArrayList myFractionStack; // guarded by this
   private Stack<String> myText2Stack; // guarded by this
 
-  ProgressIndicator myModalityProgress;
+  private ProgressIndicator myModalityProgress;
   private volatile ModalityState myModalityState = ModalityState.NON_MODAL;
   private volatile int myNonCancelableSectionCount;
   private final Object lock = ObjectUtils.sentinel("APIB lock");
@@ -74,7 +74,7 @@ public class AbstractProgressIndicatorBase extends UserDataHolderBase implements
     }
   }
 
-  private static final Set<Class> ourReportedReuseExceptions = ContainerUtil.newConcurrentSet();
+  private static final Set<Class<?>> ourReportedReuseExceptions = ContainerUtil.newConcurrentSet();
 
   protected boolean isReuseable() {
     return false;
@@ -139,7 +139,7 @@ public class AbstractProgressIndicatorBase extends UserDataHolderBase implements
   @Nullable
   protected Throwable getCancellationTrace() {
     if (this instanceof Disposable) {
-      return ObjectUtils.tryCast(Disposer.getTree().getDisposalInfo((Disposable)this), Throwable.class);
+      return Disposer.getDisposalTrace((Disposable)this);
     }
     return null;
   }
@@ -230,6 +230,10 @@ public class AbstractProgressIndicatorBase extends UserDataHolderBase implements
     return myModalityProgress != null;
   }
 
+  final boolean isModalEntity() {
+    return myModalityProgress == this;
+  }
+
   @Override
   @NotNull
   public ModalityState getModalityState() {
@@ -237,14 +241,21 @@ public class AbstractProgressIndicatorBase extends UserDataHolderBase implements
   }
 
   @Override
-  public void setModalityProgress(ProgressIndicator modalityProgress) {
+  public void setModalityProgress(@Nullable ProgressIndicator modalityProgress) {
     LOG.assertTrue(!isRunning());
     myModalityProgress = modalityProgress;
-    ModalityState currentModality = ApplicationManager.getApplication().getCurrentModalityState();
-    myModalityState = myModalityProgress != null ? ((ModalityStateEx)currentModality).appendProgress(myModalityProgress) : currentModality;
+    setModalityState(modalityProgress);
+  }
+
+  private void setModalityState(@Nullable ProgressIndicator modalityProgress) {
+    ModalityState modalityState = ModalityState.defaultModalityState();
+
     if (modalityProgress != null) {
-      ((TransactionGuardImpl)TransactionGuard.getInstance()).enteredModality(myModalityState);
+      modalityState = ((ModalityStateEx)modalityState).appendProgress(modalityProgress);
+      ((TransactionGuardImpl)TransactionGuard.getInstance()).enteredModality(modalityState);
     }
+
+    myModalityState = modalityState;
   }
 
   @Override

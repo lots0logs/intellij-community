@@ -36,7 +36,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class BaseConfigurationTestCase extends IdeaTestCase {
+public abstract class BaseConfigurationTestCase extends JavaProjectTestCase {
   private final List<Module> myModulesToDispose = new ArrayList<>();
 
   @Override
@@ -92,7 +92,7 @@ public abstract class BaseConfigurationTestCase extends IdeaTestCase {
 
   @NotNull
   public static Module createTempModule(TempFiles tempFiles, final Project project) {
-    final String tempPath = tempFiles.createTempFile("xxx").getAbsolutePath();
+    final String tempPath = tempFiles.createTempFile("xxx", ".iml").getAbsolutePath();
     Module result = WriteAction.compute(() -> ModuleManager.getInstance(project).newModule(tempPath, StdModuleTypes.JAVA.getId()));
     PlatformTestUtil.saveProject(project);
     return result;

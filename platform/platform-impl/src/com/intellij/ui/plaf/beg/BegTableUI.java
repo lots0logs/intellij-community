@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.plaf.beg;
 
 import com.intellij.openapi.wm.IdeFocusManager;
@@ -13,9 +13,6 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
-/**
- * @author mike
- */
 public class BegTableUI extends BasicTableUI {
   private final KeyAdapter myAdapter= new KeyAdapter() {
       @Override
@@ -44,6 +41,16 @@ public class BegTableUI extends BasicTableUI {
     c.getActionMap().put(START_EDITING_ACTION_KEY, new StartEditingAction());
     // fix missing escape shortcut
     c.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("pressed ESCAPE"), "cancel");
+  }
+
+  @Override
+  public void installDefaults() {
+    super.installDefaults();
+
+    int rowHeight = UIManager.getInt("Table.rowHeight");
+    if (rowHeight > 0) {
+      LookAndFeel.installProperty(table, "rowHeight", rowHeight);
+    }
   }
 
   @Override

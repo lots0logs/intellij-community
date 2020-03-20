@@ -1,22 +1,9 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.junit5;
 
+import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
+import com.intellij.util.containers.ContainerUtil;
 import jetbrains.buildServer.messages.serviceMessages.MapSerializerUtil;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.engine.descriptor.ClassTestDescriptor;
@@ -25,6 +12,7 @@ import org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor;
 import org.junit.platform.engine.TestDescriptor;
 import org.junit.platform.engine.TestExecutionResult;
 import org.junit.platform.engine.UniqueId;
+import org.junit.platform.engine.reporting.ReportEntry;
 import org.junit.platform.engine.support.descriptor.EngineDescriptor;
 import org.junit.platform.launcher.TestIdentifier;
 import org.junit.platform.launcher.TestPlan;
@@ -33,6 +21,7 @@ import org.opentest4j.MultipleFailuresError;
 
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.stream.Stream;
@@ -48,7 +37,7 @@ class JUnit5EventsTest {
     myExecutionListener = new JUnit5TestExecutionListener(new PrintStream(new OutputStream() {
       @Override
       public void write(int b) {
-        myBuf.append(new String(new byte[]{(byte)b}, CharsetToolkit.UTF8_CHARSET));
+        myBuf.append(new String(new byte[]{(byte)b}, StandardCharsets.UTF_8));
       }
     })) {
       @Override
@@ -84,6 +73,8 @@ class JUnit5EventsTest {
     MultipleFailuresError multipleFailuresError = new MultipleFailuresError("2 errors", Arrays.asList
       (new AssertionFailedError("message1", "expected1", "actual1"),
        new AssertionFailedError("message2", "expected2", "actual2")));
+    ReportEntry reportEntry = ReportEntry.from(ContainerUtil.newHashMap(Pair.create("key1", "value1"), Pair.create("stdout", "out1")));
+    myExecutionListener.reportingEntryPublished(identifier, reportEntry);
     myExecutionListener.executionFinished(identifier, TestExecutionResult.failed(multipleFailuresError));
 
 
@@ -91,6 +82,7 @@ class JUnit5EventsTest {
     Assertions.assertEquals("##teamcity[enteredTheMatrix]\n" +
                             "\n" +
                             "##teamcity[testStarted id='|[engine:testMethod|]' name='test1()' nodeId='|[engine:testMethod|]' parentNodeId='|[engine:testClass|]' locationHint='java:test://com.intellij.junit5.JUnit5EventsTest$TestClass/test1' metainfo='']\n" +
+                            "##teamcity[testStdOut id='|[engine:testMethod|]' name='test1()' nodeId='|[engine:testMethod|]' parentNodeId='|[engine:testClass|]' out = 'timestamp = " + reportEntry.getTimestamp() + ", key1 = value1, stdout = out1']\n" +
                             "\n" +
                             "##teamcity[testFailed name='test1()' id='|[engine:testMethod|]' nodeId='|[engine:testMethod|]' parentNodeId='|[engine:testClass|]' message='message1|nComparison Failure: ' expected='expected1' actual='actual1' details='']\n" +
                             "\n" +
@@ -126,7 +118,7 @@ class JUnit5EventsTest {
                             "\n" +
                             "##teamcity[testFailed name='Class Configuration' id='|[engine:testMethod|]' nodeId='|[engine:testMethod|]' parentNodeId='|[engine:testClass|]' error='true' message='' details='TRACE']\n" +
                             "\n" +
-                            "##teamcity[testFinished name='Class Configuration' nodeId='|[engine:testMethod|]' parentNodeId='[engine:testClass]' ]\n" +
+                            "##teamcity[testFinished name='Class Configuration' nodeId='|[engine:testMethod|]' parentNodeId='|[engine:testClass|]' ]\n" +
                             "##teamcity[testSuiteFinished  id='|[engine:testMethod|]' name='brokenStream()' nodeId='|[engine:testMethod|]' parentNodeId='|[engine:testClass|]']\n", StringUtil.convertLineSeparators(myBuf.toString()));
   }
 

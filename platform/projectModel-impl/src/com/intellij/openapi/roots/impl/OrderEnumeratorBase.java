@@ -32,11 +32,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/**
- * @author nik
- */
 abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnumeratorSettings {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.roots.impl.OrderEnumeratorBase");
+  private static final Logger LOG = Logger.getInstance(OrderEnumeratorBase.class);
   private boolean myProductionOnly;
   private boolean myCompileOnly;
   private boolean myRuntimeOnly;
@@ -305,8 +302,11 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
     return ProcessEntryAction.PROCESS;
   }
 
-  protected void processEntries(@NotNull ModuleRootModel rootModel, @NotNull PairProcessor<? super OrderEntry, ? super List<OrderEnumerationHandler>> processor,
-                                @Nullable Set<? super Module> processed, boolean firstLevel, @NotNull List<OrderEnumerationHandler> customHandlers) {
+  protected void processEntries(@NotNull ModuleRootModel rootModel,
+                                @Nullable Set<? super Module> processed,
+                                boolean firstLevel,
+                                @NotNull List<? extends OrderEnumerationHandler> customHandlers,
+                                @NotNull PairProcessor<? super OrderEntry, ? super List<? extends OrderEnumerationHandler>> processor) {
     if (processed != null && !processed.add(rootModel.getModule())) return;
 
     for (OrderEntry entry : rootModel.getOrderEntries()) {
@@ -315,7 +315,7 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
         continue;
       }
       if (action.type == ProcessEntryActionType.RECURSE) {
-        processEntries(getRootModel(action.recurseOnModule), processor, processed, false, customHandlers);
+        processEntries(getRootModel(action.recurseOnModule), processed, false, customHandlers, processor);
         continue;
       }
       assert action.type == ProcessEntryActionType.PROCESS;
@@ -345,14 +345,14 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
 
   @Override
   public void forEach(@NotNull final Processor<? super OrderEntry> processor) {
-    forEach((entry, handlers) -> processor.process(entry));
+    forEach((entry, __) -> processor.process(entry));
   }
 
-  protected abstract void forEach(@NotNull PairProcessor<? super OrderEntry, ? super List<OrderEnumerationHandler>> processor);
+  protected abstract void forEach(@NotNull PairProcessor<? super OrderEntry, ? super List<? extends OrderEnumerationHandler>> processor);
 
   @Override
   public void forEachLibrary(@NotNull final Processor<? super Library> processor) {
-    forEach((entry, handlers) -> {
+    forEach((entry, __) -> {
       if (entry instanceof LibraryOrderEntry) {
         final Library library = ((LibraryOrderEntry)entry).getLibrary();
         if (library != null) {
@@ -474,7 +474,7 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
    */
   public abstract void processRootModules(@NotNull Processor<? super Module> processor);
 
-  private static class OrderEntryProcessor<R> implements PairProcessor<OrderEntry, List<OrderEnumerationHandler>> {
+  private static class OrderEntryProcessor<R> implements PairProcessor<OrderEntry, List<? extends OrderEnumerationHandler>> {
     private R myValue;
     private final RootPolicy<R> myPolicy;
 
@@ -484,7 +484,7 @@ abstract class OrderEnumeratorBase extends OrderEnumerator implements OrderEnume
     }
 
     @Override
-    public boolean process(OrderEntry orderEntry, List<OrderEnumerationHandler> customHandlers) {
+    public boolean process(OrderEntry orderEntry, List<? extends OrderEnumerationHandler> __) {
       myValue = orderEntry.accept(myPolicy, myValue);
       return true;
     }

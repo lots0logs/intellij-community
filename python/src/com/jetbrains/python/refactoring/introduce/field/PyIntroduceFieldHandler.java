@@ -21,6 +21,7 @@ import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.util.Function;
 import com.intellij.util.FunctionUtil;
 import com.intellij.util.ThreeState;
+import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.PyNames;
 import com.jetbrains.python.codeInsight.controlflow.ScopeOwner;
 import com.jetbrains.python.codeInsight.dataflow.scope.ScopeUtil;
@@ -92,7 +93,8 @@ public class PyIntroduceFieldHandler extends IntroduceHandler {
   @Override
   protected boolean checkEnabled(IntroduceOperation operation) {
     if (PyUtil.getContainingClassOrSelf(operation.getElement()) == null) {
-      CommonRefactoringUtil.showErrorHint(operation.getProject(), operation.getEditor(), "Cannot introduce field: not in class", myDialogTitle,
+      CommonRefactoringUtil.showErrorHint(operation.getProject(), operation.getEditor(),
+                                          PyBundle.message("refactoring.introduce.field.not.in.class"), myDialogTitle,
                                           getHelpId());
       return false;
     }
@@ -170,11 +172,11 @@ public class PyIntroduceFieldHandler extends IntroduceHandler {
 
   @NotNull
   private static PsiElement addFieldToSetUp(PyClass clazz, final Function<String, PyStatement> callback) {
-    final PyFunction init = clazz.findMethodByName(PythonUnitTestUtil.TESTCASE_SETUP_NAME, false, null);
+    final PyFunction init = clazz.findMethodByName(PyNames.TESTCASE_SETUP_NAME, false, null);
     if (init != null) {
       return AddFieldQuickFix.appendToMethod(init, callback);
     }
-    final PyFunctionBuilder builder = new PyFunctionBuilder(PythonUnitTestUtil.TESTCASE_SETUP_NAME, clazz);
+    final PyFunctionBuilder builder = new PyFunctionBuilder(PyNames.TESTCASE_SETUP_NAME, clazz);
     builder.parameter(PyNames.CANONICAL_SELF);
     PyFunction setUp = builder.buildFunction();
     final PyStatementList statements = clazz.getStatementList();
@@ -204,7 +206,7 @@ public class PyIntroduceFieldHandler extends IntroduceHandler {
   protected PyExpression createExpression(Project project, String name, PsiElement declaration) {
     final String text = declaration.getText();
     final String self_name = text.substring(0, text.indexOf('.'));
-    return PyElementGenerator.getInstance(project).createExpressionFromText(self_name + "." + name);
+    return PyElementGenerator.getInstance(project).createExpressionFromText(LanguageLevel.forElement(declaration), self_name + "." + name);
   }
 
   @Override
@@ -241,7 +243,8 @@ public class PyIntroduceFieldHandler extends IntroduceHandler {
   @Override
   protected boolean checkIntroduceContext(PsiFile file, Editor editor, PsiElement element) {
     if (element != null && isInStaticMethod(element)) {
-      CommonRefactoringUtil.showErrorHint(file.getProject(), editor, "Introduce Field refactoring cannot be used in static methods",
+      CommonRefactoringUtil.showErrorHint(file.getProject(), editor,
+                                          PyBundle.message("refactoring.introduce.field.cannot.be.used.in.static.methods"),
                                           RefactoringBundle.message("introduce.field.title"),
                                           "refactoring.extractMethod");
       return false;

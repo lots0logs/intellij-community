@@ -9,13 +9,9 @@ import org.apache.tools.ant.DefaultLogger
 import org.apache.tools.ant.Project
 import org.jetbrains.intellij.build.BuildMessageLogger
 import org.jetbrains.intellij.build.BuildMessages
-import org.jetbrains.intellij.build.CompilationErrorsLogMessage
 import org.jetbrains.intellij.build.LogMessage
 
 import java.util.function.BiFunction
-/**
- * @author nik
- */
 @CompileStatic
 class BuildMessagesImpl implements BuildMessages {
   private final BuildMessageLogger logger
@@ -33,7 +29,7 @@ class BuildMessagesImpl implements BuildMessages {
     def registered = antProject.getReference(key)
     if (registered != null) return registered as BuildMessagesImpl
 
-    boolean underTeamCity = System.getProperty("teamcity.buildType.id") != null
+    boolean underTeamCity = System.getenv("TEAMCITY_VERSION") != null
     disableAntLogging(antProject)
     BiFunction<String, AntTaskLogger, BuildMessageLogger> mainLoggerFactory = underTeamCity ? TeamCityBuildMessageLogger.FACTORY : ConsoleBuildMessageLogger.FACTORY
     def debugLogger = new DebugLogger()
@@ -133,10 +129,14 @@ class BuildMessagesImpl implements BuildMessages {
 
   @Override
   <V> V block(String blockName, Closure<V> body) {
+    long start = System.currentTimeMillis()
     try {
       blockNames.push(blockName)
       processMessage(new LogMessage(LogMessage.Kind.BLOCK_STARTED, blockName))
-      return body()
+      def result = body()
+      long elapsedTime = System.currentTimeMillis() - start
+      debug("${blockNames.join(" > ")} finished in ${elapsedTime}ms")
+      return result
     }
     catch (IntelliJBuildException e) {
       throw e
@@ -152,7 +152,7 @@ class BuildMessagesImpl implements BuildMessages {
 
   @Override
   void artifactBuilt(String relativeArtifactPath) {
-    processMessage(new LogMessage(LogMessage.Kind.ARTIFACT_BUILT, relativeArtifactPath))
+    logger.processMessage(new LogMessage(LogMessage.Kind.ARTIFACT_BUILT, relativeArtifactPath))
   }
 
   @Override

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger.impl.actions;
 
 import com.intellij.execution.process.ProcessInfo;
@@ -20,23 +6,24 @@ import com.intellij.openapi.progress.DumbProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.util.UserDataHolderBase;
-import com.intellij.testFramework.PlatformTestCase;
+import com.intellij.testFramework.HeavyPlatformTestCase;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.xdebugger.attach.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static com.intellij.xdebugger.impl.actions.AttachToProcessAction.*;
 
-public class AttachToProcessActionTest extends PlatformTestCase {
+public class AttachToProcessActionTest extends HeavyPlatformTestCase {
 
   @NotNull
   private AttachToProcessItem fixtureCreateAttachToProcessItem(@NotNull XAttachPresentationGroup<ProcessInfo> group, boolean firstInGroup, @NotNull ProcessInfo info, @NotNull List<XLocalAttachDebugger> debuggers, @NotNull UserDataHolder dataHolder) {
-    List<XAttachDebugger> attachDebuggers = ContainerUtil.newArrayList(debuggers);
+    List<XAttachDebugger> attachDebuggers = new ArrayList<>(debuggers);
     return new AttachToProcessItem(group, firstInGroup, LocalAttachHost.INSTANCE, info, attachDebuggers, getProject(), dataHolder);
   }
 
@@ -47,7 +34,7 @@ public class AttachToProcessActionTest extends PlatformTestCase {
     return RecentItem.createRecentItem(LocalAttachHost.INSTANCE, info, group, debuggerName);
   }
 
-  private List<AttachToProcessItem> fixtureCollectAttachItems(ProcessInfo[] infos, @NotNull XAttachDebuggerProvider... providers) {
+  private List<AttachToProcessItem> fixtureCollectAttachItems(ProcessInfo[] infos, XAttachDebuggerProvider @NotNull ... providers) {
     List<ProcessInfo> infoList = ContainerUtil.newArrayList(infos);
     return doCollectAttachProcessItems(getProject(), LocalAttachHost.INSTANCE, infoList, DumbProgressIndicator.INSTANCE, Arrays.asList(providers));
   }
@@ -587,7 +574,7 @@ public class AttachToProcessActionTest extends PlatformTestCase {
                 new TestDebuggerProvider(20, group2, createDebuggers("gdb2", "lldb2")));
   }
 
-  private void assertItems(String expected, @NotNull XLocalAttachDebuggerProvider... providers) {
+  private void assertItems(String expected, XLocalAttachDebuggerProvider @NotNull ... providers) {
     ProcessInfo[] infos = {
       new ProcessInfo(1, "command line 1", "exec1", "args1"),
       new ProcessInfo(2, "command line 2", "exec2", "args2"),
@@ -595,7 +582,7 @@ public class AttachToProcessActionTest extends PlatformTestCase {
     assertItems(expected, infos, providers);
   }
 
-  private void assertItems(String expected, ProcessInfo[] infos, @NotNull XLocalAttachDebuggerProvider... providers) {
+  private void assertItems(String expected, ProcessInfo[] infos, XLocalAttachDebuggerProvider @NotNull ... providers) {
     assertEquals(expected, printItems(fixtureCollectAttachItems(infos, providers)));
   }
 

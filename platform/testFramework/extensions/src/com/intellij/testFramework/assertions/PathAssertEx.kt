@@ -1,11 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework.assertions
 
-import com.intellij.openapi.util.text.StringUtilRt
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.util.io.readChars
 import com.intellij.util.io.readText
 import com.intellij.util.io.size
 import junit.framework.ComparisonFailure
-import org.assertj.core.api.AbstractStringAssert
 import org.assertj.core.api.PathAssert
 import org.assertj.core.internal.ComparatorBasedComparisonStrategy
 import org.assertj.core.internal.Iterables
@@ -19,9 +19,9 @@ class PathAssertEx(actual: Path?) : PathAssert(actual) {
     isNotNull
 
     if (Files.exists(actual, LinkOption.NOFOLLOW_LINKS)) {
-      var error = "Expecting path:\n\t${actual}\nnot to exist"
+      var error = "Expecting path:\n\t$actual\nnot to exist"
       if (actual.size() < 16 * 1024) {
-        error += ", content:\n\n${actual.readText()}\n"
+        error += " but it does, with content:\n\n${actual.readText()}\n"
       }
       failWithMessage(error)
     }
@@ -36,9 +36,9 @@ class PathAssertEx(actual: Path?) : PathAssert(actual) {
     isRegularFile
 
     val expectedContent = expected.trimIndent()
-    val actualContent = StringUtilRt.convertLineSeparators(actual.readText())
-    if (actualContent != expectedContent) {
-      throw ComparisonFailure(null, expectedContent, actualContent)
+    val actualContent = getNormalizedActualContent(actual.readChars())
+    if (!StringUtil.equal(expectedContent, actualContent, true)) {
+      throw ComparisonFailure(null, expectedContent, actualContent.toString())
     }
 
     return this
@@ -65,16 +65,3 @@ class PathAssertEx(actual: Path?) : PathAssert(actual) {
   }
 }
 
-class StringAssertEx(actual: String?) : AbstractStringAssert<StringAssertEx>(actual, StringAssertEx::class.java) {
-  fun isEqualTo(expected: Path) {
-    isNotNull
-
-    compareFileContent(actual, expected)
-  }
-
-  fun toMatchSnapshot(snapshotFile: Path) {
-    isNotNull
-
-    compareFileContent(actual, snapshotFile)
-  }
-}

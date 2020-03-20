@@ -1,22 +1,8 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.source.resolve.reference;
 
 import com.intellij.openapi.project.IndexNotReadyException;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.patterns.ElementPattern;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiReferenceProvider;
@@ -40,7 +26,7 @@ public abstract class NamedObjectProviderBinding implements ProviderBinding {
   private final Map<String, List<ProviderInfo<ElementPattern>>> myNamesToProvidersMap = new THashMap<>(5);
   private final Map<String, List<ProviderInfo<ElementPattern>>> myNamesToProvidersMapInsensitive = new THashMap<>(5);
 
-  public void registerProvider(@NonNls @NotNull String[] names,
+  public void registerProvider(@NonNls String @NotNull [] names,
                                @NotNull ElementPattern filter,
                                boolean caseSensitive,
                                @NotNull PsiReferenceProvider provider,
@@ -48,7 +34,7 @@ public abstract class NamedObjectProviderBinding implements ProviderBinding {
     final Map<String, List<ProviderInfo<ElementPattern>>> map = caseSensitive ? myNamesToProvidersMap : myNamesToProvidersMapInsensitive;
 
     for (final String attributeName : names) {
-      String key = caseSensitive ? attributeName : attributeName.toLowerCase();
+      String key = caseSensitive ? attributeName : StringUtil.toLowerCase(attributeName);
       List<ProviderInfo<ElementPattern>> psiReferenceProviders = map.get(key);
 
       if (psiReferenceProviders == null) {
@@ -66,7 +52,7 @@ public abstract class NamedObjectProviderBinding implements ProviderBinding {
     String name = getName(position);
     if (name != null) {
       addMatchingProviders(position, myNamesToProvidersMap.get(name), list, hints);
-      addMatchingProviders(position, myNamesToProvidersMapInsensitive.get(name.toLowerCase()), list, hints);
+      addMatchingProviders(position, myNamesToProvidersMapInsensitive.get(StringUtil.toLowerCase(name)), list, hints);
     }
   }
 
@@ -88,6 +74,10 @@ public abstract class NamedObjectProviderBinding implements ProviderBinding {
     }
   }
 
+  boolean isEmpty() {
+    return myNamesToProvidersMap.isEmpty() && myNamesToProvidersMapInsensitive.isEmpty();
+  }
+
   @Nullable
   protected abstract String getName(@NotNull PsiElement position);
 
@@ -105,9 +95,6 @@ public abstract class NamedObjectProviderBinding implements ProviderBinding {
       }
 
       final ProcessingContext context = new ProcessingContext();
-      if (hints != PsiReferenceService.Hints.NO_HINTS) {
-        context.put(PsiReferenceService.HINTS, hints);
-      }
       boolean suitable = false;
       try {
         suitable = info.processingContext.accepts(position, context);

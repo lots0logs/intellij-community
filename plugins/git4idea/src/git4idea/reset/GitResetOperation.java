@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.reset;
 
 import com.intellij.dvcs.DvcsUtil;
@@ -27,27 +13,23 @@ import com.intellij.openapi.vcs.VcsNotifier;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.vcs.log.Hash;
 import git4idea.GitUtil;
 import git4idea.branch.GitBranchUiHandlerImpl;
 import git4idea.branch.GitSmartOperationDialog;
-import git4idea.changes.GitChangeUtils;
 import git4idea.commands.Git;
 import git4idea.commands.GitCommandResult;
 import git4idea.commands.GitLocalChangesWouldBeOverwrittenDetector;
 import git4idea.config.GitVcsSettings;
+import git4idea.config.GitSaveChangesPolicy;
 import git4idea.repo.GitRepository;
 import git4idea.util.GitPreservingProcess;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-import static git4idea.GitUtil.updateAndRefreshVfs;
+import static git4idea.GitUtil.*;
 import static git4idea.commands.GitLocalChangesWouldBeOverwrittenDetector.Operation.RESET;
 
 public class GitResetOperation {
@@ -76,7 +58,7 @@ public class GitResetOperation {
 
   public void execute() {
     saveAllDocuments();
-    Map<GitRepository, GitCommandResult> results = ContainerUtil.newHashMap();
+    Map<GitRepository, GitCommandResult> results = new HashMap<>();
     try (AccessToken ignore = DvcsUtil.workingTreeChangeStarted(myProject, "Git Reset")) {
       for (Map.Entry<GitRepository, Hash> entry : myCommits.entrySet()) {
         GitRepository repository = entry.getKey();
@@ -84,7 +66,7 @@ public class GitResetOperation {
         String target = entry.getValue().asString();
         GitLocalChangesWouldBeOverwrittenDetector detector = new GitLocalChangesWouldBeOverwrittenDetector(root, RESET);
 
-        Collection<Change> changes = GitChangeUtils.getDiffWithWorkingTree(repository, target, false);
+        Hash startHash = getHead(repository);
 
         GitCommandResult result = myGit.reset(repository, myMode, target, detector);
         if (!result.success() && detector.wasMessageDetected()) {
@@ -95,7 +77,7 @@ public class GitResetOperation {
         }
         results.put(repository, result);
 
-        updateAndRefreshVfs(repository, changes);
+        updateAndRefreshChangedVfs(repository, startHash);
         VcsDirtyScopeManager.getInstance(myProject).dirDirtyRecursively(root);
       }
     }
@@ -110,8 +92,9 @@ public class GitResetOperation {
                                                                                  "reset", "&Hard Reset");
     if (choice == GitSmartOperationDialog.Choice.SMART) {
       final Ref<GitCommandResult> result = Ref.create();
+      GitSaveChangesPolicy saveMethod = GitVcsSettings.getInstance(myProject).getSaveChangesPolicy();
       new GitPreservingProcess(myProject, myGit, Collections.singleton(repository.getRoot()), "reset", target,
-                               GitVcsSettings.UpdateChangesPolicy.STASH, myIndicator,
+                               saveMethod, myIndicator,
                                () -> result.set(myGit.reset(repository, myMode, target))).execute();
       return result.get();
     }
@@ -122,8 +105,8 @@ public class GitResetOperation {
   }
 
   private void notifyResult(@NotNull Map<GitRepository, GitCommandResult> results) {
-    Map<GitRepository, GitCommandResult> successes = ContainerUtil.newHashMap();
-    Map<GitRepository, GitCommandResult> errors = ContainerUtil.newHashMap();
+    Map<GitRepository, GitCommandResult> successes = new HashMap<>();
+    Map<GitRepository, GitCommandResult> errors = new HashMap<>();
     for (Map.Entry<GitRepository, GitCommandResult> entry : results.entrySet()) {
       GitCommandResult result = entry.getValue();
       GitRepository repository = entry.getKey();
@@ -168,7 +151,7 @@ public class GitResetOperation {
   }
 
   @NotNull
-  private static String joinRepos(@NotNull Collection<GitRepository> repositories) {
+  private static String joinRepos(@NotNull Collection<? extends GitRepository> repositories) {
     return StringUtil.join(DvcsUtil.sortRepositories(repositories), ", ");
   }
 

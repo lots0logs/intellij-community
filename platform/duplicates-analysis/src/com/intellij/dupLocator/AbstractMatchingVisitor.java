@@ -29,13 +29,13 @@ import org.jetbrains.annotations.Nullable;
  */
 public abstract class AbstractMatchingVisitor {
 
-  public abstract boolean matchSequentially(NodeIterator nodes, NodeIterator nodes2);
+  public abstract boolean matchSequentially(@NotNull NodeIterator nodes, @NotNull NodeIterator nodes2);
 
-  public abstract boolean match(PsiElement element1, PsiElement element2);
+  public abstract boolean match(@Nullable PsiElement element1, @Nullable PsiElement element2);
 
-  protected abstract boolean doMatchInAnyOrder(NodeIterator elements, NodeIterator elements2);
+  protected abstract boolean doMatchInAnyOrder(@NotNull NodeIterator elements, @NotNull NodeIterator elements2);
 
-  public boolean matchSequentially(@NotNull PsiElement[] elements1, @NotNull PsiElement[] element2) {
+  public boolean matchSequentially(PsiElement @NotNull [] elements1, PsiElement @NotNull [] element2) {
     return matchSequentially(new FilteringNodeIterator(new ArrayBackedNodeIterator(elements1), getNodeFilter()),
                              new FilteringNodeIterator(new ArrayBackedNodeIterator(element2), getNodeFilter()));
   }
@@ -49,7 +49,7 @@ public abstract class AbstractMatchingVisitor {
            match(element1, element2);
   }
 
-  public boolean matchSons(final PsiElement el1, final PsiElement el2) {
+  public boolean matchSons(@Nullable PsiElement el1, @Nullable PsiElement el2) {
     if (el1 == null || el2 == null) return el1 == el2;
     return matchSequentially(el1.getFirstChild(), el2.getFirstChild());
   }
@@ -85,19 +85,14 @@ public abstract class AbstractMatchingVisitor {
                            new FilteringNodeIterator(new SiblingNodeIterator(e2), getNodeFilter()));
   }
 
-  public boolean matchOptionally(@NotNull PsiElement[] elements1, @NotNull PsiElement[] elements2) {
+  public boolean matchOptionally(PsiElement @NotNull [] elements1, PsiElement @NotNull [] elements2) {
     return (elements1.length == 0 && isLeftLooseMatching()) ||
            (elements2.length == 0 && isRightLooseMatching()) ||
            matchSequentially(elements1, elements2);
   }
 
-  public final boolean matchInAnyOrder(final PsiElement[] elements, final PsiElement[] elements2) {
-    if (elements == elements2) return true;
-
-    return matchInAnyOrder(
-      new ArrayBackedNodeIterator(elements),
-      new ArrayBackedNodeIterator(elements2)
-    );
+  public final boolean matchInAnyOrder(PsiElement @NotNull [] elements, PsiElement @NotNull [] elements2) {
+    return elements == elements2 || matchInAnyOrder(new ArrayBackedNodeIterator(elements), new ArrayBackedNodeIterator(elements2));
   }
 
   public boolean isLeftLooseMatching() {
@@ -121,7 +116,7 @@ public abstract class AbstractMatchingVisitor {
                              new FilteringNodeIterator(new SiblingNodeIterator(el2), getNodeFilter()));
   }
 
-  public final boolean matchInAnyOrder(final NodeIterator elements, final NodeIterator elements2) {
+  public final boolean matchInAnyOrder(@NotNull NodeIterator elements, @NotNull NodeIterator elements2) {
     if ((!elements.hasNext() && isLeftLooseMatching()) ||
         (!elements2.hasNext() && isRightLooseMatching()) ||
         (!elements.hasNext() && !elements2.hasNext())

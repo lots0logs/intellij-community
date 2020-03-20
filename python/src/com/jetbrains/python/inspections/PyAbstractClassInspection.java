@@ -24,12 +24,6 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 
 public class PyAbstractClassInspection extends PyInspection {
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.abstract.class");
-  }
 
   @NotNull
   @Override
@@ -92,7 +86,7 @@ public class PyAbstractClassInspection extends PyInspection {
       @NotNull
       @Override
       public String getFamilyName() {
-        return "Add '" + PyNames.ABC + "' to superclasses";
+        return PyBundle.message("INSP.abstract.class.add.to.superclasses", PyNames.ABC);
       }
 
       @Override
@@ -113,7 +107,7 @@ public class PyAbstractClassInspection extends PyInspection {
       @NotNull
       @Override
       public String getFamilyName() {
-        return "Set '" + PyNames.ABC_META + "' as metaclass";
+        return PyBundle.message("INSP.abstract.class.set.as.metaclass", PyNames.ABC_META);
       }
 
       @Override

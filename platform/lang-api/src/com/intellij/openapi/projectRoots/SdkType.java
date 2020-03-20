@@ -4,17 +4,22 @@ package com.intellij.openapi.projectRoots;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectBundle;
 import com.intellij.openapi.roots.OrderRootType;
+import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
 import com.intellij.util.IconUtil;
+import com.intellij.util.containers.ContainerUtil;
 import org.jdom.Element;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.io.File;
 import java.util.*;
 
 public abstract class SdkType implements SdkTypeId {
@@ -50,6 +55,16 @@ public abstract class SdkType implements SdkTypeId {
   }
 
   /**
+   * This method is used to decide if a given {@link VirtualFile} has something in common
+   * with this {@link SdkType}.
+   *
+   * For example, it can be used by the IDE to decide showing SDK related editor notifications or quick fixes
+   */
+  public boolean isRelevantForFile(@NotNull Project project, @NotNull VirtualFile file) {
+    return true;
+  }
+
+  /**
    * If a path selected in the file chooser is not a valid SDK home path, returns an adjusted version of the path that is again
    * checked for validity.
    *
@@ -62,6 +77,15 @@ public abstract class SdkType implements SdkTypeId {
   }
 
   public abstract boolean isValidSdkHome(String path);
+
+  /**
+   * Returns the message to be shown to the user when {@link #isValidSdkHome(String)} returned false for the path.
+   */
+  public String getInvalidHomeMessage(String path) {
+    return new File(path).isDirectory()
+      ? ProjectBundle.message("sdk.configure.home.invalid.error", getPresentableName())
+      : ProjectBundle.message("sdk.configure.home.file.invalid.error", getPresentableName());
+  }
 
   @Override
   @Nullable
@@ -117,6 +141,7 @@ public abstract class SdkType implements SdkTypeId {
   }
 
   @NotNull
+  @Nls(capitalization = Nls.Capitalization.Title)
   public abstract String getPresentableName();
 
   public Icon getIcon() {
@@ -159,16 +184,14 @@ public abstract class SdkType implements SdkTypeId {
   public FileChooserDescriptor getHomeChooserDescriptor() {
     FileChooserDescriptor descriptor = new FileChooserDescriptor(false, true, false, false, false, false) {
       @Override
-      public void validateSelectedFiles(@NotNull VirtualFile[] files) throws Exception {
+      public void validateSelectedFiles(VirtualFile @NotNull [] files) throws Exception {
         if (files.length != 0) {
           String selectedPath = files[0].getPath();
           boolean valid = isValidSdkHome(selectedPath);
           if (!valid) {
             valid = isValidSdkHome(adjustSelectedSdkHome(selectedPath));
             if (!valid) {
-              String message = files[0].isDirectory()
-                               ? ProjectBundle.message("sdk.configure.home.invalid.error", getPresentableName())
-                               : ProjectBundle.message("sdk.configure.home.file.invalid.error", getPresentableName());
+              String message = getInvalidHomeMessage(selectedPath);
               throw new Exception(message);
             }
           }
@@ -194,13 +217,23 @@ public abstract class SdkType implements SdkTypeId {
     return null;
   }
 
-  @NotNull
-  public static SdkType[] getAllTypes() {
-    List<SdkType> allTypes = new ArrayList<>();
+  public static SdkType @NotNull [] getAllTypes() {
     //noinspection deprecation
-    Collections.addAll(allTypes, ApplicationManager.getApplication().getComponents(SdkType.class));
-    allTypes.addAll(EP_NAME.getExtensionList());
-    return allTypes.toArray(new SdkType[0]);
+    SdkType[] components = ApplicationManager.getApplication().getComponents(SdkType.class);
+    List<SdkType> list1 = components.length == 0 ? Collections.emptyList() : Arrays.asList(components);
+    return ContainerUtil.concat(list1, EP_NAME.getExtensionList()).toArray(new SdkType[0]);
+  }
+
+  @Nullable
+  public static SdkType findByName(@Nullable String sdkName) {
+    if (sdkName == null) return null;
+
+    for (SdkType sdkType : getAllTypes()) {
+      if (Comparing.strEqual(sdkType.getName(), sdkName)) {
+        return sdkType;
+      }
+    }
+    return null;
   }
 
   @NotNull
@@ -244,8 +277,10 @@ public abstract class SdkType implements SdkTypeId {
    * @param parentComponent    the parent component for showing the dialog.
    * @param selectedSdk        current selected sdk in parentComponent
    * @param sdkCreatedCallback the callback to which the created SDK is passed.
-   * @implSpec method's implementations should not add sdk to the jdkTable neither  invoke {@link SdkType#setupSdkPaths}. Only create and
+   * @implSpec method's implementations should not add sdk to the jdkTable neither invoke {@link SdkType#setupSdkPaths}. Only create and
    * and pass to the callback. The rest is done by {@link com.intellij.openapi.roots.ui.configuration.projectRoot.ProjectSdksModel#setupSdk(Sdk, Consumer)}
+   *
+   * @see #supportsCustomCreateUI()
    */
   public void showCustomCreateUI(@NotNull SdkModel sdkModel,
                                  @NotNull JComponent parentComponent,
@@ -275,5 +310,13 @@ public abstract class SdkType implements SdkTypeId {
   @NotNull
   public String sdkPath(@NotNull VirtualFile homePath) {
     return homePath.getPath();
+  }
+
+  /**
+   * If this method returns false, this SDK type will not be shown in the SDK type chooser popup when the user
+   * creates a new SDK.
+   */
+  public boolean allowCreationByUser() {
+    return true;
   }
 }

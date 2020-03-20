@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.i18n;
 
 import com.intellij.codeInsight.AnnotationUtil;
@@ -22,13 +20,14 @@ import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.uast.*;
+import org.jetbrains.uast.util.UastExpressionUtils;
 
+import java.text.ChoiceFormat;
+import java.text.Format;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.stream.IntStream;
 
-/**
- * @author max
- */
 public class JavaI18nUtil extends I18nUtil {
   public static final PropertyCreationHandler DEFAULT_PROPERTY_CREATION_HANDLER =
     (project, propertiesFiles, key, value, parameters) -> createProperty(project, propertiesFiles, key, value, true);
@@ -61,6 +60,9 @@ public class JavaI18nUtil extends I18nUtil {
   }
 
   public static boolean mustBePropertyKey(@NotNull UExpression expression, @Nullable Ref<? super UExpression> resourceBundleRef) {
+    while (expression.getUastParent() instanceof UParenthesizedExpression) {
+      expression = (UParenthesizedExpression)expression.getUastParent();
+    }
     final UElement parent = expression.getUastParent();
     if (parent instanceof UVariable) {
       UAnnotation annotation = ((UVariable)parent).findAnnotation(AnnotationUtil.PROPERTY_KEY);
@@ -78,7 +80,15 @@ public class JavaI18nUtil extends I18nUtil {
     if (parameter == null) return false;
     int paramIndex = ArrayUtil.indexOf(psiMethod.getParameterList().getParameters(), parameter);
     if (paramIndex == -1) return false;
-    return isMethodParameterAnnotatedWith(psiMethod, paramIndex, null, AnnotationUtil.PROPERTY_KEY, null, null);
+    @Nullable Ref<PsiAnnotationMemberValue> ref = resourceBundleRef != null ? new Ref<>() : null;
+    boolean isAnnotated = isMethodParameterAnnotatedWith(psiMethod, paramIndex, null, AnnotationUtil.PROPERTY_KEY, ref, null);
+    if (ref != null) {
+      PsiAnnotationMemberValue memberValue = ref.get();
+      if (memberValue != null) {
+        resourceBundleRef.set(UastContextKt.toUElementOfExpectedTypes(memberValue, UExpression.class));
+      }
+    }
+    return isAnnotated;
   }
 
   static boolean isPassedToAnnotatedParam(@NotNull PsiExpression expression,
@@ -105,6 +115,43 @@ public class JavaI18nUtil extends I18nUtil {
     return false;
   }
 
+  static boolean isPassedToAnnotatedParam(@NotNull UExpression expression,
+                                          String annFqn,
+                                          @Nullable final Set<? super PsiModifierListOwner> nonNlsTargets) {
+    UElement parent = UastUtils.skipParenthesizedExprUp(expression.getUastParent());
+    if (parent instanceof UPolyadicExpression) {
+      parent = UastUtils.skipParenthesizedExprUp(parent.getUastParent());
+    }
+    UCallExpression callExpression = UastUtils.getUCallExpression(parent);
+    if (callExpression == null) return false;
+
+    List<UExpression> arguments = callExpression.getValueArguments();
+    OptionalInt idx = IntStream.range(0, arguments.size())
+      .filter(i -> UastUtils.isUastChildOf(expression, arguments.get(i), false))
+      .findFirst();
+
+    if (!idx.isPresent()) return false;
+
+    PsiMethod method = callExpression.resolve();
+    if (method == null) return false;
+    if (isMethodParameterAnnotatedWith(method, idx.getAsInt(), null, annFqn, null, nonNlsTargets)) {
+      return true;
+    }
+    PsiParameter parameter = method.getParameterList().getParameter(idx.getAsInt());
+    if (parameter != null) {
+      PsiType parameterType = parameter.getType();
+      PsiElement psi = callExpression.getSourcePsi();
+      if (psi instanceof PsiMethodCallExpression) {
+        PsiSubstitutor substitutor = ((PsiMethodCallExpression)psi).getMethodExpression().advancedResolve(false).getSubstitutor();
+        parameterType = substitutor.substitute(parameterType);
+      }
+      if (AnnotationUtil.findAnnotationInTypeHierarchy(parameterType, Collections.singleton(annFqn)) != null) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @NotNull
   static PsiExpression getTopLevelExpression(@NotNull PsiExpression expression) {
     while (expression.getParent() instanceof PsiExpression) {
@@ -115,6 +162,23 @@ public class JavaI18nUtil extends I18nUtil {
       }
       expression = parent;
       if (expression instanceof PsiAssignmentExpression) break;
+    }
+    return expression;
+  }
+
+  @NotNull
+  static UExpression getTopLevelExpression(@NotNull UExpression expression) {
+    while (expression.getUastParent() instanceof UExpression) {
+      final UExpression parent = (UExpression)expression.getUastParent();
+      if (parent instanceof UBlockExpression || parent instanceof UReturnExpression) {
+        break;
+      }
+      if (parent instanceof UIfExpression &&
+          UastUtils.isPsiAncestor(((UIfExpression)parent).getCondition(), expression)) {
+        break;
+      }
+      expression = parent;
+      if (UastExpressionUtils.isAssignment(expression)) break;
     }
     return expression;
   }
@@ -164,6 +228,34 @@ public class JavaI18nUtil extends I18nUtil {
       if (isMethodParameterAnnotatedWith(superMethod, idx, processed, annFqn, resourceBundleRef, null)) return true;
     }
 
+    if (annFqn.equals(AnnotationUtil.NON_NLS) || annFqn.equals(AnnotationUtil.NLS)) {
+      String oppositeFQN = annFqn.equals(AnnotationUtil.NON_NLS) ? AnnotationUtil.NLS
+                                                                 : AnnotationUtil.NON_NLS;
+      if (AnnotationUtil.findAnnotation(param, oppositeFQN) != null) {
+        return false;
+      }
+
+      PsiClass containingClass = method.getContainingClass();
+      while (containingClass != null) {
+        PsiAnnotation classAnnotation = AnnotationUtil.findAnnotation(containingClass, AnnotationUtil.NON_NLS, AnnotationUtil.NLS);
+        if (classAnnotation != null) {
+          return classAnnotation.hasQualifiedName(annFqn);
+        }
+        containingClass = containingClass.getContainingClass();
+      }
+
+      PsiFile containingFile = method.getContainingFile();
+      if (containingFile instanceof PsiClassOwner) {
+        String packageName = ((PsiClassOwner)containingFile).getPackageName();
+        PsiPackage aPackage = JavaPsiFacade.getInstance(method.getProject()).findPackage(packageName);
+        if (aPackage != null) {
+          final PsiAnnotation packageAnnotation = AnnotationUtil.findAnnotation(aPackage, AnnotationUtil.NON_NLS, AnnotationUtil.NLS);
+          if (packageAnnotation != null) {
+            return packageAnnotation.hasQualifiedName(annFqn);
+          }
+        }
+      }
+    }
     return false;
   }
 
@@ -314,11 +406,24 @@ public class JavaI18nUtil extends I18nUtil {
    */
   public static int getPropertyValuePlaceholdersCount(@NotNull final String propertyValue) {
     try {
-      return new MessageFormat(propertyValue).getFormatsByArgumentIndex().length;
+      return countFormatParameters(new MessageFormat(propertyValue));
     }
     catch (final IllegalArgumentException e) {
       return 0;
     }
+  }
+
+  private static int countFormatParameters(MessageFormat mf) {
+    Format[] formats = mf.getFormatsByArgumentIndex();
+    int maxLength = formats.length;
+    for (Format format : formats) {
+      if (format instanceof ChoiceFormat) {
+        for (Object o : ((ChoiceFormat) format).getFormats()) {
+          maxLength = Math.max(maxLength, countFormatParameters(new MessageFormat((String) o)));
+        }
+      }
+    }
+    return maxLength;
   }
 
   /**

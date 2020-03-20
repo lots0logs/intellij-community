@@ -37,8 +37,7 @@ import java.util.ArrayList;
 
 public class RncFoldingBuilder implements FoldingBuilder {
   @Override
-  @NotNull
-  public FoldingDescriptor[] buildFoldRegions(@NotNull ASTNode node, @NotNull Document document) {
+  public FoldingDescriptor @NotNull [] buildFoldRegions(@NotNull ASTNode node, @NotNull Document document) {
 
     final ArrayList<FoldingDescriptor> regions = new ArrayList<>();
     process(node, document, regions);
@@ -81,7 +80,7 @@ public class RncFoldingBuilder implements FoldingBuilder {
     return isCommentLike(node.getElementType()) && CodeFoldingSettings.getInstance().COLLAPSE_DOC_COMMENTS;
   }
 
-  private static void process(@Nullable ASTNode node, Document document, ArrayList<FoldingDescriptor> regions) {
+  private static void process(@Nullable ASTNode node, Document document, ArrayList<? super FoldingDescriptor> regions) {
     if (node == null) {
       return;
     }
@@ -115,7 +114,7 @@ public class RncFoldingBuilder implements FoldingBuilder {
   }
 
   @Nullable
-  private static ASTNode checkNodeAndSiblings(@Nullable ASTNode node, TokenSet tokens, ArrayList<FoldingDescriptor> regions, Document document) {
+  private static ASTNode checkNodeAndSiblings(@Nullable ASTNode node, TokenSet tokens, ArrayList<? super FoldingDescriptor> regions, Document document) {
     if (node != null && tokens.contains(node.getElementType())) {
       final ASTNode start = node;
       ASTNode end = start;

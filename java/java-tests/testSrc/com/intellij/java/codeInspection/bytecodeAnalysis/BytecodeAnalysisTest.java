@@ -18,7 +18,7 @@ import com.intellij.psi.util.ClassUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.PsiTestUtil;
 import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.org.objectweb.asm.ClassReader;
@@ -30,14 +30,13 @@ import org.jetbrains.org.objectweb.asm.tree.analysis.AnalyzerException;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * @author lambdamix
  */
-public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
+public class BytecodeAnalysisTest extends LightJavaCodeInsightFixtureTestCase {
   private static final String PACKAGE_NAME = "bytecodeAnalysis";
   private static final String EXPECT_NOT_NULL = PACKAGE_NAME + ".ExpectNotNull";
   private static final String EXPECT_CONTRACT = PACKAGE_NAME + ".ExpectContract";
@@ -65,6 +64,7 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
     checkAnnotations("data.TestNonStable");
     checkAnnotations("data.TestConflict");
     checkAnnotations("data.TestEnum");
+    checkAnnotations("data.TestField");
   }
 
   public void testJava9Inference() {
@@ -87,7 +87,7 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
   public void testLeakingParametersAnalysis() throws IOException {
     Map<String, boolean[]> map = new HashMap<>();
 
-    GlobalSearchScope scope = GlobalSearchScope.moduleWithLibrariesScope(myModule);
+    GlobalSearchScope scope = GlobalSearchScope.moduleWithLibrariesScope(getModule());
     PsiClass psiClass = JavaPsiFacade.getInstance(getProject()).findClass(PACKAGE_NAME + ".data.TestLeakingParametersData", scope);
     assertNotNull(psiClass);
     try (InputStream stream = getVirtualFile(psiClass).getInputStream()) {
@@ -124,7 +124,7 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
   }
 
   private void checkAnnotations(String className) {
-    GlobalSearchScope scope = GlobalSearchScope.moduleWithLibrariesScope(myModule);
+    GlobalSearchScope scope = GlobalSearchScope.moduleWithLibrariesScope(getModule());
     PsiClass psiClass = JavaPsiFacade.getInstance(getProject()).findClass(PACKAGE_NAME + '.' + className, scope);
     assertNotNull(psiClass);
     ProjectBytecodeAnalysis service = ProjectBytecodeAnalysis.getInstance(getProject());
@@ -149,10 +149,15 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
       String inferredText = contractText(actualContract);
       assertEquals(displayName(method) + ":" + expectedText + " <> " + inferredText, expectedText, inferredText);
     }
+    for (PsiField field : psiClass.getFields()) {
+      boolean expectNotNull = AnnotationUtil.isAnnotated(field, EXPECT_NOT_NULL, 0);
+      PsiAnnotation actualAnnotation = service.findInferredAnnotation(field, AnnotationUtil.NOT_NULL);
+      assertNullity(displayName(field), expectNotNull, actualAnnotation);
+    }
   }
 
-  private static String displayName(PsiMethod method) {
-    return method.getContainingClass().getQualifiedName() + "." + method.getName();
+  private static String displayName(PsiMember member) {
+    return member.getContainingClass().getQualifiedName() + "." + member.getName();
   }
 
   private static String contractText(PsiAnnotation contract) {
@@ -169,10 +174,9 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
   }
 
   private void checkCompoundIds(String className) throws IOException {
-    GlobalSearchScope scope = GlobalSearchScope.moduleWithLibrariesScope(myModule);
+    GlobalSearchScope scope = GlobalSearchScope.moduleWithLibrariesScope(getModule());
     PsiClass psiClass = JavaPsiFacade.getInstance(getProject()).findClass(PACKAGE_NAME + '.' + className, scope);
     assertNotNull(psiClass);
-    MessageDigest digest = BytecodeAnalysisConverter.getMessageDigest();
 
     try (InputStream stream = getVirtualFile(psiClass).getInputStream()) {
       ClassReader reader = new ClassReader(stream);
@@ -185,7 +189,7 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
             assertEquals("Must be single method: " + name, 1, psiMethods.length);
             PsiMethod psiMethod = psiMethods[0];
             boolean noKey = psiMethod.hasAnnotation(EXPECT_NO_PSI_KEY);
-            checkCompoundId(method, psiMethod, noKey, digest);
+            checkCompoundId(method, psiMethod, noKey);
           }
           return null;
         }
@@ -193,7 +197,7 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
     }
   }
 
-  private static void checkCompoundId(Member method, PsiMethod psiMethod, boolean noKey, MessageDigest digest) {
+  private static void checkCompoundId(Member method, PsiMethod psiMethod, boolean noKey) {
     EKey psiKey = BytecodeAnalysisConverter.psiKey(psiMethod, Direction.Out);
     if (noKey) {
       assertNull(psiKey);
@@ -202,7 +206,7 @@ public class BytecodeAnalysisTest extends LightCodeInsightFixtureTestCase {
       assertNotNull(psiKey);
       EKey asmKey = new EKey(method, Direction.Out, true);
       assertEquals(asmKey, psiKey);
-      assertEquals(asmKey.hashed(digest), psiKey.hashed(digest));
+      assertEquals(asmKey.hashed(), psiKey.hashed());
     }
   }
 

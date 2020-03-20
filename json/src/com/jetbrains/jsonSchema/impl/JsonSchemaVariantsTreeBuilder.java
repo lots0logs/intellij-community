@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.impl;
 
 import com.intellij.json.pointer.JsonPointerPosition;
@@ -170,16 +156,29 @@ public class JsonSchemaVariantsTreeBuilder {
     }
 
     @Nullable
-    protected Operation createExpandOperation(@NotNull final JsonSchemaObject schema,
+    protected Operation createExpandOperation(@NotNull JsonSchemaObject schema,
                                               @NotNull JsonSchemaService service) {
-      if (conflictingSchema(schema)) {
-        final Operation operation = new AnyOfOperation(schema, service);
-        operation.myState = SchemaResolveState.conflict;
-        return operation;
-      }
+      Operation forConflict = getOperationForConflict(schema, service);
+      if (forConflict != null) return forConflict;
       if (schema.getAnyOf() != null) return new AnyOfOperation(schema, service);
       if (schema.getOneOf() != null) return new OneOfOperation(schema, service);
       if (schema.getAllOf() != null) return new AllOfOperation(schema, service);
+      return null;
+    }
+
+    @Nullable
+    private static Operation getOperationForConflict(@NotNull JsonSchemaObject schema,
+                                                     @NotNull JsonSchemaService service) {
+      // in case of several incompatible operations, choose the most permissive one
+      List<JsonSchemaObject> anyOf = schema.getAnyOf();
+      List<JsonSchemaObject> oneOf = schema.getOneOf();
+      List<JsonSchemaObject> allOf = schema.getAllOf();
+      if (anyOf != null && (oneOf != null || allOf != null)) {
+        return new AnyOfOperation(schema, service) {{myState = SchemaResolveState.conflict;}};
+      }
+      else if (oneOf != null && allOf != null) {
+        return new OneOfOperation(schema, service) {{myState = SchemaResolveState.conflict;}};
+      }
       return null;
     }
 
@@ -262,11 +261,9 @@ public class JsonSchemaVariantsTreeBuilder {
         final List<JsonSchemaObject> mergedAny = andGroups(op.myAnyOfGroup, myAnyOfGroup);
 
         final List<List<JsonSchemaObject>> mergedExclusive =
-          ContainerUtil.newArrayListWithCapacity(
-            op.myAnyOfGroup.size() * maxSize(myOneOfGroup) +
-            myAnyOfGroup.size() * maxSize(op.myOneOfGroup) +
-            maxSize(myOneOfGroup) * maxSize(op.myOneOfGroup)
-          );
+          new ArrayList<>(op.myAnyOfGroup.size() * maxSize(myOneOfGroup) +
+                          myAnyOfGroup.size() * maxSize(op.myOneOfGroup) +
+                          maxSize(myOneOfGroup) * maxSize(op.myOneOfGroup));
 
         for (List<JsonSchemaObject> objects : myOneOfGroup) {
           mergedExclusive.add(andGroups(op.myAnyOfGroup, objects));
@@ -290,7 +287,7 @@ public class JsonSchemaVariantsTreeBuilder {
 
   private static List<JsonSchemaObject> andGroups(@NotNull List<JsonSchemaObject> g1,
                                                   @NotNull List<JsonSchemaObject> g2) {
-    List<JsonSchemaObject> result = ContainerUtil.newArrayListWithCapacity(g1.size() * g2.size());
+    List<JsonSchemaObject> result = new ArrayList<>(g1.size() * g2.size());
     for (JsonSchemaObject s: g1) {
       result.addAll(andGroup(s, g2));
     }
@@ -299,7 +296,7 @@ public class JsonSchemaVariantsTreeBuilder {
 
   // here is important, which pointer gets the result: lets make them all different, otherwise two schemas of branches of oneOf would be equal
   private static List<JsonSchemaObject> andGroup(@NotNull JsonSchemaObject object, @NotNull List<JsonSchemaObject> group) {
-    List<JsonSchemaObject> list = ContainerUtil.newArrayListWithCapacity(group.size());
+    List<JsonSchemaObject> list = new ArrayList<>(group.size());
     for (JsonSchemaObject s: group) {
       JsonSchemaObject schemaObject = JsonSchemaObject.merge(object, s, s);
       if (schemaObject.isValidByExclusion()) {
@@ -363,14 +360,6 @@ public class JsonSchemaVariantsTreeBuilder {
         }
       }
     }
-  }
-
-  private static boolean conflictingSchema(JsonSchemaObject schema) {
-    int cnt = 0;
-    if (schema.getAllOf() != null) ++cnt;
-    if (schema.getAnyOf() != null) ++cnt;
-    if (schema.getOneOf() != null) ++cnt;
-    return cnt > 1;
   }
 
   private static boolean interestingSchema(@NotNull JsonSchemaObject schema) {

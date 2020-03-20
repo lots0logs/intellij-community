@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.run;
 
 import com.google.common.collect.Lists;
@@ -16,7 +16,9 @@ import com.intellij.execution.process.ProcessTerminatedListener;
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.ide.AppLifecycleListener;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.ui.Messages;
@@ -30,12 +32,12 @@ import com.jetbrains.python.HelperPackage;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.buildout.BuildoutFacet;
 import com.jetbrains.python.console.PydevConsoleRunner;
-import com.jetbrains.python.sdk.PySdkUtil;
 import com.jetbrains.python.sdk.PythonEnvUtil;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -65,7 +67,7 @@ public class PythonTask {
   private Runnable myAfterCompletion;
 
   public PythonTask(Module module, String runTabTitle) throws ExecutionException {
-    this(module, runTabTitle, PythonSdkType.findPythonSdk(module));
+    this(module, runTabTitle, PythonSdkUtil.findPythonSdk(module));
   }
 
   @NotNull
@@ -129,7 +131,7 @@ public class PythonTask {
     PydevConsoleRunner.setCorrectStdOutEncoding(commandLine, myModule.getProject()); // To support UTF-8 output
 
     ProcessHandler handler;
-    if (PySdkUtil.isRemote(mySdk)) {
+    if (PythonSdkUtil.isRemote(mySdk)) {
       assert mySdk != null;
       handler = new PyRemoteProcessStarter().startRemoteProcess(mySdk, commandLine, myModule.getProject(), null);
     }
@@ -145,6 +147,7 @@ public class PythonTask {
 
   /**
    * Runs command using env vars from facet
+   *
    * @param consoleView console view to be used for command or null to create new
    * @throws ExecutionException failed to execute command
    */
@@ -169,7 +172,7 @@ public class PythonTask {
     assert scriptParams != null;
 
     Map<String, String> env = cmd.getEnvironment();
-    if (!SystemInfo.isWindows && !PySdkUtil.isRemote(mySdk)) {
+    if (!SystemInfo.isWindows && !PythonSdkUtil.isRemote(mySdk)) {
       cmd.setExePath("bash");
       ParamsGroup bashParams = cmd.getParametersList().addParamsGroupAt(0, "Bash");
       bashParams.addParameter("-cl");
@@ -281,23 +284,37 @@ public class PythonTask {
 
   /**
    * Runs task with out console
+   *
    * @return stdout
    * @throws ExecutionException in case of error. Consider using {@link com.intellij.execution.util.ExecutionErrorDialog}
    */
   @NotNull
   public final String runNoConsole() throws ExecutionException {
-
-    final ProcessHandler process = createProcess(new HashMap<>());
-    final OutputListener listener = new OutputListener();
-    process.addProcessListener(listener);
-    process.startNotify();
-    process.waitFor(TIMEOUT_TO_WAIT_FOR_TASK);
-    final Output output = listener.getOutput();
+    final ProgressManager manager = ProgressManager.getInstance();
+    final Output output;
+    if (SwingUtilities.isEventDispatchThread()) {
+      assert !ApplicationManager.getApplication().isWriteAccessAllowed(): "This method can't run under write action";
+      output = manager.runProcessWithProgressSynchronously(() -> getOutputInternal(), myRunTabTitle, false, myModule.getProject());
+    }
+    else {
+      output = getOutputInternal();
+    }
     final int exitCode = output.getExitCode();
     if (exitCode == 0) {
       return output.getStdout();
     }
     throw new ExecutionException(String.format("Error on python side. " +
                                                "Exit code: %s, err: %s out: %s", exitCode, output.getStderr(), output.getStdout()));
+  }
+
+  @NotNull
+  private Output getOutputInternal() throws ExecutionException {
+    assert !SwingUtilities.isEventDispatchThread();
+    final ProcessHandler process = createProcess(new HashMap<>());
+    final OutputListener listener = new OutputListener();
+    process.addProcessListener(listener);
+    process.startNotify();
+    process.waitFor(TIMEOUT_TO_WAIT_FOR_TASK);
+    return listener.getOutput();
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.passwordSafe.impl.providers.memory;
 
 import com.intellij.credentialStore.CredentialAttributes;
@@ -9,12 +9,12 @@ import com.intellij.ide.passwordSafe.impl.PasswordSafeTimed;
 import com.intellij.ide.passwordSafe.impl.providers.ByteArrayWrapper;
 import com.intellij.ide.passwordSafe.impl.providers.EncryptionUtil;
 import com.intellij.openapi.util.registry.Registry;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.security.SecureRandom;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * The provider that stores passwords in memory in encrypted from. It does not stores passwords on the disk,
  * so all passwords are forgotten after application exit. Some efforts are done to complicate retrieving passwords
  * from page file. However the passwords could be still retrieved from the memory using debugger or full memory dump.
+ *
+ * @deprecated potentially unsafe
  */
 @Deprecated
 // used in https://github.com/groboclown/p4ic4idea, cannot be deleted
@@ -36,7 +38,7 @@ public class MemoryPasswordSafe implements PasswordStorage {
   private final transient PasswordSafeTimed<Map<ByteArrayWrapper, byte[]>> database = new PasswordSafeTimed<Map<ByteArrayWrapper, byte[]>>() {
     @Override
     protected Map<ByteArrayWrapper, byte[]> compute() {
-      return Collections.synchronizedMap(ContainerUtil.newHashMap());
+      return Collections.synchronizedMap(new HashMap<>());
     }
 
     @Override
@@ -49,8 +51,7 @@ public class MemoryPasswordSafe implements PasswordStorage {
     return Registry.intValue("passwordSafe.memorySafe.ttl");
   }
 
-  @NotNull
-  protected byte[] key() {
+  protected byte @NotNull [] key() {
     if (key.get() == null) {
       byte[] rnd = new byte[EncryptionUtil.SECRET_KEY_SIZE_BYTES * 16];
       new SecureRandom().nextBytes(rnd);
@@ -59,7 +60,7 @@ public class MemoryPasswordSafe implements PasswordStorage {
     return key.get();
   }
 
-  protected byte[] getEncryptedPassword(@NotNull byte[] key) {
+  protected byte[] getEncryptedPassword(byte @NotNull [] key) {
     return database.get().get(new ByteArrayWrapper(key));
   }
 

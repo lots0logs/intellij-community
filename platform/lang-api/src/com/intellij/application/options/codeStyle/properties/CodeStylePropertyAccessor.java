@@ -21,10 +21,26 @@ public abstract class CodeStylePropertyAccessor<V> {
   @Nullable
   protected abstract V parseString(@NotNull String string);
 
+  @Nullable
+  public final String getAsString() {
+    V value = get();
+    return value != null ? valueToString(value) : null;
+  }
+
+  @Nullable
+  protected abstract String valueToString(@NotNull V value);
+
+  /**
+   * @deprecated unused
+   */
   @Deprecated
   public boolean isGenericProperty() {
     return false;
   }
 
   public abstract String getPropertyName();
+
+  public boolean isIgnorable() {
+    return false;
+  }
 }

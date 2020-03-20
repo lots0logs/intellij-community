@@ -26,6 +26,8 @@ import com.jetbrains.python.psi.types.PyClassType;
 import com.jetbrains.python.psi.types.PyClassTypeImpl;
 import com.jetbrains.python.psi.types.PyType;
 import com.jetbrains.python.psi.types.TypeEvalContext;
+import com.jetbrains.python.refactoring.PyPsiRefactoringUtil;
+import com.jetbrains.python.ui.PyUiUtil;
 import org.jetbrains.annotations.NotNull;
 
 import static com.jetbrains.python.psi.PyUtil.sure;
@@ -56,7 +58,7 @@ public class AddMethodQuickFix implements LocalQuickFix {
   @Override
   @NotNull
   public String getFamilyName() {
-    return "Add method to class";
+    return PyBundle.message("QFIX.add.method.to.class");
   }
 
   @Override
@@ -125,14 +127,14 @@ public class AddMethodQuickFix implements LocalQuickFix {
         method.addBefore(decoratorList, method.getFirstChild()); // in the very beginning
       }
 
-      method = (PyFunction)PyUtil.addElementToStatementList(method, clsStmtList, PyNames.INIT.equals(method.getName()));
+      method = (PyFunction)PyPsiRefactoringUtil.addElementToStatementList(method, clsStmtList, PyNames.INIT.equals(method.getName()));
       if (myReplaceUsage) {
         showTemplateBuilder(method);
       }
     }
     catch (IncorrectOperationException ignored) {
       // we failed. tell about this
-      PyUtil.showBalloon(project, PyBundle.message("QFIX.failed.to.add.method"), MessageType.ERROR);
+      PyUiUtil.showBalloon(project, PyBundle.message("QFIX.failed.to.add.method"), MessageType.ERROR);
     }
   }
 

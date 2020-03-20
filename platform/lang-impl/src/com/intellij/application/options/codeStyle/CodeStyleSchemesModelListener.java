@@ -38,4 +38,6 @@ public interface CodeStyleSchemesModelListener extends EventListener {
   }
 
   default void settingsChanged(@NotNull CodeStyleSettings settings) {}
+
+  default void overridingStatusChanged() {}
 }

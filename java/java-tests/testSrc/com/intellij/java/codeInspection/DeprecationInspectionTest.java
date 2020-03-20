@@ -1,33 +1,30 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.java.codeInspection;
 
 import com.intellij.JavaTestUtil;
 import com.intellij.codeInspection.deprecation.DeprecationInspection;
+import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.roots.ContentEntry;
 import com.intellij.openapi.roots.JavaModuleExternalPaths;
 import com.intellij.openapi.roots.ModifiableRootModel;
-import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.testFramework.IdeaTestUtil;
-import com.intellij.testFramework.InspectionTestCase;
+import com.intellij.testFramework.JavaInspectionTestCase;
 import com.intellij.testFramework.LightProjectDescriptor;
 import com.intellij.testFramework.fixtures.DefaultLightProjectDescriptor;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * @author max
- */
-public class DeprecationInspectionTest extends InspectionTestCase {
+public class DeprecationInspectionTest extends JavaInspectionTestCase {
 
   private final DefaultLightProjectDescriptor myProjectDescriptor = new DefaultLightProjectDescriptor() {
     @Override
     public void configureModule(@NotNull Module module, @NotNull ModifiableRootModel model, @NotNull ContentEntry contentEntry) {
       super.configureModule(module, model, contentEntry);
       model.getModuleExtension(JavaModuleExternalPaths.class)
-        .setExternalAnnotationUrls(new String[]{VfsUtilCore.pathToUrl(FileUtil.toSystemIndependentName(getTestDataPath() + "/deprecation/" + getTestName(true) + "/extAnnotations"))});
+        .setExternalAnnotationUrls(new String[]{VfsUtilCore.pathToUrl(getTestDataPath() + "/deprecation/" + getTestName(true) + "/extAnnotations")});
     }
 
     @Override
@@ -96,6 +93,23 @@ public class DeprecationInspectionTest extends InspectionTestCase {
   public void testIgnoreInSameOutermostClass() {
     final DeprecationInspection tool = new DeprecationInspection();
     doTest("deprecation/" + getTestName(true), tool);
+  }
+
+  public void testDeprecatedUsageInJavadoc() {
+    doTest();
+  }
+
+  public void testDeprecatedDefaultConstructor() {
+    myFixture.enableInspections(new DeprecationInspection());
+    myFixture.configureByText("B.java", "class B extends A {\n" +
+                                        "    B() { this(0); }\n" +
+                                        "    B(int i) { super(i); }\n" +
+                                        "}\n" +
+                                        "class A {\n" +
+                                        "    @Deprecated A() {}\n" +
+                                        "    A(int i) {}\n" +
+                                        "}");
+    assertEmpty(myFixture.doHighlighting(HighlightSeverity.WARNING));
   }
 
   @NotNull

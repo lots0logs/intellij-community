@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileChooser.ex;
 
 import com.intellij.ide.util.treeView.AbstractTreeBuilder;
@@ -88,8 +88,8 @@ public class FileSystemTreeImpl implements FileSystemTree {
     //noinspection deprecation
     if (renderer == null && useNewAsyncModel()) {
       renderer = new FileRenderer().forTree();
-      myFileTreeModel = new FileTreeModel(descriptor, new FileRefresher(true, 3, () -> ModalityState.stateForComponent(tree)));
-      myAsyncTreeModel = new AsyncTreeModel(myFileTreeModel, false, this);
+      myFileTreeModel = createFileTreeModel(descriptor, tree);
+      myAsyncTreeModel = createAsyncTreeModel(myFileTreeModel);
       myTreeStructure = null;
     }
     else {
@@ -141,7 +141,6 @@ public class FileSystemTreeImpl implements FileSystemTree {
     else {
       new TreeSpeedSearch(myTree);
     }
-    myTree.setLineStyleAngled();
     TreeUtil.installActions(myTree);
 
     myTree.getSelectionModel().setSelectionMode(
@@ -179,9 +178,21 @@ public class FileSystemTreeImpl implements FileSystemTree {
     return Registry.is("file.chooser.async.tree.model");
   }
 
-  protected AbstractTreeBuilder createTreeBuilder(final JTree tree, DefaultTreeModel treeModel, final AbstractTreeStructure treeStructure,
-                                                  final Comparator<NodeDescriptor> comparator, FileChooserDescriptor descriptor,
-                                                  @Nullable final Runnable onInitialized) {
+  @NotNull
+  protected FileTreeModel createFileTreeModel(@NotNull FileChooserDescriptor descriptor, @NotNull Tree tree) {
+    return new FileTreeModel(descriptor, new FileRefresher(true, 3, () -> ModalityState.stateForComponent(tree)));
+  }
+
+  @NotNull
+  protected AsyncTreeModel createAsyncTreeModel(@NotNull FileTreeModel fileTreeModel) {
+    return new AsyncTreeModel(fileTreeModel, false, this);
+  }
+
+  protected AbstractTreeBuilder createTreeBuilder(JTree tree, DefaultTreeModel treeModel,
+                                                  AbstractTreeStructure treeStructure,
+                                                  Comparator<NodeDescriptor<?>> comparator,
+                                                  FileChooserDescriptor descriptor,
+                                                  @Nullable Runnable onInitialized) {
     return new FileTreeBuilder(tree, treeModel, treeStructure, comparator, descriptor, onInitialized);
   }
 
@@ -197,7 +208,7 @@ public class FileSystemTreeImpl implements FileSystemTree {
 
     new DoubleClickListener() {
       @Override
-      protected boolean onDoubleClick(MouseEvent e) {
+      protected boolean onDoubleClick(@NotNull MouseEvent e) {
         performEnterAction(false);
         return true;
       }
@@ -433,12 +444,11 @@ public class FileSystemTreeImpl implements FileSystemTree {
   }
 
   @Override
-  @NotNull
-  public VirtualFile[] getSelectedFiles() {
+  public VirtualFile @NotNull [] getSelectedFiles() {
     final TreePath[] paths = myTree.getSelectionPaths();
     if (paths == null) return VirtualFile.EMPTY_ARRAY;
 
-    final List<VirtualFile> files = ContainerUtil.newArrayList();
+    final List<VirtualFile> files = new ArrayList<>();
     for (TreePath path : paths) {
       VirtualFile file = getVirtualFile(path);
       if (file != null && file.isValid()) {
@@ -505,7 +515,7 @@ public class FileSystemTreeImpl implements FileSystemTree {
     });
   }
 
-  private void fireSelection(@NotNull List<VirtualFile> selection) {
+  private void fireSelection(@NotNull List<? extends VirtualFile> selection) {
     for (Listener each : myListeners) {
       each.selectionChanged(selection);
     }

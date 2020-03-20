@@ -64,6 +64,7 @@ public class PyCompatibilityInspection extends PyInspection {
   public static final List<String> BACKPORTED_PACKAGES = ImmutableList.<String>builder()
     .add("enum")
     .add("typing")
+    .add("dataclasses")
     .build();
 
   public static final List<String> COMPATIBILITY_LIBS = Collections.singletonList("six");
@@ -118,13 +119,6 @@ public class PyCompatibilityInspection extends PyInspection {
     return result;
   }
 
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.compatibility");
-  }
-
   @Override
   public JComponent createOptionsPanel() {
     final ElementsChooser<String> chooser = new ElementsChooser<>(true);
@@ -138,7 +132,7 @@ public class PyCompatibilityInspection extends PyInspection {
       }
     });
     final JPanel versionPanel = new JPanel(new BorderLayout());
-    JLabel label = new JLabel("Check for compatibility with python versions:");
+    JLabel label = new JLabel(PyBundle.message("INSP.compatibility.check.for.compatibility.with.python.versions"));
     label.setLabelFor(chooser);
     versionPanel.add(label, BorderLayout.PAGE_START);
     versionPanel.add(chooser);
@@ -197,11 +191,8 @@ public class PyCompatibilityInspection extends PyInspection {
       if (resolvedCallee instanceof PyFunction) {
         final PyFunction function = (PyFunction)resolvedCallee;
         final PyClass containingClass = function.getContainingClass();
-        final String originalFunctionName = function.getName();
 
-        final String functionName = containingClass != null && PyNames.INIT.equals(originalFunctionName)
-                                    ? callee.getText()
-                                    : originalFunctionName;
+        final String functionName = PyUtil.isInitOrNewMethod(function) ? callee.getText() : function.getName();
 
         if (containingClass != null) {
           final String className = containingClass.getName();
@@ -306,7 +297,7 @@ public class PyCompatibilityInspection extends PyInspection {
             .stream(node.getArguments())
             .filter(PyKeywordArgument.class::isInstance)
             .forEach(expression -> myHolder.registerProblem(expression,
-                                                            "This syntax available only since py3",
+                                                            PyBundle.message("INSP.compatibility.this.syntax.available.only.since.py3"),
                                                             !isPython2
                                                             ? ProblemHighlightType.GENERIC_ERROR_OR_WARNING
                                                             : ProblemHighlightType.GENERIC_ERROR));

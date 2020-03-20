@@ -3,7 +3,7 @@ package com.intellij.openapi.vcs.impl.projectlevelman;
 
 import com.intellij.ide.BrowserUtil;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
-import com.intellij.ide.plugins.PluginManagerCore;
+import com.intellij.ide.plugins.PluginManager;
 import com.intellij.ide.plugins.PluginManagerMain;
 import com.intellij.ide.plugins.RepositoryHelper;
 import com.intellij.notification.Notification;
@@ -12,11 +12,14 @@ import com.intellij.notification.NotificationType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.updateSettings.impl.PluginDownloader;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.AbstractVcs;
+import com.intellij.openapi.vcs.VcsBundle;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.VcsNotifier;
 import com.intellij.openapi.vcs.impl.VcsDescriptor;
@@ -31,8 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.intellij.openapi.vcs.VcsNotifier.IMPORTANT_ERROR_NOTIFICATION;
 
-public class AllVcses implements AllVcsesI, Disposable {
-  private final Logger LOG = Logger.getInstance("#com.intellij.openapi.vcs.impl.projectlevelman.AllVcses");
+public final class AllVcses implements AllVcsesI, Disposable {
+  private final Logger LOG = Logger.getInstance(AllVcses.class);
   private final Map<String, AbstractVcs> myVcses;
 
   private final Object myLock;
@@ -69,7 +72,7 @@ public class AllVcses implements AllVcsesI, Disposable {
       vcs.doStart();
     }
     catch (VcsException e) {
-      LOG.debug(e);
+      LOG.warn(e);
     }
     vcs.getProvidedStatuses();
   }
@@ -93,6 +96,8 @@ public class AllVcses implements AllVcsesI, Disposable {
 
   @Override
   public AbstractVcs getByName(final String name) {
+    if (StringUtil.isEmpty(name)) return null;
+
     synchronized (myLock) {
       final AbstractVcs vcs = myVcses.get(name);
       if (vcs != null) {
@@ -143,7 +148,7 @@ public class AllVcses implements AllVcsesI, Disposable {
       vcs.doShutdown();
     }
     catch (VcsException e) {
-      LOG.info(e);
+      LOG.warn(e);
     }
   }
 
@@ -167,12 +172,12 @@ public class AllVcses implements AllVcsesI, Disposable {
     TFS("TFS", "TFS", "https://plugins.jetbrains.com/plugin/4578-tfs");
 
     @NotNull private final String vcsName;
-    @NotNull private final String pluginId;
+    @NotNull private final PluginId pluginId;
     @NotNull private final String pluginUrl;
 
     ObsoleteVcs(@NotNull String vcsName, @NotNull String pluginId, @NotNull String pluginUrl) {
       this.vcsName = vcsName;
-      this.pluginId = pluginId;
+      this.pluginId = PluginId.getId(pluginId);
       this.pluginUrl = pluginUrl;
     }
 
@@ -185,11 +190,12 @@ public class AllVcses implements AllVcsesI, Disposable {
   private void proposeToInstallPlugin(@NotNull ObsoleteVcs vcs) {
     String message = "The " + vcs + " plugin was unbundled and needs to be installed manually";
     Notification notification = IMPORTANT_ERROR_NOTIFICATION.createNotification("", message, NotificationType.WARNING, null);
-    notification.addAction(NotificationAction.createSimple("Install", () -> {
+    notification
+      .addAction(NotificationAction.createSimple(VcsBundle.messagePointer("action.NotificationAction.AllVcses.text.install"), () -> {
       notification.expire();
       installPlugin(vcs);
     }));
-    notification.addAction(NotificationAction.createSimple("Read more", () -> {
+    notification.addAction(NotificationAction.createSimple(VcsBundle.messagePointer("action.NotificationAction.AllVcses.text.read.more"), () -> {
       BrowserUtil.browse("https://blog.jetbrains.com/idea/2019/02/unbundling-tfs-and-cvs-integration-plugins/");
     }));
     VcsNotifier.getInstance(myProject).notify(notification);
@@ -201,12 +207,12 @@ public class AllVcses implements AllVcsesI, Disposable {
       public void run(@NotNull ProgressIndicator indicator) {
         try {
           List<IdeaPluginDescriptor> plugins = RepositoryHelper.loadPlugins(indicator);
-          IdeaPluginDescriptor descriptor = ContainerUtil.find(plugins, d -> d.getPluginId().getIdString().equalsIgnoreCase(vcs.pluginId));
+          IdeaPluginDescriptor descriptor = ContainerUtil.find(plugins, d -> d.getPluginId() == vcs.pluginId);
           if (descriptor != null) {
             PluginDownloader downloader = PluginDownloader.createDownloader(descriptor);
             if (downloader.prepareToInstall(indicator)) {
               downloader.install();
-              PluginManagerCore.enablePlugin(vcs.pluginId);
+              PluginManager.getInstance().enablePlugins(Collections.singletonList(descriptor), true);
               PluginManagerMain.notifyPluginsUpdated(myProject);
             }
           }
@@ -223,7 +229,8 @@ public class AllVcses implements AllVcsesI, Disposable {
       private void showErrorNotification(@NotNull ObsoleteVcs vcs, @NotNull String message) {
         String title = "Failed to Install Plugin";
         Notification notification = IMPORTANT_ERROR_NOTIFICATION.createNotification(title, message, NotificationType.ERROR, null);
-        notification.addAction(NotificationAction.createSimple("Open Plugin Page", () -> {
+        notification.addAction(
+          NotificationAction.createSimple(VcsBundle.messagePointer("action.NotificationAction.AllVcses.text.open.plugin.page"), () -> {
           BrowserUtil.browse(vcs.pluginUrl);
         }));
         VcsNotifier.getInstance(myProject).notify(notification);

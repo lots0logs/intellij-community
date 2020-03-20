@@ -31,11 +31,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.TreeSet;
 
-/**
- * @author nik
- */
 public class ConfigFileInfoSetImpl implements ConfigFileInfoSet {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.util.descriptors.impl.ConfigFileInfoSetImpl");
+  private static final Logger LOG = Logger.getInstance(ConfigFileInfoSetImpl.class);
   @NonNls private static final String ELEMENT_NAME = "deploymentDescriptor";
   @NonNls private static final String ID_ATTRIBUTE = "name";
   @NonNls private static final String URL_ATTRIBUTE = "url";
@@ -103,7 +100,7 @@ public class ConfigFileInfoSetImpl implements ConfigFileInfoSet {
   }
 
   @Override
-  public void setConfigFileInfos(final Collection<ConfigFileInfo> descriptors) {
+  public void setConfigFileInfos(final Collection<? extends ConfigFileInfo> descriptors) {
     myConfigFiles.clear();
     for (ConfigFileInfo descriptor : descriptors) {
       myConfigFiles.put(descriptor.getMetaData(), descriptor);

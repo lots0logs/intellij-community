@@ -34,7 +34,6 @@ import com.intellij.util.Alarm;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.PlatformIcons;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -49,7 +48,7 @@ import java.util.Enumeration;
 import java.util.List;
 
 public class PackageChooserDialog extends PackageChooser {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.util.PackageChooserDialog");
+  private static final Logger LOG = Logger.getInstance(PackageChooserDialog.class);
 
   private Tree myTree;
   private DefaultTreeModel myModel;
@@ -86,8 +85,6 @@ public class PackageChooserDialog extends PackageChooser {
     myModel = new DefaultTreeModel(new DefaultMutableTreeNode());
     createTreeModel();
     myTree = new Tree(myModel);
-
-    UIUtil.setLineStyleAngled(myTree);
     myTree.setCellRenderer(
       new DefaultTreeCellRenderer() {
         @Override
@@ -396,8 +393,8 @@ public class PackageChooserDialog extends PackageChooser {
 
   private class NewPackageAction extends AnAction {
     NewPackageAction() {
-      super(IdeBundle.message("action.new.package"),
-            IdeBundle.message("action.description.create.new.package"), AllIcons.Actions.NewFolder);
+      super(IdeBundle.messagePointer("action.new.package"), IdeBundle.messagePointer("action.description.create.new.package"),
+            AllIcons.Actions.NewFolder);
     }
 
     @Override

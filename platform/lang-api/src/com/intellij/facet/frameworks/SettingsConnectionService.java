@@ -1,24 +1,9 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.facet.frameworks;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.JDOMUtil;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import com.intellij.util.io.HttpRequests;
 import org.jdom.Element;
 import org.jdom.JDOMException;
@@ -26,17 +11,17 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public abstract class SettingsConnectionService {
-  private static final Logger LOG = Logger.getInstance("com.intellij.facet.frameworks.SettingsConnectionService");
+  private static final Logger LOG = Logger.getInstance(SettingsConnectionService.class);
 
   protected static final String SERVICE_URL_ATTR_NAME = "url";
 
   private Map<String, String> myAttributesMap;
 
-  @NotNull
-  protected String[] getAttributeNames() {
+  protected String @NotNull [] getAttributeNames() {
     return new String[]{SERVICE_URL_ATTR_NAME};
   }
 
@@ -50,13 +35,6 @@ public abstract class SettingsConnectionService {
     myDefaultServiceUrl = defaultServiceUrl;
   }
 
-  @SuppressWarnings("unused")
-  @Deprecated
-  @Nullable
-  public String getSettingsUrl() {
-    return mySettingsUrl;
-  }
-
   @Nullable
   public String getDefaultServiceUrl() {
     return myDefaultServiceUrl;
@@ -68,7 +46,7 @@ public abstract class SettingsConnectionService {
     return HttpRequests.request(mySettingsUrl)
       .productNameAsUserAgent()
       .connect(request -> {
-        Map<String, String> settings = ContainerUtilRt.newLinkedHashMap();
+        Map<String, String> settings = new LinkedHashMap<>();
         try {
           Element root = JDOMUtil.load(request.getReader());
           for (String s : attributes) {

@@ -1,14 +1,15 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.action;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.Presentation;
+import com.intellij.openapi.externalSystem.importing.ImportSpecBuilder;
 import com.intellij.openapi.externalSystem.model.ExternalSystemDataKeys;
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
 import com.intellij.openapi.externalSystem.model.project.AbstractExternalEntityData;
 import com.intellij.openapi.externalSystem.model.project.ExternalConfigPathAware;
 import com.intellij.openapi.externalSystem.model.project.ModuleData;
 import com.intellij.openapi.externalSystem.model.project.ProjectData;
-import com.intellij.openapi.externalSystem.service.execution.ProgressExecutionMode;
 import com.intellij.openapi.externalSystem.settings.ExternalProjectSettings;
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemBundle;
@@ -29,11 +30,10 @@ import java.util.List;
  * @author Vladislav.Soroka
  */
 public class RefreshExternalProjectAction extends ExternalSystemNodeAction<AbstractExternalEntityData> implements DumbAware {
-
   public RefreshExternalProjectAction() {
     super(AbstractExternalEntityData.class);
-    getTemplatePresentation().setText(ExternalSystemBundle.message("action.refresh.project.text", "external"));
-    getTemplatePresentation().setDescription(ExternalSystemBundle.message("action.refresh.project.description", "external"));
+    getTemplatePresentation().setText(ExternalSystemBundle.messagePointer("action.refresh.project.text", "External"));
+    getTemplatePresentation().setDescription(ExternalSystemBundle.messagePointer("action.refresh.project.description", "External"));
   }
 
   @Override
@@ -42,16 +42,17 @@ public class RefreshExternalProjectAction extends ExternalSystemNodeAction<Abstr
     if(this.getClass() != RefreshExternalProjectAction.class) return;
 
     ProjectSystemId systemId = getSystemId(e);
-    final String systemIdName = systemId != null ? systemId.getReadableName() : "external";
+    final String systemIdNameText = systemId != null ? systemId.getReadableName() : "External";
+    final String systemIdNameDescription = systemId != null ? systemId.getReadableName() : "external";
     Presentation presentation = e.getPresentation();
-    presentation.setText(ExternalSystemBundle.message("action.refresh.project.text", systemIdName));
-    presentation.setDescription(ExternalSystemBundle.message("action.refresh.project.description", systemIdName));
+    presentation.setText(ExternalSystemBundle.messagePointer("action.refresh.project.text", systemIdNameText));
+    presentation.setDescription(ExternalSystemBundle.messagePointer("action.refresh.project.description", systemIdNameDescription));
   }
 
   @Override
   protected boolean isEnabled(@NotNull AnActionEvent e) {
     if (!super.isEnabled(e)) return false;
-    final List<ExternalSystemNode> selectedNodes = ExternalSystemDataKeys.SELECTED_NODES.getData(e.getDataContext());
+    final List<ExternalSystemNode> selectedNodes = e.getData(ExternalSystemDataKeys.SELECTED_NODES);
     if (selectedNodes == null || selectedNodes.size() != 1) return false;
     final Object externalData = selectedNodes.get(0).getData();
     return (externalData instanceof ProjectData || externalData instanceof ModuleData);
@@ -63,7 +64,7 @@ public class RefreshExternalProjectAction extends ExternalSystemNodeAction<Abstr
                       @NotNull AbstractExternalEntityData externalEntityData,
                       @NotNull AnActionEvent e) {
 
-    final List<ExternalSystemNode> selectedNodes = ExternalSystemDataKeys.SELECTED_NODES.getData(e.getDataContext());
+    final List<ExternalSystemNode> selectedNodes = e.getData(ExternalSystemDataKeys.SELECTED_NODES);
     final ExternalSystemNode<?> externalSystemNode = ContainerUtil.getFirstItem(selectedNodes);
     assert externalSystemNode != null;
 
@@ -80,6 +81,6 @@ public class RefreshExternalProjectAction extends ExternalSystemNodeAction<Abstr
                                        ? externalConfigPathAware.getLinkedExternalProjectPath()
                                        : linkedProjectSettings.getExternalProjectPath();
 
-    ExternalSystemUtil.refreshProject(project, projectSystemId, externalProjectPath, false, ProgressExecutionMode.IN_BACKGROUND_ASYNC);
+    ExternalSystemUtil.refreshProject(externalProjectPath, new ImportSpecBuilder(project, projectSystemId));
   }
 }

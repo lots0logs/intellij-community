@@ -18,11 +18,13 @@ package org.jetbrains.idea.devkit.inspections
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.Annotator
+import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.lang.properties.psi.PropertiesFile
 import com.intellij.lang.properties.psi.impl.PropertyImpl
 import com.intellij.lang.properties.psi.impl.PropertyKeyImpl
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -50,11 +52,45 @@ class RegistryPropertiesAnnotator : Annotator {
       return
     }
 
+    val groupName = propertyName.substringBefore('.').toLowerCase()
+    if (PLUGIN_GROUP_NAMES.contains(groupName) ||
+        propertyName.startsWith("editor.config.")) {
+      holder.newAnnotation(HighlightSeverity.ERROR, "Plugin specific keys should be registered via 'com.intellij.registryKey' EP")
+        .withFix(ShowEPDeclarationIntention(propertyName)).create()
+    }
+
     val propertiesFile = file as PropertiesFile
     val descriptionProperty = propertiesFile.findPropertyByKey(propertyName + DESCRIPTION_SUFFIX)
     if (descriptionProperty == null) {
-      holder.createWarningAnnotation(element.node, "Key '$propertyName' does not have description key")
-        .registerFix(AddDescriptionKeyIntention(propertyName))
+      holder.newAnnotation(HighlightSeverity.WARNING, "Key '$propertyName' does not have description key")
+        .withFix(AddDescriptionKeyIntention(propertyName)).create()
+    }
+  }
+
+  private class ShowEPDeclarationIntention(private val propertyName: String) : IntentionAction {
+    override fun startInWriteAction(): Boolean = false
+
+    override fun getFamilyName(): String = "Show EP declaration"
+
+    override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?): Boolean = true
+
+    override fun getText(): String = "Show EP declaration for '${propertyName}"
+
+    override fun invoke(project: Project, editor: Editor?, file: PsiFile?) {
+      val propertiesFile = file as PropertiesFile
+      val defaultValue = propertiesFile.findPropertyByKey(propertyName)!!.value
+      val description = propertiesFile.findPropertyByKey(propertyName + DESCRIPTION_SUFFIX)?.value
+      var restartRequiredText = ""
+      if (propertiesFile.findPropertyByKey(propertyName + RESTART_REQUIRED_SUFFIX) != null) {
+        restartRequiredText = "restartRequired=\"true\""
+      }
+
+      val epText = """
+        <registryKey key="${propertyName}" defaultValue="${defaultValue}" ${restartRequiredText}
+                     description="${description}"/>
+      """.trimIndent()
+      Messages.showMultilineInputDialog(project, "Copy this declaration into your plugin descriptor XML", "EP declaration",
+                                        epText, null, null)
     }
   }
 
@@ -83,6 +119,16 @@ class RegistryPropertiesAnnotator : Annotator {
   }
 
   companion object {
+
+    private val PLUGIN_GROUP_NAMES = setOf(
+      "appcode", "cidr", "clion",
+      "cvs", "git", "github", "svn", "hg4idea", "tfs",
+      "dart", "markdown",
+      "java", "javac", "uast", "junit4", "dsm",
+      "js", "javascript", "typescript", "nodejs", "eslint", "jest",
+      "ruby", "rubymine",
+      "groovy", "grails", "python", "php", "kotlin"
+    )
 
     @NonNls
     private const val REGISTRY_PROPERTIES_FILENAME = "registry.properties"

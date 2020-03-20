@@ -1,9 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.codeInsight.template.postfix.completion;
 
 import com.intellij.JavaTestUtil;
-import com.intellij.codeInsight.completion.CompletionAutoPopupTestCase;
 import com.intellij.codeInsight.completion.CompletionType;
+import com.intellij.codeInsight.completion.JavaCompletionAutoPopupTestCase;
 import com.intellij.codeInsight.lookup.LookupElement;
 import com.intellij.codeInsight.lookup.impl.LookupImpl;
 import com.intellij.codeInsight.template.impl.LiveTemplateCompletionContributor;
@@ -16,7 +16,9 @@ import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class TemplatesCompletionTest extends CompletionAutoPopupTestCase {
+import java.util.HashMap;
+
+public class TemplatesCompletionTest extends JavaCompletionAutoPopupTestCase {
   @Override
   public void setUp() throws Exception {
     super.setUp();
@@ -28,7 +30,7 @@ public class TemplatesCompletionTest extends CompletionAutoPopupTestCase {
     try {
       PostfixTemplatesSettings settings = PostfixTemplatesSettings.getInstance();
       assertNotNull(settings);
-      settings.setProviderToDisabledTemplates(ContainerUtil.newHashMap());
+      settings.setProviderToDisabledTemplates(new HashMap<>());
       settings.setPostfixTemplatesEnabled(true);
       settings.setTemplatesCompletionEnabled(true);
     }
@@ -228,6 +230,10 @@ public class TemplatesCompletionTest extends CompletionAutoPopupTestCase {
     myFixture.configureByText("a.java", "class Foo { ps<caret> } class psvClass {}");
     type("v");
     myFixture.assertPreferredCompletionItems(0, "psvm", "psvClass");
+
+    myFixture.configureByText("a.xml", "CARBON C<caret>");
+    myFixture.completeBasic();
+    myFixture.assertPreferredCompletionItems(0, "CD", "CARBON");
   }
 
 

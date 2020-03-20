@@ -103,7 +103,7 @@ public abstract class BaseMoveInitializerToMethodAction extends PsiElementBaseIn
   }
 
   @NotNull
-  private static List<PsiExpressionStatement> addFieldAssignments(@NotNull PsiField field, @NotNull Collection<PsiMethod> methods) {
+  private static List<PsiExpressionStatement> addFieldAssignments(@NotNull PsiField field, @NotNull Collection<? extends PsiMethod> methods) {
     final List<PsiExpressionStatement> assignments = new ArrayList<>();
     for (PsiMethod method : methods) {
       assignments.add(addAssignment(getOrCreateMethodBody(method), field));
@@ -143,7 +143,7 @@ public abstract class BaseMoveInitializerToMethodAction extends PsiElementBaseIn
   }
 
   @Nullable
-  private static PsiElement findFirstFieldUsage(@NotNull PsiStatement[] statements, @NotNull PsiField field) {
+  private static PsiElement findFirstFieldUsage(PsiStatement @NotNull [] statements, @NotNull PsiField field) {
     for (PsiStatement blockStatement : statements) {
       if (!isSuperOrThisMethodCall(blockStatement) && containsReference(blockStatement, field)) {
         return blockStatement;

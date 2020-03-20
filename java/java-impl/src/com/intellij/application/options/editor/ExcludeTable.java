@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.editor;
 
 import com.intellij.codeInsight.CodeInsightSettings;
@@ -6,8 +6,8 @@ import com.intellij.codeInsight.JavaProjectCodeInsightSettings;
 import com.intellij.execution.util.ListTableWithButtons;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.ui.laf.darcula.DarculaUIUtil;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.Disposable;
-import com.intellij.openapi.application.ApplicationBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.ComboBoxTableRenderer;
 import com.intellij.openapi.ui.ComponentValidator;
@@ -21,11 +21,10 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.ScrollingUtil;
 import com.intellij.ui.components.fields.ExtendableTextField;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.table.JBTable;
-import com.intellij.util.ArrayUtil;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.ui.ColumnInfo;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.ListTableModel;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,10 +33,7 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellEditor;
 import javax.swing.table.TableCellRenderer;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
@@ -46,10 +42,10 @@ class ExcludeTable extends ListTableWithButtons<ExcludeTable.Item> {
 
   private static final BiFunction<Object, JComponent, ValidationInfo> validationInfoProducer = (value, component) ->
     (value == null || StringUtil.isEmpty(value.toString()) || ourPackagePattern.matcher(value.toString()).matches()) ?
-      null : new ValidationInfo("Illegal name: " + value.toString(), component);
+      null : new ValidationInfo(JavaBundle.message("illegal.name.validation.info", value.toString()), component);
 
   private static final Disposable validatorsDisposable = Disposer.newDisposable();
-  private static final ColumnInfo<Item, String> NAME_COLUMN = new ColumnInfo<Item, String>("Class/package/member qualified name mask") {
+  private static final ColumnInfo<Item, String> NAME_COLUMN = new ColumnInfo<Item, String>(JavaBundle.message("exclude.table.mask")) {
 
     @Nullable
     @Override
@@ -94,7 +90,8 @@ class ExcludeTable extends ListTableWithButtons<ExcludeTable.Item> {
     }
   };
 
-  private static final ColumnInfo<Item, ExclusionScope> SCOPE_COLUMN = new ColumnInfo<Item, ExclusionScope>("Scope") {
+  private static final ColumnInfo<Item, ExclusionScope> SCOPE_COLUMN = new ColumnInfo<Item, ExclusionScope>(JavaBundle.message(
+    "exclude.table.scope.column")) {
     @Nullable
     @Override
     public ExclusionScope valueOf(Item pair) {
@@ -128,7 +125,7 @@ class ExcludeTable extends ListTableWithButtons<ExcludeTable.Item> {
 
     @Override
     public int getAdditionalWidth() {
-      return JBUI.scale(12) + AllIcons.General.ArrowDown.getIconWidth();
+      return JBUIScale.scale(12) + AllIcons.General.ArrowDown.getIconWidth();
     }
   };
   private final Project myProject;
@@ -137,7 +134,7 @@ class ExcludeTable extends ListTableWithButtons<ExcludeTable.Item> {
     myProject = project;
 
     JBTable table = getTableView();
-    table.getEmptyText().setText(ApplicationBundle.message("exclude.from.imports.no.exclusions"));
+    table.getEmptyText().setText(JavaBundle.message("exclude.from.imports.no.exclusions"));
     table.setStriped(false);
     new CellTooltipManager(myProject).withCellComponentProvider(CellComponentProvider.forTable(table)).installOn(table);
 
@@ -186,7 +183,7 @@ class ExcludeTable extends ListTableWithButtons<ExcludeTable.Item> {
   }
 
   void reset() {
-    List<Item> rows = ContainerUtil.newArrayList();
+    List<Item> rows = new ArrayList<>();
     for (String s : CodeInsightSettings.getInstance().EXCLUDED_PACKAGES) {
       rows.add(new Item(s, ExclusionScope.IDE));
     }
@@ -199,12 +196,12 @@ class ExcludeTable extends ListTableWithButtons<ExcludeTable.Item> {
   }
 
   void apply() {
-    CodeInsightSettings.getInstance().EXCLUDED_PACKAGES = ArrayUtil.toStringArray(getExcludedPackages(ExclusionScope.IDE));
+    CodeInsightSettings.getInstance().EXCLUDED_PACKAGES = ArrayUtilRt.toStringArray(getExcludedPackages(ExclusionScope.IDE));
     JavaProjectCodeInsightSettings.getSettings(myProject).excludedNames = getExcludedPackages(ExclusionScope.Project);
   }
 
   private List<String> getExcludedPackages(ExclusionScope scope) {
-    List<String> result = ContainerUtil.newArrayList();
+    List<String> result = new ArrayList<>();
     for (Item pair : getTableView().getListTableModel().getItems()) {
       if (scope == pair.scope) {
         result.add(pair.exclude);

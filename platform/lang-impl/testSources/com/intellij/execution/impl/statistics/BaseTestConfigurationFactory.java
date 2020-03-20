@@ -42,4 +42,51 @@ public abstract class BaseTestConfigurationFactory extends ConfigurationFactory 
       };
     }
   }
+
+  protected static class MultiFactoryLocalTestConfigurationFactory extends BaseTestConfigurationFactory {
+    public static final MultiFactoryLocalTestConfigurationFactory INSTANCE = new MultiFactoryLocalTestConfigurationFactory();
+
+    public MultiFactoryLocalTestConfigurationFactory() {
+      super(new BaseTestConfigurationType.MultiFactoryTestRunConfigurationType());
+    }
+
+    @NotNull
+    @Override
+    public String getId() {
+      return "Local";
+    }
+
+    @NotNull
+    @Override
+    public RunConfiguration createTemplateConfiguration(@NotNull Project project) {
+      return new BaseTestRunConfiguration(project, this) {
+      };
+    }
+  }
+
+  protected static class MultiFactoryRemoteTestConfigurationFactory extends BaseTestConfigurationFactory {
+    public static final MultiFactoryRemoteTestConfigurationFactory INSTANCE = new MultiFactoryRemoteTestConfigurationFactory();
+
+    public MultiFactoryRemoteTestConfigurationFactory() {
+      super(new BaseTestConfigurationType.MultiFactoryTestRunConfigurationType());
+    }
+
+    @NotNull
+    @Override
+    public String getId() {
+      return "Remote";
+    }
+
+    @NotNull
+    @Override
+    public RunConfiguration createTemplateConfiguration(@NotNull Project project) {
+      return new BaseTestRunConfiguration(project, this) {
+      };
+    }
+  }
+
+  @Override
+  public @NotNull String getId() {
+    return getType().getId();
+  }
 }

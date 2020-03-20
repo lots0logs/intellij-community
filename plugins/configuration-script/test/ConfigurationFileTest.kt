@@ -1,7 +1,10 @@
+@file:Suppress("UsePropertyAccessSyntax")
 package com.intellij.configurationScript
 
-import com.google.gson.Gson
-import com.intellij.execution.application.JvmMainMethodRunConfigurationOptions
+import com.fasterxml.jackson.core.JsonFactory
+import com.intellij.configurationScript.providers.readRunConfigurations
+import com.intellij.configurationScript.schemaGenerators.rcTypeIdToPropertyName
+//import com.intellij.execution.application.JvmMainMethodRunConfigurationOptions
 import com.intellij.execution.configurations.ConfigurationTypeBase
 import com.intellij.testFramework.ProjectRule
 import com.intellij.testFramework.assertions.Assertions.assertThat
@@ -20,11 +23,21 @@ class ConfigurationFileTest {
   }
 
   @Test
+  fun `file name`() {
+    assertThat(isConfigurationFile("foo")).isFalse()
+    assertThat(isConfigurationFile("foo.yaml")).isFalse()
+    assertThat(isConfigurationFile("foo.yml")).isFalse()
+    assertThat(isConfigurationFile("intellij.yml")).isTrue()
+    assertThat(isConfigurationFile("intellij.yaml")).isTrue()
+    assertThat(isConfigurationFile("intellij.json")).isTrue()
+  }
+
+  @Test
   fun schema() {
     // check that parseable
-    val schema = generateConfigurationSchema()
-    val jsonReader = Gson().fromJson(CharSequenceReader(schema), Any::class.java)
-    assertThat(jsonReader).isNotNull
+    val schema = doGenerateConfigurationSchema(emptyList())
+    val jsonFactory = JsonFactory()
+    jsonFactory.createParser(CharSequenceReader(schema)).nextValue()
   }
 
   @Test
@@ -47,7 +60,7 @@ class ConfigurationFileTest {
 
   @Test
   fun empty() {
-    val result = readRunConfigurations("""
+    val result = collectRunConfigurations("""
     runConfigurations:
     """)
     assertThat(result).isEmpty()
@@ -55,7 +68,7 @@ class ConfigurationFileTest {
 
   @Test
   fun `empty rc type group`() {
-    val result = readRunConfigurations("""
+    val result = collectRunConfigurations("""
     runConfigurations:
       java:
     """)
@@ -64,7 +77,7 @@ class ConfigurationFileTest {
 
   @Test
   fun `empty rc`() {
-    val result = readRunConfigurations("""
+    val result = collectRunConfigurations("""
     runConfigurations:
       java:
         -
@@ -73,45 +86,8 @@ class ConfigurationFileTest {
   }
 
   @Test
-  fun `one java`() {
-    val result = readRunConfigurations("""
-    runConfigurations:
-      java:
-        isAlternativeJrePathEnabled: true
-    """)
-    val options = JvmMainMethodRunConfigurationOptions()
-    options.isAlternativeJrePathEnabled = true
-    assertThat(result).containsExactly(options)
-  }
-
-  @Test
-  fun `one java as list`() {
-    val result = readRunConfigurations("""
-    runConfigurations:
-      java:
-        - isAlternativeJrePathEnabled: true
-    """)
-    val options = JvmMainMethodRunConfigurationOptions()
-    options.isAlternativeJrePathEnabled = true
-    assertThat(result).containsExactly(options)
-  }
-
-  @Test
-  fun `one v as list - template`() {
-    val result = readRunConfigurations("""
-    runConfigurations:
-      templates:
-        java:
-          - isAlternativeJrePathEnabled: true
-    """, isTemplatesOnly = true)
-    val options = JvmMainMethodRunConfigurationOptions()
-    options.isAlternativeJrePathEnabled = true
-    assertThat(result).containsExactly(options)
-  }
-
-  @Test
   fun `templates as invalid node type`() {
-    val result = readRunConfigurations("""
+    val result = collectRunConfigurations("""
     runConfigurations:
       templates: foo
     """, isTemplatesOnly = true)
@@ -119,9 +95,9 @@ class ConfigurationFileTest {
   }
 }
 
-internal fun readRunConfigurations(@Language("YAML") data: String, isTemplatesOnly: Boolean = false): List<Any> {
+fun collectRunConfigurations(@Language("YAML") data: String, isTemplatesOnly: Boolean = false): List<Any> {
   val list = SmartList<Any>()
-  com.intellij.configurationScript.providers.readRunConfigurations(doRead(data.trimIndent().reader())!!, isTemplatesOnly) { _, state ->
+  readRunConfigurations(doRead(data.trimIndent().reader())!!, isTemplatesOnly) { _, state ->
     list.add(state)
   }
   return list

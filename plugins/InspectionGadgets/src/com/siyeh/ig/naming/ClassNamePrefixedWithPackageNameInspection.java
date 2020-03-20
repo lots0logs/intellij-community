@@ -15,6 +15,7 @@
  */
 package com.siyeh.ig.naming;
 
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiClass;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspection;
@@ -32,13 +33,6 @@ public class ClassNamePrefixedWithPackageNameInspection
   @Override
   protected InspectionGadgetsFix buildFix(Object... infos) {
     return new RenameFix();
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message(
-      "class.name.prefixed.with.package.name.display.name");
   }
 
   @Override
@@ -88,8 +82,8 @@ public class ClassNamePrefixedWithPackageNameInspection
       if (lastPackageName == null) {
         return;
       }
-      final String lowercaseClassName = className.toLowerCase();
-      final String lowercasePackageName = lastPackageName.toLowerCase();
+      final String lowercaseClassName = StringUtil.toLowerCase(className);
+      final String lowercasePackageName = StringUtil.toLowerCase(lastPackageName);
       if (!lowercaseClassName.startsWith(lowercasePackageName)) {
         return;
       }

@@ -125,7 +125,7 @@ public final class KeyChooserDialog extends DialogWrapper{
     init();
     new DoubleClickListener() {
       @Override
-      protected boolean onDoubleClick(MouseEvent e) {
+      protected boolean onDoubleClick(@NotNull MouseEvent e) {
         doOKAction();
         return true;
       }
@@ -161,8 +161,7 @@ public final class KeyChooserDialog extends DialogWrapper{
     }
   }
 
-  @NotNull
-  @Override protected Action[] createLeftSideActions() {
+  @Override protected Action @NotNull [] createLeftSideActions() {
     return new Action[] { new NewKeyValueAction() };
   }
 
@@ -284,9 +283,8 @@ public final class KeyChooserDialog extends DialogWrapper{
       return myComponent.getSelectedRow();
     }
 
-    @NotNull
     @Override
-    public Object[] getAllElements() {
+    public Object @NotNull [] getAllElements() {
       if (myElements == null) {
         myElements = new TObjectIntHashMap<>();
         myElementsArray = myPairs.toArray();

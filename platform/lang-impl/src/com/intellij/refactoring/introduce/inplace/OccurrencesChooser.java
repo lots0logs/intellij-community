@@ -1,36 +1,22 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.introduce.inplace;
 
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorColors;
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.markup.*;
-import com.intellij.openapi.ui.popup.JBPopupAdapter;
 import com.intellij.openapi.ui.popup.JBPopupFactory;
+import com.intellij.openapi.ui.popup.JBPopupListener;
 import com.intellij.openapi.ui.popup.LightweightWindowEvent;
 import com.intellij.openapi.util.Pass;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiElement;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.refactoring.RefactoringBundle;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
-import java.text.MessageFormat;
 import java.util.List;
 import java.util.*;
 
@@ -38,42 +24,39 @@ import java.util.*;
 // This prevents languages with polyadic expressions or sequences
 // from reusing it, use simpleChooser instead.
 public abstract class OccurrencesChooser<T> {
-  public static final String DEFAULT_CHOOSER_TITLE = "Multiple occurrences found";
-
   public interface BaseReplaceChoice {
-    boolean isMultiple();
-
+    /**
+     * @return true if more than one element is selected
+     */
     boolean isAll();
 
-    String formatDescription(int occurrencesCount);
+    /**
+     * @param occurrencesCount number of occurrences
+     * @return user-readable description of given choice
+     */
+    @Nls String formatDescription(int occurrencesCount);
   }
 
   public enum ReplaceChoice implements BaseReplaceChoice {
-    NO("Replace this occurrence only"), NO_WRITE("Replace all occurrences but write"), ALL("Replace all {0} occurrences");
-
-    private final String myDescription;
-
-    ReplaceChoice(String description) {
-      myDescription = description;
-    }
-
-    public String getDescription() {
-      return myDescription;
-    }
-
-    @Override
-    public boolean isMultiple() {
-      return this == NO_WRITE || this == ALL;
-    }
+    NO, NO_WRITE, ALL;
 
     @Override
     public boolean isAll() {
-      return this == ALL;
+      return this != NO;
     }
 
     @Override
-    public String formatDescription(int occurrencesCount) {
-      return MessageFormat.format(getDescription(), occurrencesCount);
+    public @Nls String formatDescription(int occurrencesCount) {
+      switch (this) {
+        case NO:
+          return RefactoringBundle.message("replace.this.occurrence.only");
+        case NO_WRITE:
+          return RefactoringBundle.message("replace.all.occurrences.but.write");
+        case ALL:
+          return RefactoringBundle.message("replace.all.occurrences", occurrencesCount);
+        default:
+          throw new IllegalStateException("Unexpected value: " + this);
+      }
     }
   }
 
@@ -95,25 +78,25 @@ public abstract class OccurrencesChooser<T> {
     myAttributes = EditorColorsManager.getInstance().getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
   }
 
-  public void showChooser(final T selectedOccurrence, final List<T> allOccurrences, final Pass<ReplaceChoice> callback) {
+  public void showChooser(final T selectedOccurrence, final List<T> allOccurrences, final Pass<? super ReplaceChoice> callback) {
     if (allOccurrences.size() == 1) {
       callback.pass(ReplaceChoice.ALL);
     }
     else {
-      Map<ReplaceChoice, List<T>> occurrencesMap = ContainerUtil.newLinkedHashMap();
+      Map<ReplaceChoice, List<T>> occurrencesMap = new LinkedHashMap<>();
       occurrencesMap.put(ReplaceChoice.NO, Collections.singletonList(selectedOccurrence));
       occurrencesMap.put(ReplaceChoice.ALL, allOccurrences);
       showChooser(callback, occurrencesMap);
     }
   }
 
-  public void showChooser(final Pass<ReplaceChoice> callback, final Map<ReplaceChoice, List<T>> occurrencesMap) {
-    showChooser(callback, occurrencesMap, DEFAULT_CHOOSER_TITLE);
+  public void showChooser(final Pass<? super ReplaceChoice> callback, final Map<ReplaceChoice, List<T>> occurrencesMap) {
+    showChooser(callback, occurrencesMap, RefactoringBundle.message("replace.multiple.occurrences.found"));
   }
 
-  public <C extends BaseReplaceChoice> void showChooser(final Pass<C> callback,
+  public <C extends BaseReplaceChoice> void showChooser(final Pass<? super C> callback,
                           final Map<C, List<T>> occurrencesMap,
-                          String title) {
+                          @Nls String title) {
     if (occurrencesMap.size() == 1) {
       callback.pass(occurrencesMap.keySet().iterator().next());
       return;
@@ -156,7 +139,7 @@ public abstract class OccurrencesChooser<T> {
       .setResizable(false)
       .setRequestFocus(true)
       .setItemChosenCallback(callback::pass)
-      .addListener(new JBPopupAdapter() {
+      .addListener(new JBPopupListener() {
         @Override
         public void onClosed(@NotNull LightweightWindowEvent event) {
           dropHighlighters();

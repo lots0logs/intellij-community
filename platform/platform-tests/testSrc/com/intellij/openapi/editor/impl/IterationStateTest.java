@@ -24,20 +24,16 @@ import com.intellij.openapi.editor.impl.view.IterationState;
 import com.intellij.openapi.editor.markup.HighlighterLayer;
 import com.intellij.openapi.editor.markup.HighlighterTargetArea;
 import com.intellij.openapi.editor.markup.TextAttributes;
-import com.intellij.openapi.fileTypes.PlainTextFileType;
 import com.intellij.testFramework.EditorTestUtil;
-import com.intellij.testFramework.fixtures.EditorMouseFixture;
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 
-public class IterationStateTest extends LightPlatformCodeInsightFixtureTestCase {
+public class IterationStateTest extends AbstractEditorTest {
   private Color DEFAULT_BACKGROUND;
   private Color CARET_ROW_BACKGROUND;
   private Color SELECTION_BACKGROUND;
@@ -49,7 +45,7 @@ public class IterationStateTest extends LightPlatformCodeInsightFixtureTestCase 
     DEFAULT_BACKGROUND = colorsScheme.getDefaultBackground();
     CARET_ROW_BACKGROUND = colorsScheme.getColor(EditorColors.CARET_ROW_COLOR);
     SELECTION_BACKGROUND = colorsScheme.getColor(EditorColors.SELECTION_BACKGROUND_COLOR);
-    assertEquals(3, new HashSet<>(Arrays.asList(DEFAULT_BACKGROUND, CARET_ROW_BACKGROUND, SELECTION_BACKGROUND)).size());
+    assertEquals(3, ContainerUtil.set(DEFAULT_BACKGROUND, CARET_ROW_BACKGROUND, SELECTION_BACKGROUND).size());
   }
 
   public void testBlockSelection() {
@@ -159,7 +155,7 @@ public class IterationStateTest extends LightPlatformCodeInsightFixtureTestCase 
     init("abc");
     getEditor().getColorsScheme().setAttributes(HighlighterColors.TEXT,
                                                 new TextAttributes(Color.black, Color.white, null, null, Font.BOLD));
-    IterationState it = new IterationState(getEditor(), 0, 3, null, false, false, true, false);
+    IterationState it = new IterationState((EditorEx)getEditor(), 0, 3, null, false, false, true, false);
     assertFalse(it.atEnd());
     assertEquals(0, it.getStartOffset());
     assertEquals(3, it.getEndOffset());
@@ -173,7 +169,7 @@ public class IterationStateTest extends LightPlatformCodeInsightFixtureTestCase 
     assertNotNull(getEditor().getSoftWrapModel().getSoftWrap(2));
     addRangeHighlighter(1, 3, 0, Color.red);
     addRangeHighlighter(1, 2, 1, Color.blue);
-    IterationState it = new IterationState(getEditor(), 0, 4, null, false, false, false, false);
+    IterationState it = new IterationState((EditorEx)getEditor(), 0, 4, null, false, false, false, false);
     it.advance();
     it.advance();
     assertFalse(it.atEnd());
@@ -183,19 +179,15 @@ public class IterationStateTest extends LightPlatformCodeInsightFixtureTestCase 
     assertEquals(Color.red, it.getBeforeLineStartBackgroundAttributes().getBackgroundColor());
   }
 
-  private EditorImpl getEditor() {
-    return (EditorImpl)myFixture.getEditor();
-  }
-
   private void addRangeHighlighter(int startOffset, int endOffset, int layer, Color bgColor) {
     getEditor().getMarkupModel().addRangeHighlighter(startOffset, endOffset, layer,
-                                                     new TextAttributes(null, bgColor, null, null, 0),
+                                                     new TextAttributes(null, bgColor, null, null, Font.PLAIN),
                                                      HighlighterTargetArea.EXACT_RANGE);
   }
 
 
-  private void verifySplitting(boolean checkForegroundColor, @NotNull Segment... expectedSegments) {
-    EditorEx editor = getEditor();
+  private void verifySplitting(boolean checkForegroundColor, Segment @NotNull ... expectedSegments) {
+    EditorEx editor = (EditorEx)getEditor();
     IterationState.CaretData caretData = IterationState.createCaretData(editor);
     IterationState iterationState = new IterationState(editor, 0, editor.getDocument().getTextLength(),
                                                        caretData, false, false, true, false);
@@ -214,16 +206,12 @@ public class IterationStateTest extends LightPlatformCodeInsightFixtureTestCase 
   }
 
   private void init(String text) {
-    myFixture.configureByText(PlainTextFileType.INSTANCE, text);
+    configureFromFileText(getTestName(true) + ".txt", text);
     EditorTestUtil.setEditorVisibleSize(getEditor(), 1000, 1000);
   }
 
   private void setColumnModeOn() {
-    getEditor().setColumnMode(true);
-  }
-
-  private EditorMouseFixture mouse() {
-    return new EditorMouseFixture(getEditor());
+    ((EditorEx)getEditor()).setColumnMode(true);
   }
 
   private static class Segment {

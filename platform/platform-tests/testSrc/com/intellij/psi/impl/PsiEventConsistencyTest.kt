@@ -5,14 +5,14 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileTypes.PlainTextLanguage
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
+import com.intellij.psi.PsiManager
 import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.impl.source.CharTableImpl
 import com.intellij.psi.impl.source.DummyHolder
 import com.intellij.psi.impl.source.codeStyle.CodeEditUtil
 import com.intellij.psi.impl.source.tree.*
 import com.intellij.psi.tree.IElementType
-import com.intellij.testFramework.LightPlatformTestCase
-import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase
+import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.jetbrains.jetCheck.Generator
 import org.jetbrains.jetCheck.ImperativeCommand
 import org.jetbrains.jetCheck.IntDistribution
@@ -21,7 +21,7 @@ import org.jetbrains.jetCheck.PropertyChecker
 /**
  * @author peter
  */
-class PsiEventConsistencyTest : LightPlatformCodeInsightFixtureTestCase() {
+class PsiEventConsistencyTest : BasePlatformTestCase() {
 
   fun `test replacing child after changing its subtree`() {
     WriteCommandAction.runWriteCommandAction(project) {
@@ -239,7 +239,7 @@ class PsiEventConsistencyTest : LightPlatformCodeInsightFixtureTestCase() {
   private val nodes = Generator.frequency(4, leaves, 2, composites)
 
   private fun withDummyHolder(e: TreeElement): TreeElement {
-    DummyHolder(LightPlatformTestCase.getPsiManager(), e, null, CharTableImpl())
+    DummyHolder(PsiManager.getInstance(project), e, null, CharTableImpl())
     CodeEditUtil.setNodeGenerated(e, true)
     return e
   }

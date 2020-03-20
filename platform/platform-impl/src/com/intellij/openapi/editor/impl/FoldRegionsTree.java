@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.impl;
 
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Attachment;
 import com.intellij.openapi.diagnostic.RuntimeExceptionWithAttachments;
 import com.intellij.openapi.editor.Document;
@@ -66,7 +67,7 @@ abstract class FoldRegionsTree {
       FoldRegionImpl lastCollapsedRegion;
 
       @Override
-      public boolean process(int offset, @NotNull FoldRegionImpl region, boolean atStart, @NotNull Collection<FoldRegionImpl> overlapping) {
+      public boolean process(int offset, @NotNull FoldRegionImpl region, boolean atStart, @NotNull Collection<? extends FoldRegionImpl> overlapping) {
         if (atStart) {
           if (lastCollapsedRegion == null || region.getEndOffset() > lastCollapsedRegion.getEndOffset()) {
             if (!region.isExpanded()) {
@@ -94,8 +95,7 @@ abstract class FoldRegionsTree {
     return updateCachedAndSortOffsets(visibleRegions, true);
   }
 
-  @NotNull
-  private static FoldRegion[] toFoldArray(@NotNull List<FoldRegion> topLevels) {
+  private static FoldRegion @NotNull [] toFoldArray(@NotNull List<FoldRegion> topLevels) {
     return topLevels.isEmpty() ? FoldRegion.EMPTY_ARRAY : topLevels.toArray(FoldRegion.EMPTY_ARRAY);
   }
 
@@ -177,7 +177,7 @@ abstract class FoldRegionsTree {
 
   private CachedData ensureAvailableData() {
     CachedData cachedData = myCachedData;
-    if (!cachedData.isAvailable()) {
+    if (!cachedData.isAvailable() && ApplicationManager.getApplication().isDispatchThread()) {
       return rebuild();
     }
     return cachedData;
@@ -198,16 +198,14 @@ abstract class FoldRegionsTree {
     return i < 0 ? null : cachedData.topLevelRegions[i];
   }
 
-  @Nullable
-  FoldRegion[] fetchVisible() {
+  FoldRegion @Nullable [] fetchVisible() {
     if (!isFoldingEnabled()) return null;
     CachedData cachedData = ensureAvailableData();
 
     return cachedData.visibleRegions;
   }
 
-  @Nullable
-  FoldRegion[] fetchTopLevel() {
+  FoldRegion @Nullable [] fetchTopLevel() {
     if (!isFoldingEnabled()) return null;
     CachedData cachedData = ensureAvailableData();
     return cachedData.topLevelRegions;
@@ -217,8 +215,7 @@ abstract class FoldRegionsTree {
     return region.getStartOffset() < offset && offset < region.getEndOffset();
   }
 
-  @NotNull
-  FoldRegion[] fetchCollapsedAt(int offset) {
+  FoldRegion @NotNull [] fetchCollapsedAt(int offset) {
     if (!isFoldingEnabled()) return FoldRegion.EMPTY_ARRAY;
     List<FoldRegion> allCollapsed = new ArrayList<>();
     myMarkerTree.processContaining(offset, region->{
@@ -239,8 +236,7 @@ abstract class FoldRegionsTree {
     });
   }
 
-  @NotNull
-  FoldRegion[] fetchAllRegions() {
+  FoldRegion @NotNull [] fetchAllRegions() {
     if (!isFoldingEnabled()) return FoldRegion.EMPTY_ARRAY;
     List<FoldRegion> regions = new ArrayList<>();
     myMarkerTree.processOverlappingWith(0, Integer.MAX_VALUE, new CommonProcessors.CollectProcessor<>(regions));
@@ -275,7 +271,8 @@ abstract class FoldRegionsTree {
     int idx = getLastTopLevelIndexBefore(cachedData, offset);
     if (idx == -1) return 0;
     cachedData.ensureInlayDataAvailable();
-    return cachedData.topFoldedInlaysHeight[idx];
+    int[] topFoldedInlaysHeight = cachedData.topFoldedInlaysHeight;
+    return topFoldedInlaysHeight == null ? 0 : topFoldedInlaysHeight[idx];
   }
 
   int getTotalHeightOfFoldedBlockInlays() {
@@ -283,7 +280,7 @@ abstract class FoldRegionsTree {
     CachedData cachedData = ensureAvailableData();
     cachedData.ensureInlayDataAvailable();
     int[] foldedInlaysHeight = cachedData.topFoldedInlaysHeight;
-    return foldedInlaysHeight.length == 0 ? 0 : foldedInlaysHeight[foldedInlaysHeight.length - 1];
+    return foldedInlaysHeight == null || foldedInlaysHeight.length == 0 ? 0 : foldedInlaysHeight[foldedInlaysHeight.length - 1];
   }
 
   int getLastTopLevelIndexBefore(int offset) {
@@ -336,11 +333,11 @@ abstract class FoldRegionsTree {
       topFoldedLines = null;
     }
 
-    private CachedData(@NotNull FoldRegion[] visibleRegions,
-                       @NotNull FoldRegion[] topLevelRegions,
-                       @NotNull int[] topStartOffsets,
-                       @NotNull int[] topEndOffsets,
-                       @NotNull int[] topFoldedLines) {
+    private CachedData(FoldRegion @NotNull [] visibleRegions,
+                       FoldRegion @NotNull [] topLevelRegions,
+                       int @NotNull [] topStartOffsets,
+                       int @NotNull [] topEndOffsets,
+                       int @NotNull [] topFoldedLines) {
       this.visibleRegions = visibleRegions;
       this.topLevelRegions = topLevelRegions;
       this.topStartOffsets = topStartOffsets;
@@ -354,7 +351,7 @@ abstract class FoldRegionsTree {
     }
 
     private void ensureInlayDataAvailable() {
-      if (topFoldedInlaysHeightValid) return;
+      if (topFoldedInlaysHeightValid || !ApplicationManager.getApplication().isDispatchThread()) return;
       topFoldedInlaysHeightValid = true;
       if (hasBlockInlays()) {
         int count = topLevelRegions.length;

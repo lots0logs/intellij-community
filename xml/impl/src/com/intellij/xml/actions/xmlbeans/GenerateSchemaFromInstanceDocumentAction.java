@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xml.actions.xmlbeans;
 
 import com.intellij.javaee.ExternalResourceManager;
@@ -28,7 +14,7 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.xml.XmlBundle;
 import org.apache.xmlbeans.impl.inst2xsd.Inst2Xsd;
 import org.jetbrains.annotations.NonNls;
@@ -36,6 +22,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
+import java.security.Permission;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -44,22 +31,24 @@ import java.util.Map;
 /**
  * @author Konstantin Bulenkov
  */
-public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
-  private static final Map<String, String> DESIGN_TYPES = new HashMap<>();
-  private static final Map<String, String> CONTENT_TYPES = new HashMap<>();
-  static {
-    DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.LOCAL_ELEMENTS_GLOBAL_COMPLEX_TYPES, "vb");
-    DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.LOCAL_ELEMENTS_TYPES, "ss");
-    DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.GLOBAL_ELEMENTS_LOCAL_TYPES, "rd");
-    CONTENT_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.SMART_TYPE, "smart");
-    CONTENT_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.STRING_TYPE, "string");
-  }
+final class GenerateSchemaFromInstanceDocumentAction extends AnAction {
+  private static class Holder {
+    private static final Map<String, String> DESIGN_TYPES = new HashMap<>();
+    static {
+      DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.getLocalElementsGlobalComplexTypes(), "vb");
+      DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.getLocalElementsTypes(), "ss");
+      DESIGN_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.getGlobalElementsLocalTypes(), "rd");
+    }
 
-  //private static final
-  
+    private static final Map<String, String> CONTENT_TYPES = new HashMap<>();
+    static {
+      CONTENT_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.SMART_TYPE, "smart");
+      CONTENT_TYPES.put(GenerateSchemaFromInstanceDocumentDialog.STRING_TYPE, "string");
+    }
+  }
   @Override
   public void update(@NotNull AnActionEvent e) {
-    final VirtualFile file = CommonDataKeys.VIRTUAL_FILE.getData(e.getDataContext());
+    final VirtualFile file = e.getData(CommonDataKeys.VIRTUAL_FILE);
     final boolean enabled = isAcceptableFile(file);
     e.getPresentation().setEnabled(enabled);
     if (ActionPlaces.isPopupPlace(e.getPlace())) {
@@ -70,7 +59,7 @@ public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
     final Project project = e.getProject();
-    final VirtualFile file = CommonDataKeys.VIRTUAL_FILE.getData(e.getDataContext());
+    final VirtualFile file = e.getData(CommonDataKeys.VIRTUAL_FILE);
 
     final GenerateSchemaFromInstanceDocumentDialog dialog = new GenerateSchemaFromInstanceDocumentDialog(project, file);
     dialog.setOkAction(() -> doAction(project, dialog));
@@ -97,10 +86,10 @@ public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
 
     @NonNls List<String> parameters = new LinkedList<>();
     parameters.add("-design");
-    parameters.add(DESIGN_TYPES.get(dialog.getDesignType()));
+    parameters.add(Holder.DESIGN_TYPES.get(dialog.getDesignType()));
 
     parameters.add("-simple-content-types");
-    parameters.add(CONTENT_TYPES.get(dialog.getSimpleContentType()));
+    parameters.add(Holder.CONTENT_TYPES.get(dialog.getSimpleContentType()));
 
     parameters.add("-enumerations");
     String enumLimit = dialog.getEnumerationsLimit();
@@ -133,7 +122,28 @@ public class GenerateSchemaFromInstanceDocumentAction extends AnAction {
         });
     }
 
-    Inst2Xsd.main(ArrayUtil.toStringArray(parameters));
+    // Inst2Xsd.main contains exit() calls, so we need to prevent this
+    SecurityManager old = System.getSecurityManager();
+    try {
+      System.setSecurityManager(new SecurityManager() {
+        @Override
+        public void checkExit(int status) {
+          throw new SecurityException();
+        }
+
+        @Override
+        public void checkPermission(Permission perm) {
+        }
+      });
+      Inst2Xsd.main(ArrayUtilRt.toStringArray(parameters));
+    }
+    catch (Exception e) {
+      Messages.showErrorDialog(project, XmlBundle.message("xml2xsd.generator.error.message"), XmlBundle.message("xml2xsd.generator.error"));
+      return;
+    }
+    finally {
+      System.setSecurityManager(old);
+    }
     if (expectedSchemaFile.exists()) {
       final boolean renamed = expectedSchemaFile.renameTo(xsd);
       if (! renamed) {

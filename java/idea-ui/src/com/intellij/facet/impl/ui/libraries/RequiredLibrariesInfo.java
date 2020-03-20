@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.facet.impl.ui.libraries;
 
@@ -8,7 +8,8 @@ import com.intellij.openapi.roots.libraries.LibraryUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
+import com.intellij.util.io.DigestUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,9 +18,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class RequiredLibrariesInfo {
   private final List<LibraryInfo> myLibraryInfos = new ArrayList<>();
 
@@ -33,7 +31,7 @@ public class RequiredLibrariesInfo {
   }
 
   @Nullable
-  public RequiredClassesNotFoundInfo checkLibraries(List<VirtualFile> libraryFiles) {
+  public RequiredClassesNotFoundInfo checkLibraries(List<? extends VirtualFile> libraryFiles) {
     List<LibraryInfo> infos = new ArrayList<>();
     List<String> classes = new ArrayList<>();
 
@@ -66,13 +64,13 @@ public class RequiredLibrariesInfo {
     if (infos.isEmpty()) {
       return null;
     }
-    return new RequiredClassesNotFoundInfo(ArrayUtil.toStringArray(classes), infos.toArray(LibraryInfo.EMPTY_ARRAY));
+    return new RequiredClassesNotFoundInfo(ArrayUtilRt.toStringArray(classes), infos.toArray(LibraryInfo.EMPTY_ARRAY));
   }
 
   @Nullable
   public static String md5(@NotNull VirtualFile file) {
     try {
-      MessageDigest md5 = MessageDigest.getInstance("MD5");
+      MessageDigest md5 = DigestUtil.md5();
       md5.update(file.contentsToByteArray());
       final byte[] digest = md5.digest();
 

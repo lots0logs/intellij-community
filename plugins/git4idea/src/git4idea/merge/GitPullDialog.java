@@ -11,7 +11,7 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.containers.ContainerUtil;
 import git4idea.GitBranch;
 import git4idea.GitRemoteBranch;
@@ -38,6 +38,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
+import static git4idea.commands.GitImpl.REBASE_CONFIG_PARAMS;
+
 public class GitPullDialog extends DialogWrapper {
 
   private static final Logger LOG = Logger.getInstance(GitPullDialog.class);
@@ -50,7 +52,7 @@ public class GitPullDialog extends DialogWrapper {
   private JCheckBox mySquashCommitCheckBox;
   private JCheckBox myNoFastForwardCheckBox;
   private JCheckBox myAddLogInformationCheckBox;
-  private JComboBox myRemote;
+  private JComboBox<GitRemote> myRemote;
   private JButton myGetBranchesButton;
   private ElementsChooser<String> myBranchChooser;
   private final Project myProject;
@@ -156,15 +158,12 @@ public class GitPullDialog extends DialogWrapper {
       setOKActionEnabled(false);
       return;
     }
-    setOKActionEnabled(myBranchChooser.getMarkedElements().size() != 0);
+    setOKActionEnabled(getSelectedBranches().size() != 0);
   }
 
   public GitLineHandler makeHandler(@NotNull List<String> urls) {
-    GitLineHandler h = new GitLineHandler(myProject, gitRoot(), GitCommand.PULL);
+    GitLineHandler h = new GitLineHandler(myProject, gitRoot(), GitCommand.PULL, REBASE_CONFIG_PARAMS);
     h.setUrls(urls);
-    if(GitVersionSpecialty.ABLE_TO_USE_PROGRESS_IN_REMOTE_COMMANDS.existsIn(myProject)) {
-      h.addParameters("--progress");
-    }
     h.addParameters("--no-stat");
     if (myNoCommitCheckBox.isSelected()) {
       h.addParameters("--no-commit");
@@ -181,7 +180,7 @@ public class GitPullDialog extends DialogWrapper {
       h.addParameters("--no-ff");
     }
     String strategy = (String)myStrategy.getSelectedItem();
-    if (!GitMergeUtil.DEFAULT_STRATEGY.equals(strategy)) {
+    if (!GitMergeUtil.getDefaultStrategy().equals(strategy)) {
       h.addParameters("--strategy", strategy);
     }
     h.addParameters("-v");
@@ -189,7 +188,7 @@ public class GitPullDialog extends DialogWrapper {
       h.addParameters("--progress");
     }
 
-    final List<String> markedBranches = myBranchChooser.getMarkedElements();
+    final List<String> markedBranches = getSelectedBranches();
     String remote = getRemote();
     LOG.assertTrue(remote != null, "Selected remote can't be null here.");
     // git pull origin master (remote branch name in the format local to that remote)
@@ -198,6 +197,11 @@ public class GitPullDialog extends DialogWrapper {
       h.addParameters(removeRemotePrefix(branch, remote));
     }
     return h;
+  }
+
+  @NotNull
+  public List<String> getSelectedBranches() {
+    return myBranchChooser.getMarkedElements();
   }
 
   @NotNull
@@ -267,7 +271,7 @@ public class GitPullDialog extends DialogWrapper {
   @Nullable
   private GitRepository getRepository() {
     VirtualFile root = gitRoot();
-    GitRepository repository = myRepositoryManager.getRepositoryForRoot(root);
+    GitRepository repository = myRepositoryManager.getRepositoryForRootQuick(root);
     if (repository == null) {
       LOG.error("Repository is null for " + root);
       return null;
@@ -283,30 +287,20 @@ public class GitPullDialog extends DialogWrapper {
    * @param defaultRemote a default remote
    * @return a list cell renderer for virtual files (it renders presentable URL
    */
-  public ListCellRendererWrapper<GitRemote> getGitRemoteListCellRenderer(final String defaultRemote) {
-    return new ListCellRendererWrapper<GitRemote>() {
-      @Override
-      public void customize(final JList list, final GitRemote remote, final int index, final boolean selected, final boolean hasFocus) {
-        final String text;
-        if (remote == null) {
-          text = GitBundle.getString("util.remote.renderer.none");
-        }
-        else if (".".equals(remote.getName())) {
-          text = GitBundle.getString("util.remote.renderer.self");
-        }
-        else {
-          String key;
-          if (defaultRemote != null && defaultRemote.equals(remote.getName())) {
-            key = "util.remote.renderer.default";
-          }
-          else {
-            key = "util.remote.renderer.normal";
-          }
-          text = GitBundle.message(key, remote.getName(), remote.getFirstUrl());
-        }
-        setText(text);
+  public ListCellRenderer<GitRemote> getGitRemoteListCellRenderer(final String defaultRemote) {
+    return SimpleListCellRenderer.create((label, remote, index) -> {
+      final String text;
+      if (remote == null) {
+        text = GitBundle.getString("util.remote.renderer.none");
       }
-    };
+      else if (".".equals(remote.getName())) {
+        text = GitBundle.getString("util.remote.renderer.self");
+      }
+      else {
+        text = String.format("<html><b>%s</b>(<i>%s</i>)</html>", remote.getName(), remote.getFirstUrl());
+      }
+      label.setText(text);
+    });
   }
 
   public VirtualFile gitRoot() {
@@ -341,5 +335,9 @@ public class GitPullDialog extends DialogWrapper {
   @Override
   public JComponent getPreferredFocusedComponent() {
     return myBranchChooser.getComponent();
+  }
+
+  public boolean isCommitAfterMerge() {
+    return !myNoCommitCheckBox.isSelected();
   }
 }

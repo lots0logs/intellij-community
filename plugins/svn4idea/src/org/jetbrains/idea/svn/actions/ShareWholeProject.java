@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.actions;
 
 import com.intellij.openapi.actionSystem.*;
@@ -18,7 +18,7 @@ import org.jetbrains.idea.svn.SvnStatusUtil;
 import org.jetbrains.idea.svn.SvnUtil;
 import org.jetbrains.idea.svn.SvnVcs;
 
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class ShareWholeProject extends AnAction implements DumbAware {
@@ -32,7 +32,7 @@ public class ShareWholeProject extends AnAction implements DumbAware {
 
     presentation.setVisible(checker.isVisible());
     if (checker.isEnabled()) {
-      presentation.setText(SvnBundle.message("action.share.whole.project.text"));
+      presentation.setText(SvnBundle.messagePointer("action.share.whole.project.text"));
     }
   }
 
@@ -147,7 +147,7 @@ public class ShareWholeProject extends AnAction implements DumbAware {
           VcsDirtyScopeManager.getInstance(project).dirDirtyRecursively(project.getBaseDir());
           if (checker.isHadNoMappings() && SvnUtil.seemsLikeVersionedDir(baseDir)) {
             final ProjectLevelVcsManager vcsManager = ProjectLevelVcsManager.getInstance(project);
-            vcsManager.setDirectoryMappings(Arrays.asList(new VcsDirectoryMapping("", SvnVcs.VCS_NAME)));
+            vcsManager.setDirectoryMappings(Collections.singletonList(VcsDirectoryMapping.createDefault(SvnVcs.VCS_NAME)));
           }
         }, ModalityState.NON_MODAL, project.getDisposed()));
       }

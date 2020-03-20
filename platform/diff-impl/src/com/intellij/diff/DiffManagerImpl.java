@@ -30,6 +30,7 @@ import com.intellij.diff.tools.fragmented.UnifiedDiffTool;
 import com.intellij.diff.tools.simple.SimpleDiffTool;
 import com.intellij.diff.util.DiffUtil;
 import com.intellij.openapi.Disposable;
+import com.intellij.openapi.diff.DiffBundle;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.WindowWrapper;
@@ -82,7 +83,7 @@ public class DiffManagerImpl extends DiffManagerEx {
     if (Registry.is("show.diff.as.editor.tab") &&
         project != null &&
         DiffUtil.getWindowMode(hints) == WindowWrapper.Mode.FRAME) {
-      ChainDiffVirtualFile diffFile = new ChainDiffVirtualFile(requests);
+      ChainDiffVirtualFile diffFile = new ChainDiffVirtualFile(requests, DiffBundle.message("label.default.diff.editor.tab.name"));
       FileEditorManager.getInstance(project).openFile(diffFile, true);
       return;
     }
@@ -133,6 +134,12 @@ public class DiffManagerImpl extends DiffManagerEx {
   @Override
   @CalledInAwt
   public void showMergeBuiltin(@Nullable Project project, @NotNull MergeRequest request) {
-    new MergeWindow(project, request).show();
+    new MergeWindow.ForRequest(project, request, DiffDialogHints.MODAL).show();
+  }
+
+  @Override
+  @CalledInAwt
+  public void showMergeBuiltin(@Nullable Project project, @NotNull MergeRequestProducer requestProducer, @NotNull DiffDialogHints hints) {
+    new MergeWindow.ForProducer(project, requestProducer, hints).show();
   }
 }

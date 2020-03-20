@@ -1,5 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
-
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes;
 
 import com.intellij.openapi.Disposable;
@@ -11,24 +10,29 @@ import com.intellij.openapi.vcs.FileStatus;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.Consumer;
 import com.intellij.util.ThreeState;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 public abstract class ChangeListManager implements ChangeListModification {
   @NotNull
   public static ChangeListManager getInstance(@NotNull Project project) {
-    return project.getComponent(ChangeListManager.class);
+    return project.getService(ChangeListManager.class);
   }
 
   public abstract void scheduleUpdate();
 
+  /**
+   * @deprecated use {@link #scheduleUpdate()}
+   */
   @Deprecated
-  public abstract void scheduleUpdate(boolean updateUnversionedFiles);
+  public void scheduleUpdate(boolean updateUnversionedFiles) {
+    scheduleUpdate();
+  }
 
 
   public abstract void invokeAfterUpdate(@NotNull Runnable afterUpdate,
@@ -36,6 +40,9 @@ public abstract class ChangeListManager implements ChangeListModification {
                                          @Nullable String title,
                                          @Nullable ModalityState state);
 
+  /**
+   * @deprecated use {@link #invokeAfterUpdate(Runnable, InvokeAfterUpdateMode, String, ModalityState)}
+   */
   @Deprecated
   public abstract void invokeAfterUpdate(@NotNull Runnable afterUpdate,
                                          @NotNull InvokeAfterUpdateMode mode,
@@ -85,7 +92,7 @@ public abstract class ChangeListManager implements ChangeListModification {
   public abstract LocalChangeList findChangeList(String name);
 
   @Nullable
-  public abstract LocalChangeList getChangeList(String id);
+  public abstract LocalChangeList getChangeList(@Nullable String id);
 
 
   @NotNull
@@ -130,8 +137,14 @@ public abstract class ChangeListManager implements ChangeListModification {
   public abstract AbstractVcs getVcsFor(@NotNull Change change);
 
 
+  /**
+   * Prefer using {@link ChangeListListener#TOPIC}
+   */
   public abstract void addChangeListListener(@NotNull ChangeListListener listener, @NotNull Disposable disposable);
 
+  /**
+   * Prefer using {@link ChangeListListener#TOPIC}
+   */
   public abstract void addChangeListListener(@NotNull ChangeListListener listener);
 
   public abstract void removeChangeListListener(@NotNull ChangeListListener listener);
@@ -149,43 +162,27 @@ public abstract class ChangeListManager implements ChangeListModification {
 
   public abstract void scheduleAutomaticEmptyChangeListDeletion(@NotNull LocalChangeList list, boolean silently);
 
-  @NotNull
-  public abstract Set<IgnoredFileDescriptor> getPotentiallyIgnoredFiles();
-
   /**
    * @deprecated All potential ignores should be contributed to VCS native ignores by corresponding {@link IgnoredFileProvider}.
-   * To get all potentially ignored files use {@link #getPotentiallyIgnoredFiles()} instead.
    */
   @Deprecated
-  @NotNull
-  public abstract IgnoredFileBean[] getFilesToIgnore();
+  public abstract IgnoredFileBean @NotNull [] getFilesToIgnore();
 
-  /**
-   * Check if the file ignored by matching any ignore defined by {@link IgnoredFileProvider}
-   * @param file file to check if ignored
-   * @return true if file ignored
-   * @deprecated Deprecated since idea level ignores will be substituted by corresponding VCS native ignore (e.g. .gitignore, .hgignore).
-   * Use {@link #isVcsIgnoredFile(VirtualFile)} to check if the file already ignored
-   * or use {@link #isPotentiallyIgnoredFile(VirtualFile)} to check if the file/directory should be always ignored (but may not ignored with specific VCS ignore yet).
-   */
-  @Deprecated
   public abstract boolean isIgnoredFile(@NotNull VirtualFile file);
 
-  public abstract boolean isPotentiallyIgnoredFile(@NotNull VirtualFile file);
-
-  public abstract boolean isVcsIgnoredFile(@NotNull VirtualFile file);
+  public abstract boolean isIgnoredFile(@NotNull FilePath file);
 
   /**
    * @deprecated All potential ignores should be contributed to VCS native ignores by corresponding {@link IgnoredFileProvider}.
    */
   @Deprecated
-  public abstract void setFilesToIgnore(@NotNull IgnoredFileBean... ignoredFiles);
+  public abstract void setFilesToIgnore(IgnoredFileBean @NotNull ... ignoredFiles);
 
   /**
    * @deprecated All potential ignores should be contributed to VCS native ignores by corresponding {@link IgnoredFileProvider}.
    */
   @Deprecated
-  public abstract void addFilesToIgnore(@NotNull IgnoredFileBean... ignoredFiles);
+  public abstract void addFilesToIgnore(IgnoredFileBean @NotNull ... ignoredFiles);
 
   /**
    * @deprecated All potential ignores should be contributed to VCS native ignores by corresponding {@link IgnoredFileProvider}.
@@ -210,8 +207,7 @@ public abstract class ChangeListManager implements ChangeListModification {
   @Nullable
   public abstract String isFreezed();
 
-  public abstract boolean isFreezedWithNotification(@Nullable String modalTitle);
-
+  public abstract boolean isFreezedWithNotification(@Nls @Nullable String modalTitle);
 
   @Deprecated // used in TeamCity
   public abstract void reopenFiles(@NotNull List<? extends FilePath> paths);

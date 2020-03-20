@@ -19,11 +19,10 @@ import com.intellij.codeInspection.dataFlow.ContractValue;
 import com.intellij.codeInspection.dataFlow.JavaMethodContractUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.tree.IElementType;
-import com.intellij.psi.util.PropertyUtil;
-import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.psi.util.PsiUtil;
+import com.intellij.psi.util.*;
+import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.util.SmartList;
-import gnu.trove.THashSet;
+import com.intellij.util.containers.ContainerUtil;
 import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -34,7 +33,7 @@ import java.util.function.Predicate;
 import static com.intellij.util.ObjectUtils.tryCast;
 
 public class SideEffectChecker {
-  private static final Set<String> ourSideEffectFreeClasses = new THashSet<>(Arrays.asList(
+  private static final Set<String> ourSideEffectFreeClasses = ContainerUtil.set(
     Object.class.getName(),
     Short.class.getName(),
     Character.class.getName(),
@@ -59,7 +58,7 @@ public class SideEffectChecker {
     TreeMap.class.getName(),
     TreeSet.class.getName(),
     Vector.class.getName(),
-    WeakHashMap.class.getName()));
+    WeakHashMap.class.getName());
 
   private SideEffectChecker() {
   }
@@ -124,8 +123,13 @@ public class SideEffectChecker {
   }
 
   public static List<PsiExpression> extractSideEffectExpressions(@NotNull PsiExpression element) {
+    return extractSideEffectExpressions(element, e -> false);
+  }
+
+  public static List<PsiExpression> extractSideEffectExpressions(@NotNull PsiExpression element,
+                                                                 @NotNull Predicate<? super PsiElement> ignoreElement) {
     List<PsiElement> list = new SmartList<>();
-    element.accept(new SideEffectsVisitor(list, element));
+    element.accept(new SideEffectsVisitor(list, element, ignoreElement));
     return StreamEx.of(list).select(PsiExpression.class).toList();
   }
 
@@ -171,7 +175,7 @@ public class SideEffectChecker {
       super.visitMethodCallExpression(expression);
     }
 
-    protected boolean isPure(PsiMethod method) {
+    protected static boolean isPure(PsiMethod method) {
       if (method == null) return false;
       PsiField field = PropertyUtil.getFieldOfGetter(method);
       if (field != null) return !field.hasModifierProperty(PsiModifier.VOLATILE);
@@ -180,7 +184,7 @@ public class SideEffectChecker {
 
     @Override
     public void visitNewExpression(@NotNull PsiNewExpression expression) {
-      if (!ExpressionUtils.isArrayCreationExpression(expression) && !isSideEffectFreeConstructor(expression)) {
+      if (!expression.isArrayCreation() && !isSideEffectFreeConstructor(expression)) {
         if (addSideEffect(expression)) return;
       }
       super.visitNewExpression(expression);
@@ -196,14 +200,25 @@ public class SideEffectChecker {
     }
 
     @Override
+    public void visitInstanceOfExpression(PsiInstanceOfExpression expression) {
+      List<PsiPatternVariable> variables = JavaPsiPatternUtil.getExposedPatternVariables(expression);
+      if (!variables.isEmpty() &&
+          !PsiTreeUtil.isAncestor(myStartElement, variables.get(0).getDeclarationScope(), false)) {
+        if (addSideEffect(expression)) return;
+      }
+      super.visitInstanceOfExpression(expression);
+    }
+
+    @Override
     public void visitVariable(PsiVariable variable) {
+      if (variable instanceof PsiPatternVariable) return;
       if (addSideEffect(variable)) return;
       super.visitVariable(variable);
     }
 
     @Override
     public void visitBreakStatement(PsiBreakStatement statement) {
-      PsiElement exitedStatement = statement.findExitedElement();
+      PsiStatement exitedStatement = statement.findExitedStatement();
       if (exitedStatement == null || !PsiTreeUtil.isAncestor(myStartElement, exitedStatement, false)) {
         if (addSideEffect(statement)) return;
       }
@@ -225,7 +240,9 @@ public class SideEffectChecker {
 
     @Override
     public void visitReturnStatement(PsiReturnStatement statement) {
-      if (addSideEffect(statement)) return;
+      if (!(myStartElement.getParent() instanceof PsiParameterListOwner)) {
+        if (addSideEffect(statement)) return;
+      }
       super.visitReturnStatement(statement);
     }
 
@@ -255,6 +272,11 @@ public class SideEffectChecker {
   public static boolean mayHaveExceptionalSideEffect(PsiMethod method) {
     String name = method.getName();
     if (name.startsWith("assert") || name.startsWith("check") || name.startsWith("require")) return true;
+    PsiClass aClass = method.getContainingClass();
+    if (InheritanceUtil.isInheritor(aClass, "org.assertj.core.api.Descriptable")) {
+      // See com.intellij.codeInsight.DefaultInferredAnnotationProvider#getHardcodedContractAnnotation
+      return true;
+    }
     return JavaMethodContractUtil.getMethodCallContracts(method, null).stream()
                                  .filter(mc -> mc.getConditions().stream().noneMatch(ContractValue::isBoundCheckingCondition))
                                  .anyMatch(mc -> mc.getReturnValue().isFail());

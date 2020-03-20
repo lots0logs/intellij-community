@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.gradle.service;
 
 import com.intellij.openapi.components.ServiceManager;
@@ -35,12 +35,13 @@ public class GradleBuildClasspathManager {
   private final AtomicReference<Map<String/*module path*/, List<VirtualFile> /*module build classpath*/>> myClasspathMap
     = new AtomicReference<>(new HashMap<>());
 
+  @NotNull
   private final Map<String, PackageDirectoryCache> myClassFinderCache = ConcurrentFactoryMap
     .createMap(path -> PackageDirectoryCache.createCache(getModuleClasspathEntries(path)));
 
   public GradleBuildClasspathManager(@NotNull Project project) {
     myProject = project;
-    allFilesCache = ContainerUtil.newArrayList();
+    allFilesCache = new ArrayList<>();
   }
 
   @NotNull
@@ -53,13 +54,15 @@ public class GradleBuildClasspathManager {
     assert manager != null;
     AbstractExternalSystemLocalSettings<?> localSettings = manager.getLocalSettingsProvider().fun(myProject);
 
-    Map<String/*module path*/, List<VirtualFile> /*module build classpath*/> map = ContainerUtil.newHashMap();
+    Map<String/*module path*/, List<VirtualFile> /*module build classpath*/> map = new HashMap<>();
 
     final JarFileSystem jarFileSystem = JarFileSystem.getInstance();
+    final Map<String, VirtualFile> localVFCache = new HashMap<>();
+
     for (final ExternalProjectBuildClasspathPojo projectBuildClasspathPojo : localSettings.getProjectBuildClasspath().values()) {
-      final List<VirtualFile> projectBuildClasspath = ContainerUtil.newArrayList();
+      final List<VirtualFile> projectBuildClasspath = new ArrayList<>();
       for (String path : projectBuildClasspathPojo.getProjectBuildClasspath()) {
-        final VirtualFile virtualFile = ExternalSystemUtil.findLocalFileByPath(path);
+        final VirtualFile virtualFile = localVFCache.computeIfAbsent(path, it -> ExternalSystemUtil.findLocalFileByPath(it)) ;
         ContainerUtil.addIfNotNull(projectBuildClasspath,
                                    virtualFile == null || virtualFile.isDirectory()
                                    ? virtualFile
@@ -67,9 +70,9 @@ public class GradleBuildClasspathManager {
       }
 
       for (final ExternalModuleBuildClasspathPojo moduleBuildClasspathPojo : projectBuildClasspathPojo.getModulesBuildClasspath().values()) {
-        final List<VirtualFile> moduleBuildClasspath = ContainerUtil.newArrayList(projectBuildClasspath);
+        final List<VirtualFile> moduleBuildClasspath = new ArrayList<>(projectBuildClasspath);
             for (String path : moduleBuildClasspathPojo.getEntries()) {
-              final VirtualFile virtualFile = ExternalSystemUtil.findLocalFileByPath(path);
+              final VirtualFile virtualFile = localVFCache.computeIfAbsent(path, it -> ExternalSystemUtil.findLocalFileByPath(it)) ;
               ContainerUtil.addIfNotNull(moduleBuildClasspath,
                                          virtualFile == null || virtualFile.isDirectory()
                                          ? virtualFile
@@ -86,10 +89,11 @@ public class GradleBuildClasspathManager {
     for (List<VirtualFile> virtualFiles : myClasspathMap.get().values()) {
       set.addAll(virtualFiles);
     }
-    allFilesCache = ContainerUtil.newArrayList(set);
+    allFilesCache = new ArrayList<>(set);
     myClassFinderCache.clear();
   }
 
+  @NotNull
   public Map<String, PackageDirectoryCache> getClassFinderCache() {
     return myClassFinderCache;
   }

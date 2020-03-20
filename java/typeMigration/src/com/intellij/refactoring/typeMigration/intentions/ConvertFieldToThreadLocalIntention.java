@@ -1,3 +1,4 @@
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.typeMigration.intentions;
 
 import com.intellij.codeInsight.FileModificationService;
@@ -13,12 +14,13 @@ import com.intellij.psi.impl.AllowedApiFilterExtension;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
+import com.intellij.refactoring.typeMigration.TypeMigrationBundle;
 import com.intellij.refactoring.typeMigration.TypeMigrationVariableTypeFixProvider;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class ConvertFieldToThreadLocalIntention extends PsiElementBaseIntentionAction implements LowPriorityAction {
@@ -33,7 +35,7 @@ public class ConvertFieldToThreadLocalIntention extends PsiElementBaseIntentionA
   @NotNull
   @Override
   public String getFamilyName() {
-    return "Convert to ThreadLocal";
+    return TypeMigrationBundle.message("convert.to.threadlocal.family.name");
   }
 
   @Override
@@ -79,7 +81,7 @@ public class ConvertFieldToThreadLocalIntention extends PsiElementBaseIntentionA
     if (threadLocalClass == null) {//show warning
       return null;
     }
-    final Map<PsiTypeParameter, PsiType> substitutor = ContainerUtil.newHashMap();
+    final Map<PsiTypeParameter, PsiType> substitutor = new HashMap<>();
     final PsiTypeParameter[] typeParameters = threadLocalClass.getTypeParameters();
     if (typeParameters.length == 1) {
       PsiType type = fromType;

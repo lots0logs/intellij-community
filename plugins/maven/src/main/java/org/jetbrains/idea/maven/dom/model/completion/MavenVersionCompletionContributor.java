@@ -15,100 +15,95 @@
  */
 package org.jetbrains.idea.maven.dom.model.completion;
 
-import com.google.common.collect.Sets;
-import com.intellij.codeInsight.completion.*;
-import com.intellij.codeInsight.completion.impl.NegatingComparable;
-import com.intellij.codeInsight.lookup.LookupElement;
+import com.intellij.codeInsight.completion.CompletionParameters;
+import com.intellij.codeInsight.completion.CompletionResultSet;
+import com.intellij.codeInsight.completion.CompletionService;
 import com.intellij.codeInsight.lookup.LookupElementBuilder;
-import com.intellij.codeInsight.lookup.LookupElementWeigher;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.xml.XmlTag;
-import com.intellij.psi.xml.XmlText;
-import com.intellij.util.xml.DomElement;
-import com.intellij.util.xml.DomManager;
-import com.intellij.util.xml.GenericDomValue;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.idea.maven.dom.MavenVersionComparable;
-import org.jetbrains.idea.maven.dom.converters.MavenArtifactCoordinatesVersionConverter;
-import org.jetbrains.idea.maven.dom.model.MavenDomArtifactCoordinates;
-import org.jetbrains.idea.maven.dom.model.MavenDomPlugin;
-import org.jetbrains.idea.maven.indices.MavenProjectIndicesManager;
-import org.jetbrains.idea.maven.utils.MavenArtifactUtil;
+import org.jetbrains.concurrency.Promise;
+import org.jetbrains.idea.maven.dom.converters.MavenDependencyCompletionUtil;
+import org.jetbrains.idea.maven.dom.model.MavenDomShortArtifactCoordinates;
+import org.jetbrains.idea.maven.onlinecompletion.model.MavenRepositoryArtifactInfo;
+import org.jetbrains.idea.maven.server.MavenServerManager;
 import org.jetbrains.idea.maven.utils.library.RepositoryLibraryDescription;
+import org.jetbrains.idea.reposearch.DependencySearchService;
+import org.jetbrains.idea.reposearch.RepositoryArtifactData;
+import org.jetbrains.idea.reposearch.SearchParameters;
 
-import java.util.Set;
+import java.util.function.Consumer;
 
-/**
- * @author Sergey Evdokimov
- */
-public class MavenVersionCompletionContributor extends CompletionContributor {
+public class MavenVersionCompletionContributor extends MavenCoordinateCompletionContributor {
+  public MavenVersionCompletionContributor() {
+    super("version");
+  }
 
   @Override
-  public void fillCompletionVariants(@NotNull CompletionParameters parameters, @NotNull CompletionResultSet result) {
-    if (parameters.getCompletionType() != CompletionType.BASIC) return;
+  protected Promise<Integer> find(@NotNull DependencySearchService service,
+                                  @NotNull MavenDomShortArtifactCoordinates coordinates,
+                                  @NotNull CompletionParameters parameters,
+                                  @NotNull Consumer<RepositoryArtifactData> consumer) {
 
-    PsiElement element = parameters.getPosition();
+    SearchParameters searchParameters = createSearchParameters(parameters);
+    String groupId = trimDummy(coordinates.getGroupId().getStringValue());
+    String artifactId = trimDummy(coordinates.getArtifactId().getStringValue());
 
-    PsiElement xmlText = element.getParent();
-    if (!(xmlText instanceof XmlText)) return;
+    if (MavenAbstractPluginExtensionCompletionContributor.isPluginOrExtension(coordinates) && StringUtil.isEmpty(groupId)) {
+      return MavenAbstractPluginExtensionCompletionContributor
+        .findPluginByArtifactId(service, artifactId, searchParameters, new RepositoryArtifactDataConsumer(artifactId, groupId, consumer));
+    }
 
-    PsiElement tagElement = xmlText.getParent();
 
-    if (!(tagElement instanceof XmlTag)) return;
+    return service.suggestPrefix(groupId, artifactId, searchParameters, new RepositoryArtifactDataConsumer(artifactId, groupId, consumer));
+  }
 
-    XmlTag tag = (XmlTag)tagElement;
-
-    Project project = element.getProject();
-
-    DomElement domElement = DomManager.getDomManager(project).getDomElement(tag);
-
-    if (!(domElement instanceof GenericDomValue)) return;
-
-    DomElement parent = domElement.getParent();
-
-    if (parent instanceof MavenDomArtifactCoordinates
-        && ((GenericDomValue)domElement).getConverter() instanceof MavenArtifactCoordinatesVersionConverter) {
-      MavenDomArtifactCoordinates coordinates = (MavenDomArtifactCoordinates)parent;
-
-      String groupId = coordinates.getGroupId().getStringValue();
-      String artifactId = coordinates.getArtifactId().getStringValue();
-
-      if (StringUtil.isEmptyOrSpaces(artifactId)) return;
-
-      CompletionResultSet newResultSet = result.withRelevanceSorter(CompletionService.getCompletionService().emptySorter().weigh(
-        new LookupElementWeigher("mavenVersionWeigher") {
-          @Nullable
-          @Override
-          public Comparable weigh(@NotNull LookupElement element) {
-            return new NegatingComparable(new MavenVersionComparable(element.getLookupString()));
-          }
-        }));
-
-      MavenProjectIndicesManager indicesManager = MavenProjectIndicesManager.getInstance(project);
-
-      Set<String> versions;
-
-      if (StringUtil.isEmptyOrSpaces(groupId)) {
-        if (!(coordinates instanceof MavenDomPlugin)) return;
-
-        versions = indicesManager.getVersions(MavenArtifactUtil.DEFAULT_GROUPS[0], artifactId);
-        for (int i = 0; i < MavenArtifactUtil.DEFAULT_GROUPS.length; i++) {
-          versions = Sets.union(versions, indicesManager.getVersions(MavenArtifactUtil.DEFAULT_GROUPS[i], artifactId));
-        }
-      }
-      else {
-        versions = indicesManager.getVersions(groupId, artifactId);
-      }
-
-      for (String version : versions) {
-        newResultSet.addElement(LookupElementBuilder.create(version));
-      }
-      newResultSet.addElement(LookupElementBuilder.create(RepositoryLibraryDescription.ReleaseVersionId));
-      newResultSet.addElement(LookupElementBuilder.create(RepositoryLibraryDescription.LatestVersionId));
+  @Override
+  protected void fillAfter(CompletionResultSet result) {
+    if (MavenServerManager.getInstance().isUseMaven2()) {
+      result.addElement(LookupElementBuilder.create(RepositoryLibraryDescription.ReleaseVersionId).withStrikeoutness(true));
+      result.addElement(LookupElementBuilder.create(RepositoryLibraryDescription.LatestVersionId).withStrikeoutness(true));
     }
   }
 
+  @Override
+  protected void fillResult(@NotNull MavenDomShortArtifactCoordinates coordinates,
+                            @NotNull CompletionResultSet result,
+                            @NotNull MavenRepositoryArtifactInfo item) {
+    result.addAllElements(ContainerUtil.map(item.getItems(), dci -> MavenDependencyCompletionUtil.lookupElement(dci, dci.getVersion())));
+  }
+
+  @Override
+  protected boolean validate(String groupId, String artifactId) {
+    return !StringUtil.isEmptyOrSpaces(artifactId);
+  }
+
+  @NotNull
+  @Override
+  protected CompletionResultSet amendResultSet(@NotNull CompletionResultSet result) {
+    return result.withRelevanceSorter(CompletionService.getCompletionService().emptySorter().weigh(
+      new MavenVersionNegatingWeigher()));
+  }
+
+  private static class RepositoryArtifactDataConsumer implements Consumer<RepositoryArtifactData> {
+    private final String myArtifactId;
+    private final String myGroupId;
+    private @NotNull final Consumer<RepositoryArtifactData> myConsumer;
+
+    public RepositoryArtifactDataConsumer(String artifactId, String groupId, @NotNull Consumer<RepositoryArtifactData> consumer) {
+      myArtifactId = artifactId;
+      myGroupId = groupId;
+      myConsumer = consumer;
+    }
+
+    @Override
+    public void accept(RepositoryArtifactData rad) {
+      if (rad instanceof MavenRepositoryArtifactInfo) {
+        MavenRepositoryArtifactInfo mrai = (MavenRepositoryArtifactInfo)rad;
+        if (StringUtil.equals(mrai.getArtifactId(), myArtifactId) && (StringUtil.isEmpty(myGroupId) || StringUtil.equals(mrai.getGroupId(), myGroupId))) {
+          myConsumer.accept(mrai);
+        }
+      }
+    }
+  }
 }

@@ -1,23 +1,10 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.daemon;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Computable;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -26,7 +13,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HighlightDisplayKey {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.daemon.HighlightDisplayKey");
+  private static final Logger LOG = Logger.getInstance(HighlightDisplayKey.class);
 
   private static final Map<String,HighlightDisplayKey> ourNameToKeyMap = new ConcurrentHashMap<>();
   private static final Map<String,HighlightDisplayKey> ourIdToKeyMap = new ConcurrentHashMap<>();
@@ -49,32 +36,44 @@ public class HighlightDisplayKey {
     return null;
   }
 
+
+  /**
+   * @deprecated Use {@link #register(String, String, String)} instead
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.2")
   @Nullable
   public static HighlightDisplayKey register(@NonNls @NotNull final String name) {
     final HighlightDisplayKey key = find(name);
     if (key != null) {
-      LOG.error("Key with name \'" + name + "\' already registered with display name: " + getDisplayNameByKey(key));
+      LOG.error("Key with name '" + name + "' already registered with display name: " + getDisplayNameByKey(key));
       return null;
     }
-    return new HighlightDisplayKey(name);
+    return new HighlightDisplayKey(name, name);
   }
 
   /**
-   * @see #register(String, com.intellij.openapi.util.Computable)
+   * @deprecated Use {@link #register(String, String, String)} instead
    */
+  @Deprecated
   @Nullable
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.2")
   public static HighlightDisplayKey register(@NonNls @NotNull final String name, @NotNull final String displayName) {
     return register(name, displayName, name);
   }
 
+  /**
+   * @deprecated Use {@link #register(String, Computable, String)} instead
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.2")
   @Nullable
   public static HighlightDisplayKey register(@NonNls @NotNull final String name, @NotNull Computable<String> displayName) {
     return register(name, displayName, name);
   }
 
-
   /**
-   * @see #register(String, com.intellij.openapi.util.Computable, String)
+   * @see #register(String, Computable, String)
    */
   @Nullable
   public static HighlightDisplayKey register(@NonNls @NotNull final String name,
@@ -89,7 +88,7 @@ public class HighlightDisplayKey {
                                              @NotNull @NonNls final String id) {
     final HighlightDisplayKey key = find(name);
     if (key != null) {
-      LOG.error("Key with name \'" + name + "\' already registered with display name: " + getDisplayNameByKey(key));
+      LOG.error("Key with name '" + name + "' already registered with display name: " + getDisplayNameByKey(key));
       return null;
     }
     HighlightDisplayKey highlightDisplayKey = new HighlightDisplayKey(name, id);
@@ -107,6 +106,15 @@ public class HighlightDisplayKey {
       ourKeyToAlternativeIDMap.put(key, alternativeID);
     }
     return key;
+  }
+
+  public static void unregister(@NotNull String shortName) {
+    HighlightDisplayKey key = ourNameToKeyMap.remove(shortName);
+    if (key != null) {
+      ourIdToKeyMap.remove(key.myID);
+      ourKeyToAlternativeIDMap.remove(key);
+      ourKeyToDisplayNameMap.remove(key);
+    }
   }
 
   @NotNull
@@ -141,10 +149,6 @@ public class HighlightDisplayKey {
     return ourKeyToAlternativeIDMap.get(key);
   }
 
-
-  private HighlightDisplayKey(@NonNls @NotNull final String name) {
-    this(name, name);
-  }
 
   public HighlightDisplayKey(@NonNls @NotNull final String name, @NonNls @NotNull final String ID) {
     myName = name;

@@ -23,7 +23,7 @@ import java.util.Collections;
  * @author yole
  */
 public class DraggedComponentList implements Transferable, ComponentDragObject {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.DraggedComponentList");
+  private static final Logger LOG = Logger.getInstance(DraggedComponentList.class);
 
   private static DataFlavor ourDataFlavor;
 
@@ -46,7 +46,7 @@ public class DraggedComponentList implements Transferable, ComponentDragObject {
   private int myDragDeltaY = 0;
   private boolean myHasDragDelta = false;
 
-  private DraggedComponentList(Collection<RadComponent> selection) {
+  private DraggedComponentList(Collection<? extends RadComponent> selection) {
     mySelection = new ArrayList<>(selection);
     fillOriginalConstraints();
   }

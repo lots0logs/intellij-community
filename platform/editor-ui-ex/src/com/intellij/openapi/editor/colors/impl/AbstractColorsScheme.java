@@ -12,16 +12,15 @@ import com.intellij.openapi.editor.colors.*;
 import com.intellij.openapi.editor.colors.ex.DefaultColorSchemesManager;
 import com.intellij.openapi.editor.markup.EffectType;
 import com.intellij.openapi.editor.markup.TextAttributes;
-import com.intellij.openapi.options.FontSize;
 import com.intellij.openapi.options.SchemeState;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.Ref;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.ColorUtil;
 import com.intellij.util.JdomKt;
 import com.intellij.util.ObjectUtils;
 import com.intellij.util.PlatformUtils;
-import com.intellij.util.containers.ContainerUtilRt;
 import com.intellij.util.containers.JBIterable;
 import gnu.trove.THashMap;
 import org.jdom.Element;
@@ -44,12 +43,7 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
 
   public static final int CURR_VERSION = 142;
 
-  // todo: unify with UIUtil.DEF_SYSTEM_FONT_SIZE
-  private static final FontSize DEFAULT_FONT_SIZE = FontSize.SMALL;
-
   protected EditorColorsScheme myParentScheme;
-
-  protected FontSize myQuickDocFontSize = DEFAULT_FONT_SIZE;
 
   @NotNull private FontPreferences                 myFontPreferences
     = new DelegatingFontPreferences(() -> AppEditorFontOptions.getInstance().getFontPreferences());
@@ -65,7 +59,7 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
   // version influences XML format and triggers migration
   private int myVersion = CURR_VERSION;
 
-  Map<ColorKey, Color> myColorsMap = ContainerUtilRt.newHashMap();
+  Map<ColorKey, Color> myColorsMap = new HashMap<>();
   Map<String, TextAttributes> myAttributesMap = new THashMap<>();
 
   @NonNls private static final String EDITOR_FONT       = "font";
@@ -91,7 +85,6 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
   @NonNls private static final String CONSOLE_FONT_SIZE              = "CONSOLE_FONT_SIZE";
   @NonNls private static final String EDITOR_LIGATURES               = "EDITOR_LIGATURES";
   @NonNls private static final String CONSOLE_LIGATURES              = "CONSOLE_LIGATURES";
-  @NonNls private static final String EDITOR_QUICK_JAVADOC_FONT_SIZE = "EDITOR_QUICK_DOC_FONT_SIZE";
 
 
   //region Meta info-related fields
@@ -146,6 +139,13 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
     return mySchemeName;
   }
 
+  @NotNull
+  @Override
+  public String getDisplayName() {
+    String name = StringUtil.trimStart(getName(), EDITABLE_COPY_PREFIX);
+    return DEFAULT_SCHEME_NAME.equals(name) ? DEFAULT_SCHEME_ALIAS : name;
+  }
+
   @Override
   public void setFont(EditorFontType key, Font font) {
   }
@@ -154,7 +154,6 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
   public abstract Object clone();
 
   public void copyTo(AbstractColorsScheme newScheme) {
-    newScheme.myQuickDocFontSize = myQuickDocFontSize;
     if (myConsoleFontPreferences instanceof DelegatingFontPreferences) {
       newScheme.setUseEditorFontPreferencesInConsole();
     }
@@ -217,14 +216,6 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
   }
 
   @Override
-  public void setQuickDocFontSize(@NotNull FontSize fontSize) {
-    if (myQuickDocFontSize != fontSize) {
-      myQuickDocFontSize = fontSize;
-      myIsSaveNeeded = true;
-    }
-  }
-
-  @Override
   public void setLineSpacing(float lineSpacing) {
     ensureEditableFontPreferences().setLineSpacing(lineSpacing);
   }
@@ -260,12 +251,6 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
   @Override
   public int getEditorFontSize() {
     return myFontPreferences.getSize(myFontPreferences.getFontFamily());
-  }
-
-  @NotNull
-  @Override
-  public FontSize getQuickDocFontSize() {
-    return myQuickDocFontSize;
   }
 
   @Override
@@ -463,11 +448,6 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
         if (value != null) setConsoleFontName(value);
         break;
       }
-      case EDITOR_QUICK_JAVADOC_FONT_SIZE: {
-        FontSize value = myValueReader.read(FontSize.class, childNode);
-        if (value != null) myQuickDocFontSize = value;
-        break;
-      }
       case EDITOR_LIGATURES: {
         Boolean value = myValueReader.read(Boolean.class, childNode);
         if (value != null) ensureEditableFontPreferences().setUseLigatures(value);
@@ -576,10 +556,6 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
       if ((myFontPreferences instanceof DelegatingFontPreferences) || getConsoleLineSpacing() != getLineSpacing()) {
         JdomKt.addOptionTag(parentNode, CONSOLE_LINE_SPACING, Float.toString(getConsoleLineSpacing()));
       }
-    }
-
-    if (DEFAULT_FONT_SIZE != getQuickDocFontSize()) {
-      JdomKt.addOptionTag(parentNode, EDITOR_QUICK_JAVADOC_FONT_SIZE, getQuickDocFontSize().toString());
     }
 
     Element colorElements = new Element(COLORS_ELEMENT);
@@ -747,7 +723,12 @@ public abstract class AbstractColorsScheme extends EditorFontCacheImpl implement
       }
     }
 
-    String rgb = color == NULL_COLOR_MARKER ? "" : Integer.toString(color.getRGB() & 0xFFFFFF, 16);
+    String rgb = "";
+    if (color != NULL_COLOR_MARKER) {
+      rgb = Integer.toString(0xFFFFFF & color.getRGB(), 16);
+      int alpha = 0xFF & color.getAlpha();
+      if (alpha != 0xFF) rgb += Integer.toString(alpha, 16);
+    }
     JdomKt.addOptionTag(colorElements, key.getExternalName(), rgb);
   }
 

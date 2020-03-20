@@ -23,11 +23,12 @@ import com.intellij.codeInspection.ProblemDescriptor;
 import com.intellij.openapi.compiler.CompileContext;
 import com.intellij.openapi.compiler.CompileScope;
 import com.intellij.openapi.compiler.CompilerMessageCategory;
-import com.intellij.openapi.extensions.ExtensionPointName;
+import com.intellij.openapi.extensions.ProjectExtensionPointName;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -39,18 +40,16 @@ import java.util.Map;
  * @author peter
  */
 public abstract class InspectionValidator {
-  public static final ExtensionPointName<InspectionValidator> EP_NAME =
-    ExtensionPointName.create("com.intellij.compiler.inspectionValidator");
+  public static final ProjectExtensionPointName<InspectionValidator> EP_NAME = new ProjectExtensionPointName<>("com.intellij.compiler.inspectionValidator");
   private final String myDescription;
   private final String myProgressIndicatorText;
 
-  @Nullable
-  private final Class<? extends LocalInspectionTool>[] myInspectionToolClasses;
+  private final Class<? extends LocalInspectionTool> @Nullable [] myInspectionToolClasses;
 
   @Nullable
   private final InspectionToolProvider myInspectionToolProvider;
 
-  protected InspectionValidator(@NotNull final String description, @NotNull final String progressIndicatorText) {
+  protected InspectionValidator(@NotNull @Nls String description, @NotNull @Nls String progressIndicatorText) {
     myDescription = description;
     myProgressIndicatorText = progressIndicatorText;
     myInspectionToolClasses = null;
@@ -62,8 +61,8 @@ public abstract class InspectionValidator {
    */
   @Deprecated
   @SafeVarargs
-  protected InspectionValidator(@NotNull final String description,
-                                @NotNull final String progressIndicatorText,
+  protected InspectionValidator(@NotNull @Nls String description,
+                                @NotNull @Nls String progressIndicatorText,
                                 final Class<? extends LocalInspectionTool>... inspectionToolClasses) {
     myDescription = description;
     myProgressIndicatorText = progressIndicatorText;
@@ -71,8 +70,8 @@ public abstract class InspectionValidator {
     myInspectionToolProvider = null;
   }
 
-  protected InspectionValidator(@NotNull final String description,
-                                @NotNull final String progressIndicatorText,
+  protected InspectionValidator(@NotNull @Nls String description,
+                                @NotNull @Nls String progressIndicatorText,
                                 final InspectionToolProvider provider) {
     myDescription = description;
     myProgressIndicatorText = progressIndicatorText;
@@ -80,8 +79,8 @@ public abstract class InspectionValidator {
     myInspectionToolProvider = provider;
   }
 
-  protected InspectionValidator(@NotNull final String description,
-                                @NotNull final String progressIndicatorText,
+  protected InspectionValidator(@NotNull @Nls String description,
+                                @NotNull @Nls String progressIndicatorText,
                                 final Class<? extends InspectionToolProvider> providerClass)
     throws IllegalAccessException, InstantiationException {
     this(description, progressIndicatorText, providerClass.newInstance());
@@ -98,8 +97,7 @@ public abstract class InspectionValidator {
   }
 
   @SuppressWarnings("unchecked")
-  @NotNull
-  public Class<? extends LocalInspectionTool>[] getInspectionToolClasses(final CompileContext context) {
+  public Class<? extends LocalInspectionTool> @NotNull [] getInspectionToolClasses(final CompileContext context) {
     if (myInspectionToolClasses != null) {
       return myInspectionToolClasses;
     }

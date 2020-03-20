@@ -1,8 +1,8 @@
-// Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.capitalization;
 
-import com.intellij.codeInsight.AnnotationUtil;
 import com.intellij.codeInspection.*;
+import com.intellij.java.i18n.JavaI18nBundle;
 import com.intellij.lang.properties.psi.Property;
 import com.intellij.lang.properties.references.PropertyReference;
 import com.intellij.openapi.project.Project;
@@ -12,12 +12,20 @@ import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PropertyUtilBase;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.util.IncorrectOperationException;
+import com.intellij.util.containers.ContainerUtil;
 import com.siyeh.ig.psiutils.ExpressionUtils;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.text.ChoiceFormat;
+import java.text.Format;
+import java.text.MessageFormat;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspectionTool {
@@ -37,10 +45,10 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
           List<PsiExpression> children = ExpressionUtils.nonStructuralChildren(expression).collect(Collectors.toList());
           for (PsiExpression e : children) {
             if (capitalization == null) {
-              capitalization = getCapitalizationFromAnno(method);
+              capitalization = NlsCapitalizationUtil.getCapitalizationFromAnno(method);
               if (capitalization == Nls.Capitalization.NotSpecified) return;
             }
-            String titleValue = getTitleValue(e, new HashSet<>());
+            Value titleValue = getTitleValue(e, new HashSet<>());
             if (titleValue == null) continue;
             checkCapitalization(e, titleValue, holder, capitalization);
           }
@@ -57,7 +65,7 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
             PsiParameter[] parameters = psiMethod.getParameterList().getParameters();
             for (int i = 0; i < Math.min(parameters.length, args.length); i++) {
               PsiParameter parameter = parameters[i];
-              Nls.Capitalization capitalization = getCapitalizationFromAnno(parameter);
+              Nls.Capitalization capitalization = NlsCapitalizationUtil.getCapitalizationFromAnno(parameter);
               if (capitalization == Nls.Capitalization.NotSpecified) continue;
               ExpressionUtils.nonStructuralChildren(args[i])
                 .forEach(e -> checkCapitalization(e, getTitleValue(e, new HashSet<>()), holder, capitalization));
@@ -68,32 +76,22 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
     };
   }
 
-  public Nls.Capitalization getCapitalizationFromAnno(PsiModifierListOwner modifierListOwner) {
-    PsiAnnotation nls = AnnotationUtil.findAnnotationInHierarchy(modifierListOwner, Collections.singleton(Nls.class.getName()));
-    if (nls == null) return Nls.Capitalization.NotSpecified;
-    PsiAnnotationMemberValue capitalization = nls.findAttributeValue("capitalization");
-    Object cap = JavaPsiFacade.getInstance(modifierListOwner.getProject()).getConstantEvaluationHelper().computeConstantExpression(capitalization);
-    return cap instanceof Nls.Capitalization ? (Nls.Capitalization)cap : Nls.Capitalization.NotSpecified;
-  }
-
   private static void checkCapitalization(PsiExpression e,
-                                          String titleValue,
+                                          Value titleValue,
                                           @NotNull ProblemsHolder holder,
                                           Nls.Capitalization capitalization) {
-    if (!isCapitalizationSatisfied(titleValue, capitalization)) {
-      holder.registerProblem(e, "String '" + titleValue + "' is not properly capitalized. It should have " +
-                                StringUtil.toLowerCase(capitalization.toString()) + " capitalization",
-                             ProblemHighlightType.GENERIC_ERROR_OR_WARNING, new TitleCapitalizationFix(titleValue, capitalization));
+    if (titleValue != null && !titleValue.isSatisfied(capitalization)) {
+      holder.registerProblem(e, JavaI18nBundle
+                               .message("inspection.title.capitalization.description", titleValue, StringUtil.toLowerCase(capitalization.toString())),
+                             ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
+                             titleValue.canFix() ? new TitleCapitalizationFix(titleValue, capitalization) : null);
     }
   }
 
   @Nullable
-  private static String getTitleValue(@Nullable PsiExpression arg, Set<? super PsiElement> processed) {
+  private static Value getTitleValue(@Nullable PsiExpression arg, Set<? super PsiElement> processed) {
     if (arg instanceof PsiLiteralExpression) {
-      Object value = ((PsiLiteralExpression)arg).getValue();
-      if (value instanceof String) {
-        return (String) value;
-      }
+      return Value.of((PsiLiteralExpression)arg);
     }
     if (arg instanceof PsiMethodCallExpression) {
       PsiMethod psiMethod = ((PsiMethodCallExpression)arg).resolveMethod();
@@ -104,10 +102,7 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
       if (returnValue != null && processed.add(returnValue)) {
         return getTitleValue(returnValue, processed);
       }
-      Property propertyArgument = getPropertyArgument((PsiMethodCallExpression)arg);
-      if (propertyArgument != null) {
-        return propertyArgument.getUnescapedValue();
-      }
+      return Value.of(getPropertyArgument((PsiMethodCallExpression)arg));
     }
     if (arg instanceof PsiReferenceExpression) {
       PsiElement result = ((PsiReferenceExpression)arg).resolve();
@@ -141,43 +136,11 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
     return null;
   }
 
-  public static boolean isCapitalizationSatisfied(String value, Nls.Capitalization capitalization) {
-    if (StringUtil.isEmpty(value) || capitalization == Nls.Capitalization.NotSpecified) {
-      return true;
-    }
-    value = value.replace("&", "");
-    return capitalization == Nls.Capitalization.Title
-           ? StringUtil.wordsToBeginFromUpperCase(value).equals(value)
-           : checkSentenceCapitalization(value);
-  }
-
-  private static boolean checkSentenceCapitalization(@NotNull String value) {
-    List<String> words = StringUtil.split(value, " ");
-    if (words.size() == 0) return true;
-    if (Character.isLetter(words.get(0).charAt(0)) && !isCapitalizedWord(words.get(0))) return false;
-    if (words.size() == 1) return true;
-    int capitalized = 1;
-    for (int i = 1, size = words.size(); i < size; i++) {
-      String word = words.get(i);
-      if (isCapitalizedWord(word)) {
-        // check for abbreviations like SQL or I18n
-        if (word.length() == 1 || !Character.isLowerCase(word.charAt(1)))
-          continue;
-        capitalized++;
-      }
-    }
-    return capitalized / words.size() < 0.2; // allow reasonable amount of capitalized words
-  }
-
-  private static boolean isCapitalizedWord(String word) {
-    return word.length() > 0 && Character.isLetter(word.charAt(0)) && Character.isUpperCase(word.charAt(0));
-  }
-
   private static class TitleCapitalizationFix implements LocalQuickFix {
-    private final String myTitleValue;
+    private final Value myTitleValue;
     private final Nls.Capitalization myCapitalization;
 
-    TitleCapitalizationFix(String titleValue, Nls.Capitalization capitalization) {
+    TitleCapitalizationFix(Value titleValue, Nls.Capitalization capitalization) {
       myTitleValue = titleValue;
       myCapitalization = capitalization;
     }
@@ -185,7 +148,7 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
     @NotNull
     @Override
     public String getName() {
-      return "Properly capitalize '" + myTitleValue + '\'';
+      return JavaI18nBundle.message("quickfix.text.title.capitalization", myTitleValue);
     }
 
     @Override
@@ -197,15 +160,12 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
 
     protected void doFix(Project project, PsiElement element) throws IncorrectOperationException {
       if (element instanceof PsiLiteralExpression) {
-        final PsiLiteralExpression literalExpression = (PsiLiteralExpression)element;
-        final Object value = literalExpression.getValue();
-        if (!(value instanceof String)) {
-          return;
-        }
-        final String string = (String)value;
+        Value value = Value.of((PsiLiteralExpression)element);
+        if (value == null) return;
         final PsiElementFactory factory = JavaPsiFacade.getElementFactory(project);
-        final PsiExpression newExpression = factory.createExpressionFromText('"' + fixValue(string) + '"', element);
-        literalExpression.replace(newExpression);
+        final PsiExpression newExpression =
+          factory.createExpressionFromText('"' + value.fixCapitalization(myCapitalization) + '"', element);
+        element.replace(newExpression);
       }
       else if (element instanceof PsiMethodCallExpression) {
         final PsiMethodCallExpression methodCallExpression = (PsiMethodCallExpression)element;
@@ -215,14 +175,9 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
           doFix(project, returnValue);
         }
         final Property property = getPropertyArgument(methodCallExpression);
-        if (property == null) {
-          return;
-        }
-        final String value = property.getUnescapedValue();
-        if (value == null) {
-          return;
-        }
-        property.setValue(fixValue(value));
+        Value value = Value.of(property);
+        if (value == null) return;
+        property.setValue(value.fixCapitalization(myCapitalization));
       }
       else if (element instanceof PsiReferenceExpression) {
         final PsiReferenceExpression referenceExpression = (PsiReferenceExpression)element;
@@ -232,22 +187,103 @@ public class TitleCapitalizationInspection extends AbstractBaseJavaLocalInspecti
         }
         final PsiVariable variable = (PsiVariable)target;
         if (variable.hasModifierProperty(PsiModifier.FINAL)) {
-            doFix(project, variable.getInitializer());
-          }
+          doFix(project, variable.getInitializer());
+        }
       }
-    }
-
-    @NotNull
-    private String fixValue(String string) {
-      return myCapitalization == Nls.Capitalization.Title
-             ? StringUtil.wordsToBeginFromUpperCase(string)
-             : StringUtil.capitalize(StringUtil.wordsToBeginFromLowerCase(string));
     }
 
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Properly capitalize";
+      return JavaI18nBundle.message("quickfix.family.title.capitalization.fix");
+    }
+  }
+
+  interface Value {
+    @NotNull String toString();
+    boolean isSatisfied(@NotNull Nls.Capitalization capitalization);
+
+    @NotNull
+    default String fixCapitalization(@NotNull Nls.Capitalization capitalization) {
+      return NlsCapitalizationUtil.fixValue(toString(), capitalization);
+    }
+
+    default boolean canFix() { return true; }
+
+    @Contract("null -> null")
+    @Nullable
+    static Value of(@Nullable Property property) {
+      if (property == null) return null;
+      String value = property.getUnescapedValue();
+      if (value == null) return null;
+      try {
+        MessageFormat format = new MessageFormat(value);
+        return new PropertyValue(value, format);
+      }
+      catch (IllegalArgumentException e) {
+        return new TextValue(value);
+      }
+    }
+
+    @Nullable
+    static Value of(@NotNull PsiLiteralExpression literal) {
+      Object value = literal.getValue();
+      return value instanceof String ? new TextValue((String)value) : null;
+    }
+  }
+
+  static class TextValue implements Value {
+    private final String myText;
+
+    TextValue(String text) { myText = text; }
+
+    @NotNull @Override
+    public String toString() { return myText;}
+
+    @Override
+    public boolean isSatisfied(@NotNull Nls.Capitalization capitalization) {
+      return NlsCapitalizationUtil.isCapitalizationSatisfied(myText, capitalization);
+    }
+  }
+
+  static class PropertyValue implements Value {
+    private final String myPresentation;
+    private final MessageFormat myFormat;
+
+    PropertyValue(String presentation, MessageFormat format) {
+      myPresentation = presentation;
+      myFormat = format;
+    }
+
+    @NotNull @Override
+    public String toString() {
+      return myPresentation;
+    }
+
+    @Override
+    public boolean isSatisfied(@NotNull Nls.Capitalization capitalization) {
+      if (capitalization == Nls.Capitalization.NotSpecified) return true;
+      Format[] formats = myFormat.getFormats();
+      MessageFormat clone = (MessageFormat)myFormat.clone();
+      clone.setFormats(new Format[formats.length]);
+      if (!NlsCapitalizationUtil.isCapitalizationSatisfied(clone.toPattern(), capitalization)) return false;
+      for (Format format : formats) {
+        if (format instanceof ChoiceFormat) {
+          for (Object subValue : ((ChoiceFormat)format).getFormats()) {
+            String str = subValue.toString();
+            if (capitalization == Nls.Capitalization.Sentence) {
+              str = "The " + str;
+            }
+            if (!NlsCapitalizationUtil.isCapitalizationSatisfied(str, capitalization)) return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    @Override
+    public boolean canFix() {
+      return ContainerUtil.findInstance(myFormat.getFormats(), ChoiceFormat.class) == null;
     }
   }
 }

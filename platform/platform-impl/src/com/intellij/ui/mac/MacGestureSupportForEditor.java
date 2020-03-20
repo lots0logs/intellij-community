@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.mac;
 
 import com.apple.eawt.event.GestureUtilities;
@@ -29,16 +15,13 @@ import com.intellij.openapi.keymap.KeymapManager;
 import com.intellij.openapi.keymap.impl.IdeKeyEventDispatcher;
 import com.intellij.openapi.keymap.impl.IdeMouseEventDispatcher;
 import com.intellij.openapi.keymap.impl.KeymapManagerImpl;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 
-/**
- * @author denis
- */
-public class MacGestureSupportForEditor {
-
+public final class MacGestureSupportForEditor {
   private final ArrayList<AnAction> myActions = new ArrayList<>(1);
 
   public MacGestureSupportForEditor(JComponent component) {
@@ -62,7 +45,7 @@ public class MacGestureSupportForEditor {
         DataContext dataContext = DataManager.getInstance().getDataContext(component);
         Presentation presentation = myPresentationFactory.getPresentation(action);
         AnActionEvent actionEvent =
-          new AnActionEvent(null, dataContext, ActionPlaces.MAIN_MENU, presentation,
+          new AnActionEvent(null, dataContext, ActionPlaces.FORCE_TOUCH, presentation,
                             ActionManager.getInstance(),
                             0);
         action.beforeActionPerformedUpdate(actionEvent);
@@ -81,31 +64,31 @@ public class MacGestureSupportForEditor {
     IdeMouseEventDispatcher.forbidForceTouch();
   }
 
-
   private final PresentationFactory myPresentationFactory = new PresentationFactory();
 
-  private void fillActionsList(MouseShortcut mouseShortcut, boolean isModalContext) {
+  private void fillActionsList(@NotNull MouseShortcut mouseShortcut, boolean isModalContext) {
     myActions.clear();
 
     // search in main keymap
-    if (KeymapManagerImpl.ourKeymapManagerInitialized) {
-      final KeymapManager keymapManager = KeymapManager.getInstance();
-      if (keymapManager != null) {
-        final Keymap keymap = keymapManager.getActiveKeymap();
-        final String[] actionIds = keymap.getActionIds(mouseShortcut);
+    if (!KeymapManagerImpl.isKeymapManagerInitialized()) {
+      return;
+    }
 
-        ActionManager actionManager = ActionManager.getInstance();
-        for (String actionId : actionIds) {
-          AnAction action = actionManager.getAction(actionId);
+    KeymapManager keymapManager = KeymapManager.getInstance();
+    if (keymapManager == null) {
+      return;
+    }
 
-          if (action == null) continue;
+    Keymap keymap = keymapManager.getActiveKeymap();
+    ActionManager actionManager = ActionManager.getInstance();
+    for (String actionId : keymap.getActionIds(mouseShortcut)) {
+      AnAction action = actionManager.getAction(actionId);
+      if (action == null || (isModalContext && !action.isEnabledInModalContext())) {
+        continue;
+      }
 
-          if (isModalContext && !action.isEnabledInModalContext()) continue;
-
-          if (!myActions.contains(action)) {
-            myActions.add(action);
-          }
-        }
+      if (!myActions.contains(action)) {
+        myActions.add(action);
       }
     }
   }

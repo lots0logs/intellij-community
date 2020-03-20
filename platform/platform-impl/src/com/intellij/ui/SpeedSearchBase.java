@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui;
 
 import com.intellij.featureStatistics.FeatureUsageTracker;
@@ -16,11 +16,12 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.openapi.wm.ToolWindowManager;
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener;
-import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.ui.border.CustomLineBorder;
 import com.intellij.ui.speedSearch.SpeedSearch;
 import com.intellij.ui.speedSearch.SpeedSearchSupply;
+import com.intellij.util.text.NameUtilCore;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -39,17 +40,22 @@ import java.util.ListIterator;
 import java.util.NoSuchElementException;
 
 public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSearchSupply {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ui.SpeedSearchBase");
+  private static final Logger LOG = Logger.getInstance(SpeedSearchBase.class);
 
   private static final Border BORDER = new CustomLineBorder(JBColor.namedColor("SpeedSearch.borderColor", JBColor.GRAY), JBUI.insets(1));
   private static final Color FOREGROUND_COLOR = JBColor.namedColor("SpeedSearch.foreground", UIUtil.getToolTipForeground());
-  private static final Color BACKGROUND_COLOR = JBColor.namedColor("SpeedSearch.background", new JBColor(UIUtil.getToolTipBackground().brighter(), Gray._111));
+  private static final Color BACKGROUND_COLOR = JBColor.namedColor("SpeedSearch.background", new JBColor(Gray.xFF, Gray._111));
   private static final Color ERROR_FOREGROUND_COLOR = JBColor.namedColor("SpeedSearch.errorForeground", JBColor.RED);
 
   private SearchPopup mySearchPopup;
   private JLayeredPane myPopupLayeredPane;
   protected final Comp myComponent;
-  private final ToolWindowManagerListener myWindowManagerListener = new MyToolWindowManagerListener();
+  private final ToolWindowManagerListener myWindowManagerListener = new ToolWindowManagerListener() {
+    @Override
+    public void stateChanged(@NotNull ToolWindowManager toolWindowManager) {
+      manageSearchPopup(null);
+    }
+  };
   private final PropertyChangeSupport myChangeSupport = new PropertyChangeSupport(this);
   private String myRecentEnteredPrefix;
   private SpeedSearchComparator myComparator = new SpeedSearchComparator(false);
@@ -57,7 +63,7 @@ public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSear
 
   private Disposable myListenerDisposable;
 
-  public SpeedSearchBase(Comp component) {
+  public SpeedSearchBase(@NotNull Comp component) {
     myComponent = component;
 
     myComponent.addComponentListener(new ComponentAdapter() {
@@ -99,7 +105,7 @@ public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSear
       public void actionPerformed(@NotNull AnActionEvent e) {
         final String prefix = getEnteredPrefix();
         assert prefix != null;
-        final String[] strings = NameUtil.splitNameIntoWords(prefix);
+        final String[] strings = NameUtilCore.splitNameIntoWords(prefix);
         final String last = strings[strings.length - 1];
         final int i = prefix.lastIndexOf(last);
         mySearchPopup.mySearchField.setText(prefix.substring(0, i).trim());
@@ -149,8 +155,7 @@ public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSear
    */
   protected abstract int getSelectedIndex();
 
-  @NotNull
-  protected abstract Object[] getAllElements();
+  protected abstract Object @NotNull [] getAllElements();
 
   @Nullable
   protected abstract String getElementText(Object element);
@@ -240,7 +245,7 @@ public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSear
   }
 
   @Nullable
-  private Object findPreviousElement(String s) {
+  private Object findPreviousElement(@NotNull String s) {
     final int selectedIndex = getSelectedIndex();
     if (selectedIndex < 0) return null;
     final ListIterator<?> it = getElementIterator(selectedIndex);
@@ -270,7 +275,7 @@ public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSear
   }
 
   @Nullable
-  protected Object findElement(String s) {
+  protected Object findElement(@NotNull String s) {
     int selectedIndex = getSelectedIndex();
     if (selectedIndex < 0) {
       selectedIndex = 0;
@@ -379,7 +384,7 @@ public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSear
   }
 
   @Nullable
-  private Object findTargetElement(int keyCode, String searchPrefix) {
+  private Object findTargetElement(int keyCode, @NotNull String searchPrefix) {
     if (keyCode == KeyEvent.VK_UP) {
       return findPreviousElement(searchPrefix);
     }
@@ -641,14 +646,7 @@ public abstract class SpeedSearchBase<Comp extends JComponent> extends SpeedSear
     return myComponent.getLocationOnScreen();
   }
 
-  private class MyToolWindowManagerListener implements ToolWindowManagerListener {
-    @Override
-    public void stateChanged() {
-      manageSearchPopup(null);
-    }
-  }
-
-  protected class ViewIterator implements ListIterator<Object> {
+  protected final class ViewIterator implements ListIterator<Object> {
     private final SpeedSearchBase mySpeedSearch;
     private int myCurrentIndex;
     private final Object[] myElements;

@@ -23,7 +23,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.Processor;
 import com.intellij.util.containers.MultiMap;
-import com.intellij.util.containers.hash.HashSet;
+import java.util.HashSet;
 import com.intellij.util.xml.DomFileElement;
 import com.intellij.util.xml.highlighting.DomElementAnnotationHolder;
 import com.intellij.util.xml.highlighting.DomElementsInspection;
@@ -165,12 +165,6 @@ public class MavenDuplicateDependenciesInspection extends DomElementsInspection<
   @NotNull
   public String getGroupDisplayName() {
     return MavenDomBundle.message("inspection.group");
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return MavenDomBundle.message("inspection.duplicate.dependencies.name");
   }
 
   @Override

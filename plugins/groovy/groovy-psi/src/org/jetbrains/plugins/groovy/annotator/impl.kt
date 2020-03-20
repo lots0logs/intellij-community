@@ -5,10 +5,12 @@ import com.intellij.codeInsight.intention.QuickFixFactory
 import com.intellij.codeInsight.quickfix.UnresolvedReferenceQuickFixProvider
 import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.lang.annotation.AnnotationHolder
+import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.psi.PsiClass
 import com.intellij.psi.util.PsiUtil.isInnerClass
 import com.intellij.psi.util.parentOfType
 import org.jetbrains.plugins.groovy.GroovyBundle.message
+import org.jetbrains.plugins.groovy.annotator.GrReferenceHighlighterFactory.shouldHighlight
 import org.jetbrains.plugins.groovy.codeInspection.untypedUnresolvedAccess.generateAddImportActions
 import org.jetbrains.plugins.groovy.codeInspection.untypedUnresolvedAccess.generateCreateClassActions
 import org.jetbrains.plugins.groovy.lang.groovydoc.psi.api.GroovyDocPsiElement
@@ -21,6 +23,8 @@ import org.jetbrains.plugins.groovy.lang.psi.util.GrStaticChecker.isInStaticCont
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil.hasEnclosingInstanceInScope
 
 fun checkUnresolvedCodeReference(ref: GrCodeReferenceElement, annotationHolder: AnnotationHolder) {
+  if (!shouldHighlight(annotationHolder.currentAnnotationSession.file)) return
+
   if (ref.parentOfType<GroovyDocPsiElement>() != null) return
   if (ref.parent is GrPackageDefinition) return
 
@@ -30,13 +34,14 @@ fun checkUnresolvedCodeReference(ref: GrCodeReferenceElement, annotationHolder: 
   if (isResolvedStaticImport(ref)) return
   if (ref.resolve() != null) return
 
-  val annotation = annotationHolder.createErrorAnnotation(nameElement, message("cannot.resolve", referenceName))
-  annotation.highlightType = ProblemHighlightType.LIKE_UNKNOWN_SYMBOL
-  generateCreateClassActions(ref).forEach(annotation::registerFix)
-  generateAddImportActions(ref).forEach(annotation::registerFix)
-  val fixRegistrar = AnnotationFixRegistrar(annotation)
+  val builder = annotationHolder.newAnnotation(HighlightSeverity.ERROR, message("cannot.resolve", referenceName)).range(nameElement)
+    .highlightType(ProblemHighlightType.LIKE_UNKNOWN_SYMBOL)
+  generateCreateClassActions(ref).forEach { builder.withFix(it) }
+  generateAddImportActions(ref).forEach { builder.withFix(it) }
+  val fixRegistrar = AnnotationFixRegistrar(builder)
   UnresolvedReferenceQuickFixProvider.registerReferenceFixes(ref, fixRegistrar)
   QuickFixFactory.getInstance().registerOrderEntryFixes(fixRegistrar, ref)
+  builder.create()
 }
 
 private fun isResolvedStaticImport(refElement: GrCodeReferenceElement): Boolean {
@@ -62,5 +67,7 @@ fun checkInnerClassReferenceFromInstanceContext(ref: GrCodeReferenceElement, hol
   val outerClass = resolved.containingClass ?: return
   if (hasEnclosingInstanceInScope(outerClass, parent, true)) return
 
-  holder.createErrorAnnotation(nameElement, message("cannot.reference.non.static", qname))
+  holder.newAnnotation(HighlightSeverity.ERROR, message("cannot.reference.non.static", qname)).range(nameElement).create()
 }
+
+internal val illegalJvmNameSymbols: Regex = "[.;\\[/<>:]".toRegex()

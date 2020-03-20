@@ -2,6 +2,7 @@
 package com.intellij.ui;
 
 import com.intellij.ide.DataManager;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.TextCopyProvider;
 import com.intellij.ide.ui.LafManager;
 import com.intellij.ide.ui.UITheme;
@@ -35,6 +36,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -57,7 +59,7 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
   public void perform(Project project) {
     new DialogWrapper(project, true) {
       {
-        setTitle("Edit LaF Defaults");
+        setTitle(IdeBundle.message("dialog.title.edit.laf.defaults"));
         setModal(false);
         init();
       }
@@ -81,7 +83,7 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
       @Override
       protected JComponent createCenterPanel() {
         mySearchField = new JBTextField(40);
-        JPanel top = UI.PanelFactory.panel(mySearchField).withLabel("Filter:").createPanel();
+        JPanel top = UI.PanelFactory.panel(mySearchField).withLabel(IdeBundle.message("label.ui.filter")).createPanel();
         final JBTable table = new JBTable(createFilteringModel()) {
           @Override
           public boolean editCellAt(int row, int column, EventObject e) {
@@ -101,6 +103,9 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
                   updateValue(pair, colorUIResource, row, column);
                   changed = true;
                 }
+              } else if (value instanceof Boolean) {
+                updateValue(pair, !((Boolean)value), row, column);
+                changed = true;
               } else if (value instanceof Integer) {
                 Integer newValue = editNumber(key.toString(), value.toString());
                 if (newValue != null) {
@@ -168,6 +173,14 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
                                                          int row,
                                                          int column) {
             value = column == 0 ? ((Pair)value).first : ((Pair)value).second;
+            if (value instanceof Boolean) {
+              TableCellRenderer renderer = table.getDefaultRenderer(Boolean.class);
+              if (renderer != null) {
+                JCheckBox box = (JCheckBox)renderer.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                box.setHorizontalAlignment(SwingConstants.LEFT);
+                return box;
+              }
+            }
             final JPanel panel = new JPanel(new BorderLayout());
             final JLabel label = new JLabel(value == null ? "" : value.toString());
             panel.add(label, BorderLayout.CENTER);
@@ -213,7 +226,7 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
 
         ScrollingUtil.installActions(myTable, true, mySearchField);
 
-        myColorsOnly = new JBCheckBox("Colors only", PropertiesComponent.getInstance().getBoolean("LaFDialog.ColorsOnly", false)) {
+        myColorsOnly = new JBCheckBox(IdeBundle.message("checkbox.colors.only"), PropertiesComponent.getInstance().getBoolean("LaFDialog.ColorsOnly", false)) {
           @Override
           public void addNotify() {
             super.addNotify();
@@ -264,15 +277,15 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
           final JBTextField name = new JBTextField(40);
           final JBTextField value = new JBTextField(40);
           {
-            setTitle("Add New Value");
+            setTitle(IdeBundle.message("dialog.title.add.new.value"));
             init();
           }
 
           @Override
           protected JComponent createCenterPanel() {
             return UI.PanelFactory.grid()
-              .add(UI.PanelFactory.panel(name).withLabel("Name:"))
-              .add(UI.PanelFactory.panel(value).withLabel("Value:"))
+              .add(UI.PanelFactory.panel(name).withLabel(IdeBundle.message("label.ui.name")))
+              .add(UI.PanelFactory.panel(value).withLabel(IdeBundle.message("label.ui.value")))
               .createPanel();
           }
 
@@ -322,7 +335,8 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
       }
 
       private @Nullable Integer editNumber(String key, String value) {
-        String newValue = Messages.showInputDialog(getRootPane(), "Enter new value for " + key, "Number Editor", null, value,
+        String newValue = Messages.showInputDialog(getRootPane(), IdeBundle.message("dialog.message.enter.new.value.for.0", key),
+                                                   IdeBundle.message("dialog.title.number.editor"), null, value,
                                                    new InputValidator() {
                                      @Override
                                      public boolean checkInput(String inputString) {
@@ -346,9 +360,9 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
       @Nullable
       private Insets editInsets(String key, String value) {
         String newValue = Messages.showInputDialog(getRootPane(),
-           "Enter new value for " + key + "\nin form top,left,bottom,right",
-           "Insets Editor", null, value,
-           new InputValidator() {
+                                                   IdeBundle.message("dialog.message.enter.new.value.for.0.in.form.top.left.bottom.right", key),
+                                                   IdeBundle.message("dialog.title.insets.editor"), null, value,
+                                                   new InputValidator() {
              @Override
              public boolean checkInput(String inputString) {
                return parseInsets(inputString) != null;
@@ -381,8 +395,9 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
       @Nullable
       private UIUtil.GrayFilter editGrayFilter(String key, String value) {
         String newValue = Messages.showInputDialog(getRootPane(),
-                                                   "Enter new value for " + key + "\nin form brightness,contrast,alpha",
-                                                   "Gray Filter Editor", null, value,
+                                                   IdeBundle.message(
+                                                     "dialog.message.enter.new.value.for.0.in.form.brightness.contrast.alpha", key),
+                                                   IdeBundle.message("dialog.title.gray.filter.editor"), null, value,
                                                    new InputValidator() {
                                                      @Override
                                                      public boolean checkInput(String inputString) {
@@ -416,8 +431,8 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
       @Nullable
       private Font editFontSize(String key, Font font) {
         String newValue = Messages.showInputDialog(getRootPane(),
-                                                   "Enter new font size for " + key,
-                                                   "Font Size Editor", null, Integer.toString(font.getSize()),
+                                                   IdeBundle.message("label.enter.new.font.size.for.0", key),
+                                                   IdeBundle.message("dialog.title.font.size.editor"), null, Integer.toString(font.getSize()),
                                                    new InputValidator() {
                                                      @Override
                                                      public boolean checkInput(String inputString) {
@@ -446,8 +461,7 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
   }
 
 
-  @NotNull
-  private static Object[][] getUIDefaultsData() {
+  private static Object[] @NotNull [] getUIDefaultsData() {
     final UIDefaults defaults = UIManager.getDefaults();
     Enumeration keys = defaults.keys();
     final Object[][] data = new Object[defaults.size()][2];
@@ -472,6 +486,7 @@ public class ShowUIDefaultsAction extends AnAction implements DumbAware {
         if (column != 1) return false;
         Object value = ((Pair)getValueAt(row, column)).second;
         return (value instanceof Color ||
+                value instanceof Boolean ||
                 value instanceof Integer ||
                 value instanceof EmptyBorder ||
                 value instanceof Insets ||

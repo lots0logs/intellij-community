@@ -1,8 +1,12 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.siyeh.ig.bugs;
 
-import com.intellij.codeInspection.*;
+import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool;
+import com.intellij.codeInspection.LocalQuickFix;
+import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.codeInspection.SetInspectionOptionFix;
 import com.intellij.codeInspection.ui.SingleCheckboxOptionsPanel;
+import com.intellij.java.JavaBundle;
 import com.intellij.psi.*;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.util.ArrayUtil;
@@ -26,7 +30,7 @@ public class SortedCollectionWithNonComparableKeysInspection extends AbstractBas
   @Override
   public JComponent createOptionsPanel() {
     return new SingleCheckboxOptionsPanel(
-      InspectionsBundle.message("inspection.sorted.collection.with.non.comparable.keys.option.type.parameters"), this,
+      JavaBundle.message("inspection.sorted.collection.with.non.comparable.keys.option.type.parameters"), this,
       "IGNORE_TYPE_PARAMETERS");
   }
 
@@ -36,11 +40,8 @@ public class SortedCollectionWithNonComparableKeysInspection extends AbstractBas
     return new JavaElementVisitor() {
       @Override
       public void visitNewExpression(PsiNewExpression expression) {
-        if (expression.getAnonymousClass() != null ||
-            expression.getArrayInitializer() != null ||
-            expression.getArrayDimensions().length > 0 ||
-            expression.getArgumentList() == null ||
-            !expression.getArgumentList().isEmpty()) {
+        if (expression.getAnonymousClass() != null || expression.isArrayCreation() ||
+            expression.getArgumentList() == null || !expression.getArgumentList().isEmpty()) {
           return;
         }
         PsiJavaCodeReferenceElement reference = expression.getClassReference();
@@ -54,11 +55,11 @@ public class SortedCollectionWithNonComparableKeysInspection extends AbstractBas
         LocalQuickFix fix = null;
         if (elementType instanceof PsiClassType && ((PsiClassType)elementType).resolve() instanceof PsiTypeParameter) {
           if (IGNORE_TYPE_PARAMETERS) return;
-          String message = InspectionsBundle.message("inspection.sorted.collection.with.non.comparable.keys.option.type.parameters");
+          String message = JavaBundle.message("inspection.sorted.collection.with.non.comparable.keys.option.type.parameters");
           fix = new SetInspectionOptionFix(SortedCollectionWithNonComparableKeysInspection.this, "IGNORE_TYPE_PARAMETERS", message, true);
         }
         if (InheritanceUtil.isInheritor(elementType, CommonClassNames.JAVA_LANG_COMPARABLE)) return;
-        holder.registerProblem(expression, InspectionsBundle.message("inspection.sorted.collection.with.non.comparable.keys.message"), fix);
+        holder.registerProblem(expression, JavaBundle.message("inspection.sorted.collection.with.non.comparable.keys.message"), fix);
       }
     };
   }

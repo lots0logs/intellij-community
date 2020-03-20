@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2011 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem.impl;
 
 import com.apple.eawt.event.*;
@@ -27,7 +13,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseEvent;
 
-class MacGestureAdapter extends GestureAdapter {
+final class MacGestureAdapter extends GestureAdapter {
   double magnification;
   private final IdeFrame myFrame;
   private final MouseGestureManager myManager;
@@ -48,7 +34,7 @@ class MacGestureAdapter extends GestureAdapter {
 
     if (pointerInfo == null) return;
 
-    Point mouse = pointerInfo.getLocation();
+    Point mouse = new Point(pointerInfo.getLocation());
     SwingUtilities.convertPointFromScreen(mouse, myFrame.getComponent());
     Component deepest = SwingUtilities.getDeepestComponentAt(myFrame.getComponent(), mouse.x, mouse.y);
     ZoomableViewport viewport = (ZoomableViewport) SwingUtilities.getAncestorOfClass(ZoomableViewport.class, deepest);
@@ -56,7 +42,7 @@ class MacGestureAdapter extends GestureAdapter {
       Magnificator magnificator = viewport.getMagnificator();
 
       if (magnificator != null) {
-        Point at = pointerInfo.getLocation();
+        Point at = new Point(pointerInfo.getLocation());
         SwingUtilities.convertPointFromScreen(at, (JComponent)viewport);
         viewport.magnificationStarted(at);
         myMagnifyingViewport = viewport;

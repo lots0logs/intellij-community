@@ -1,14 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection.java15api;
 
 import com.intellij.codeHighlighting.HighlightDisplayLevel;
 import com.intellij.codeInsight.AnnotationUtil;
-import com.intellij.codeInsight.daemon.GroupNames;
 import com.intellij.codeInsight.intention.QuickFixFactory;
 import com.intellij.codeInspection.AbstractBaseJavaLocalInspectionTool;
 import com.intellij.codeInspection.InspectionsBundle;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemsHolder;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.EffectiveLanguageLevelUtil;
 import com.intellij.openapi.module.Module;
@@ -20,7 +20,6 @@ import com.intellij.openapi.ui.VerticalFlowLayout;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.WriteExternalException;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.javadoc.PsiDocComment;
@@ -28,10 +27,8 @@ import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.reference.SoftReference;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.hash.HashSet;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.UIUtil;
 import gnu.trove.THashSet;
@@ -47,24 +44,24 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.ref.Reference;
 import java.net.URL;
-import java.util.ArrayList;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author max
+ * To generate apiXXX.txt uncomment and run {@link com.intellij.java.codeInspection.JavaAPIUsagesInspectionTest#testCollectSinceApiUsages}
  */
 public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionTool {
   public static final String SHORT_NAME = "Since15";
 
   private static final String EFFECTIVE_LL = "effectiveLL";
 
-  private static final Map<LanguageLevel, Reference<Set<String>>> ourForbiddenAPI = ContainerUtil.newEnumMap(LanguageLevel.class);
-  private static final Set<String> ourIgnored16ClassesAPI = new THashSet<>(10);
-  private static final Map<LanguageLevel, String> ourPresentableShortMessage = ContainerUtil.newEnumMap(LanguageLevel.class);
+  private static final Map<LanguageLevel, Reference<Set<String>>> ourForbiddenAPI = new EnumMap<>(LanguageLevel.class);
+  private static final Set<String> ourIgnored16ClassesAPI = loadForbiddenApi("ignore16List.txt");
+  private static final Map<LanguageLevel, String> ourPresentableShortMessage = new EnumMap<>(LanguageLevel.class);
 
-  private static final LanguageLevel ourHighestKnownLanguage = LanguageLevel.JDK_10;
+  private static final LanguageLevel ourHighestKnownLanguage = LanguageLevel.JDK_12;
 
   static {
     ourPresentableShortMessage.put(LanguageLevel.JDK_1_3, "1.4");
@@ -76,8 +73,8 @@ public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionToo
     ourPresentableShortMessage.put(LanguageLevel.JDK_1_9, "10");
     ourPresentableShortMessage.put(LanguageLevel.JDK_10, "11");
     ourPresentableShortMessage.put(LanguageLevel.JDK_11, "12");
+    ourPresentableShortMessage.put(LanguageLevel.JDK_12, "13");
 
-    loadForbiddenApi("ignore16List.txt", ourIgnored16ClassesAPI);
   }
 
   private static final Set<String> ourGenerifiedClasses = new HashSet<>();
@@ -97,11 +94,11 @@ public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionToo
   @Override
   public JComponent createOptionsPanel() {
     JPanel panel = new JPanel(new VerticalFlowLayout(VerticalFlowLayout.TOP, 0, 5, true, false));
-    panel.add(new JLabel("Forbid API usages:"));
+    panel.add(new JLabel(JavaBundle.message("label.forbid.api.usages")));
 
-    JRadioButton projectRb = new JRadioButton("Respecting to project language level settings");
+    JRadioButton projectRb = new JRadioButton(JavaBundle.message("radio.button.respecting.to.project.language.level.settings"));
     panel.add(projectRb);
-    JRadioButton customRb = new JRadioButton("Higher than:");
+    JRadioButton customRb = new JRadioButton(JavaBundle.message("radio.button.higher.than"));
     panel.add(customRb);
     ButtonGroup gr = new ButtonGroup();
     gr.add(projectRb);
@@ -116,14 +113,7 @@ public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionToo
       }
     };
     llCombo.setSelectedItem(myEffectiveLanguageLevel != null ? myEffectiveLanguageLevel : LanguageLevel.JDK_1_3);
-    llCombo.setRenderer(new ListCellRendererWrapper<LanguageLevel>() {
-      @Override
-      public void customize(JList list, LanguageLevel value, int index, boolean selected, boolean hasFocus) {
-        if (value != null) {
-          setText(value.getPresentableText());
-        }
-      }
-    });
+    llCombo.setRenderer(SimpleListCellRenderer.create("", LanguageLevel::getPresentableText));
     llCombo.addActionListener(e -> myEffectiveLanguageLevel = (LanguageLevel)llCombo.getSelectedItem());
 
     JPanel comboPanel = new JPanel(new BorderLayout());
@@ -154,36 +144,32 @@ public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionToo
     Reference<Set<String>> ref = ourForbiddenAPI.get(languageLevel);
     Set<String> result = SoftReference.dereference(ref);
     if (result == null) {
-      result = new THashSet<>(1000);
-      loadForbiddenApi("api" + getShortName(languageLevel) + ".txt", result);
+      result = loadForbiddenApi("api" + getShortName(languageLevel) + ".txt");
       ourForbiddenAPI.put(languageLevel, new SoftReference<>(result));
     }
     return result;
   }
 
-  private static void loadForbiddenApi(String fileName, Set<? super String> set) {
+  private static Set<String> loadForbiddenApi(String fileName) {
     URL resource = Java15APIUsageInspection.class.getResource(fileName);
     if (resource == null) {
       Logger.getInstance(Java15APIUsageInspection.class).warn("not found: " + fileName);
-      return;
+      return Collections.emptySet();
     }
 
-    try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource.openStream(), CharsetToolkit.UTF8_CHARSET))) {
-      set.addAll(FileUtil.loadLines(reader));
+    try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource.openStream(), StandardCharsets.UTF_8))) {
+      return new THashSet<>(FileUtil.loadLines(reader));
     }
-    catch (IOException ignored) { }
+    catch (IOException ex) {
+      Logger.getInstance(Java15APIUsageInspection.class).warn("cannot load: " + fileName, ex);
+      return Collections.emptySet();
+    }
   }
 
   @Override
   @NotNull
   public String getGroupDisplayName() {
-    return GroupNames.LANGUAGE_LEVEL_SPECIFIC_GROUP_NAME;
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionsBundle.message("inspection.1.5.display.name");
+    return InspectionsBundle.message("group.names.language.level.specific.issues.and.migration.aids");
   }
 
   @Override
@@ -265,8 +251,8 @@ public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionToo
                 element2Highlight = aClass instanceof PsiAnonymousClass ? ((PsiAnonymousClass)aClass).getBaseClassReference() : aClass;
               }
               myHolder.registerProblem(element2Highlight,
-                                       methods.size() == 1 ? InspectionsBundle.message("inspection.1.8.problem.single.descriptor", methods.get(0).getName(), getJdkName(effectiveLanguageLevel))
-                                                           : InspectionsBundle.message("inspection.1.8.problem.descriptor", methods.size(), getJdkName(effectiveLanguageLevel)),
+                                       methods.size() == 1 ? JavaBundle.message("inspection.1.8.problem.single.descriptor", methods.get(0).getName(), getJdkName(effectiveLanguageLevel))
+                                                           : JavaBundle.message("inspection.1.8.problem.descriptor", methods.size(), getJdkName(effectiveLanguageLevel)),
                                        QuickFixFactory.getInstance().createImplementMethodsFix(aClass));
             }
           }
@@ -330,7 +316,7 @@ public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionToo
               for (String generifiedClass : ourGenerifiedClasses) {
                 if (InheritanceUtil.isInheritor((PsiClass)resolved, generifiedClass) &&
                     !isRawInheritance(generifiedClass, (PsiClass)resolved, new HashSet<>())) {
-                  String message = InspectionsBundle.message("inspection.1.7.problem.descriptor", getJdkName(languageLevel));
+                  String message = JavaBundle.message("inspection.1.7.problem.descriptor", getJdkName(languageLevel));
                   myHolder.registerProblem(reference, message);
                   break;
                 }
@@ -413,7 +399,7 @@ public class Java15APIUsageInspection extends AbstractBaseJavaLocalInspectionToo
     private void registerError(PsiElement reference, LanguageLevel api) {
       if (reference != null && isInProject(reference)) {
         myHolder.registerProblem(reference,
-                                 InspectionsBundle.message("inspection.1.5.problem.descriptor", getShortName(api)),
+                                 JavaBundle.message("inspection.1.5.problem.descriptor", getShortName(api)),
                                  myOnTheFly ? new LocalQuickFix[] {(LocalQuickFix)QuickFixFactory.getInstance().createIncreaseLanguageLevelFix(LanguageLevel.values()[api.ordinal() + 1])} : null);
       }
     }

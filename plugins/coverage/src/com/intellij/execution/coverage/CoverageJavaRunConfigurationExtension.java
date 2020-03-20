@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.coverage;
 
 import com.intellij.coverage.*;
@@ -23,7 +23,6 @@ import com.intellij.openapi.projectRoots.JavaSdk;
 import com.intellij.openapi.projectRoots.JavaSdkVersion;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.util.InvalidDataException;
-import com.intellij.openapi.util.WriteExternalException;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.JavaPsiFacade;
 import com.intellij.psi.PsiClass;
@@ -34,6 +33,7 @@ import com.intellij.refactoring.listeners.RefactoringElementListener;
 import com.intellij.refactoring.listeners.RefactoringElementListenerComposite;
 import com.intellij.ui.classFilter.ClassFilter;
 import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -68,7 +68,7 @@ public class CoverageJavaRunConfigurationExtension extends RunConfigurationExten
   }
 
   @Override
-  public void updateJavaParameters(RunConfigurationBase configuration, JavaParameters params, RunnerSettings runnerSettings) {
+  public void updateJavaParameters(@NotNull RunConfigurationBase configuration, @NotNull JavaParameters params, RunnerSettings runnerSettings) {
     if (!isApplicableFor(configuration)) {
       return;
     }
@@ -103,7 +103,7 @@ public class CoverageJavaRunConfigurationExtension extends RunConfigurationExten
   }
 
   @Override
-  public void writeExternal(@NotNull RunConfigurationBase runConfiguration, @NotNull Element element) throws WriteExternalException {
+  public void writeExternal(@NotNull RunConfigurationBase runConfiguration, @NotNull Element element) {
     if (!isApplicableFor(runConfiguration)) {
       return;
     }
@@ -186,15 +186,14 @@ public class CoverageJavaRunConfigurationExtension extends RunConfigurationExten
     return listener;
   }
 
-  @Nullable
-  private static String[] getFilters(JavaCoverageEnabledConfiguration coverageEnabledConfiguration) {
+  private static String @Nullable [] getFilters(JavaCoverageEnabledConfiguration coverageEnabledConfiguration) {
     final ClassFilter[] patterns = coverageEnabledConfiguration.getCoveragePatterns();
     if (patterns != null) {
       final List<String> filters = new ArrayList<>();
       for (ClassFilter classFilter : patterns) {
         filters.add(classFilter.getPattern());
       }
-      return ArrayUtil.toStringArray(filters);
+      return ArrayUtilRt.toStringArray(filters);
     }
     return null;
   }

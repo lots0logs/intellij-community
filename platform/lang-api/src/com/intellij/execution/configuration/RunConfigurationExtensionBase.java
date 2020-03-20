@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.configuration;
 
 import com.intellij.execution.ExecutionException;
@@ -9,8 +9,8 @@ import com.intellij.execution.configurations.RunConfigurationBase;
 import com.intellij.execution.configurations.RunnerSettings;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.openapi.options.SettingsEditor;
-import com.intellij.openapi.util.WriteExternalException;
 import org.jdom.Element;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -47,7 +47,6 @@ public abstract class RunConfigurationExtensionBase<T extends RunConfigurationBa
    * @param element          the element into which the settings should be persisted,
    */
   protected void writeExternal(@NotNull T runConfiguration, @NotNull Element element) {
-    throw new WriteExternalException();
   }
 
   /**
@@ -68,6 +67,7 @@ public abstract class RunConfigurationExtensionBase<T extends RunConfigurationBa
    * @return the editor tab title, or null if this extension doesn't provide any UI for editing the settings.
    */
   @Nullable
+  @Nls(capitalization = Nls.Capitalization.Title)
   protected String getEditorTitle() {
     return null;
   }

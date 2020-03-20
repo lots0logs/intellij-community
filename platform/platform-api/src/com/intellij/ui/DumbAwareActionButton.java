@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2014 JetBrains s.r.o.
+ * Copyright 2000-2019 JetBrains s.r.o.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,25 +15,45 @@
  */
 package com.intellij.ui;
 
+import com.intellij.openapi.actionSystem.Presentation;
 import com.intellij.openapi.project.DumbAware;
+import com.intellij.openapi.util.NlsActions;
+import com.intellij.openapi.util.NlsActions.ActionText;
+import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import java.util.function.Supplier;
 
 /**
  * @author gregsh
  */
 public abstract class DumbAwareActionButton extends AnActionButton implements DumbAware {
-  public DumbAwareActionButton(String text) {
+
+  public DumbAwareActionButton(@Nls @ActionText String text) {
     super(text);
   }
 
-  public DumbAwareActionButton(String text, String description, @Nullable Icon icon) {
+  public DumbAwareActionButton(@Nls @ActionText String text,
+                               @Nls @NlsActions.ActionDescription String description,
+                               @Nullable Icon icon) {
     super(text, description, icon);
   }
 
-  public DumbAwareActionButton(String text, Icon icon) {
+  public DumbAwareActionButton(@NotNull Supplier<String> dynamicText,
+                               @NotNull Supplier<String> dynamicDescription,
+                               @Nullable Icon icon) {
+    super(dynamicText, dynamicDescription, icon);
+  }
+
+  public DumbAwareActionButton(@Nls @ActionText String text,
+                               Icon icon) {
     super(text, icon);
+  }
+
+  public DumbAwareActionButton(@NotNull Supplier<String> dynamicText, Icon icon) {
+    this(dynamicText, Presentation.NULL_STRING, icon);
   }
 
   public DumbAwareActionButton() {

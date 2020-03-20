@@ -46,7 +46,7 @@ import static com.intellij.patterns.PsiJavaPatterns.psiExpressionStatement;
  * @author yole
 */
 class InlineToAnonymousConstructorProcessor {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.inline.InlineToAnonymousConstructorProcessor");
+  private static final Logger LOG = Logger.getInstance(InlineToAnonymousConstructorProcessor.class);
 
   private static final Key<PsiAssignmentExpression> ourAssignmentKey = Key.create("assignment");
   private static final Key<PsiCallExpression> ourCallKey = Key.create("call");
@@ -372,7 +372,7 @@ class InlineToAnonymousConstructorProcessor {
   }
 
   private PsiElement replaceParameterReferences(PsiElement argument,
-                                                @Nullable final List<PsiReferenceExpression> localVarRefs,
+                                                @Nullable final List<? super PsiReferenceExpression> localVarRefs,
                                                 final boolean replaceFieldsWithInitializers) throws IncorrectOperationException {
     if (argument instanceof PsiReferenceExpression) {
       PsiElement element = ((PsiReferenceExpression)argument).resolve();

@@ -7,11 +7,11 @@ import com.intellij.codeInsight.completion.InsertionContext;
 import com.intellij.codeInsight.completion.JavaMethodCallElement;
 import com.intellij.codeInsight.daemon.impl.analysis.LambdaHighlightingUtil;
 import com.intellij.codeInsight.hints.ParameterHintsPass;
+import com.intellij.codeInsight.lookup.CommaTailType;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.Computable;
 import com.intellij.openapi.util.NullableComputable;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
@@ -22,7 +22,6 @@ import com.intellij.psi.impl.source.resolve.DefaultParameterTypeInferencePolicy;
 import com.intellij.psi.impl.source.resolve.ParameterTypeInferencePolicy;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
-import com.intellij.psi.scope.conflictResolvers.DuplicateConflictResolver;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.PsiShortNamesCache;
 import com.intellij.psi.tree.IElementType;
@@ -46,10 +45,7 @@ import java.util.*;
 public class ExpectedTypesProvider {
   private static final ExpectedTypeInfo VOID_EXPECTED = createInfoImpl(PsiType.VOID, ExpectedTypeInfo.TYPE_OR_SUBTYPE, PsiType.VOID, TailType.SEMICOLON);
 
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.ExpectedTypesProvider");
-
-  private ExpectedTypesProvider() {
-  }
+  private static final Logger LOG = Logger.getInstance(ExpectedTypesProvider.class);
 
   public static ExpectedTypesProvider getInstance(@NotNull Project project) {
     return ServiceManager.getService(project, ExpectedTypesProvider.class);
@@ -58,16 +54,14 @@ public class ExpectedTypesProvider {
   private static final int MAX_COUNT = 50;
   private static final ExpectedClassProvider ourGlobalScopeClassProvider = new ExpectedClassProvider() {
     @Override
-    @NotNull
-    public PsiField[] findDeclaredFields(@NotNull final PsiManager manager, @NotNull String name) {
+    public PsiField @NotNull [] findDeclaredFields(@NotNull final PsiManager manager, @NotNull String name) {
       final PsiShortNamesCache cache = PsiShortNamesCache.getInstance(manager.getProject());
       GlobalSearchScope scope = GlobalSearchScope.allScope(manager.getProject());
       return cache.getFieldsByName(name, scope);
     }
 
     @Override
-    @NotNull
-    public PsiMethod[] findDeclaredMethods(@NotNull final PsiManager manager, @NotNull String name) {
+    public PsiMethod @NotNull [] findDeclaredMethods(@NotNull final PsiManager manager, @NotNull String name) {
       Project project = manager.getProject();
       final PsiShortNamesCache cache = PsiShortNamesCache.getInstance(project);
       GlobalSearchScope sources = GlobalSearchScope.projectScope(project);
@@ -113,35 +107,30 @@ public class ExpectedTypesProvider {
     return null;
   }
 
-  @NotNull
-  public static ExpectedTypeInfo[] getExpectedTypes(@Nullable PsiExpression expr, boolean forCompletion) {
+  public static ExpectedTypeInfo @NotNull [] getExpectedTypes(@Nullable PsiExpression expr, boolean forCompletion) {
     return getExpectedTypes(expr, forCompletion, false, false);
   }
 
-  @NotNull
-  public static ExpectedTypeInfo[] getExpectedTypes(@Nullable PsiExpression expr, boolean forCompletion, final boolean voidable, boolean usedAfter) {
+  public static ExpectedTypeInfo @NotNull [] getExpectedTypes(@Nullable PsiExpression expr, boolean forCompletion, final boolean voidable, boolean usedAfter) {
     return getExpectedTypes(expr, forCompletion, ourGlobalScopeClassProvider, voidable, usedAfter);
   }
 
-  @NotNull
-  public static ExpectedTypeInfo[] getExpectedTypes(@Nullable PsiExpression expr,
-                                                    boolean forCompletion,
-                                                    ExpectedClassProvider classProvider, boolean usedAfter) {
+  public static ExpectedTypeInfo @NotNull [] getExpectedTypes(@Nullable PsiExpression expr,
+                                                              boolean forCompletion,
+                                                              ExpectedClassProvider classProvider, boolean usedAfter) {
     return getExpectedTypes(expr, forCompletion, classProvider, false, usedAfter);
   }
 
-  @NotNull
-  public static ExpectedTypeInfo[] getExpectedTypes(@Nullable PsiExpression expr, boolean forCompletion, ExpectedClassProvider classProvider,
-                                                    final boolean voidable, boolean usedAfter) {
+  public static ExpectedTypeInfo @NotNull [] getExpectedTypes(@Nullable PsiExpression expr, boolean forCompletion, ExpectedClassProvider classProvider,
+                                                              final boolean voidable, boolean usedAfter) {
     return getExpectedTypes(expr, forCompletion, classProvider, voidable, usedAfter, Integer.MAX_VALUE);
   }
 
-  @NotNull
-  private static ExpectedTypeInfo[] getExpectedTypes(@Nullable PsiExpression expr,
-                                                     boolean forCompletion,
-                                                     ExpectedClassProvider classProvider,
-                                                     boolean voidable,
-                                                     boolean usedAfter, int maxCandidates) {
+  private static ExpectedTypeInfo @NotNull [] getExpectedTypes(@Nullable PsiExpression expr,
+                                                               boolean forCompletion,
+                                                               ExpectedClassProvider classProvider,
+                                                               boolean voidable,
+                                                               boolean usedAfter, int maxCandidates) {
     if (expr == null) return ExpectedTypeInfo.EMPTY_ARRAY;
     PsiElement parent = expr.getParent();
     PsiFunctionalExpression functionalExpression = extractFunctionalExpression(expr);
@@ -179,10 +168,9 @@ public class ExpectedTypesProvider {
     }
     return null;
   }
-  
-  @NotNull
-  public static PsiType[] processExpectedTypes(@NotNull ExpectedTypeInfo[] infos,
-                                               @NotNull PsiTypeVisitor<? extends PsiType> visitor, @NotNull Project project) {
+
+  public static PsiType @NotNull [] processExpectedTypes(ExpectedTypeInfo @NotNull [] infos,
+                                                         @NotNull PsiTypeVisitor<? extends PsiType> visitor, @NotNull Project project) {
     LinkedHashSet<PsiType> set = new LinkedHashSet<>();
     for (ExpectedTypeInfo info : infos) {
       ExpectedTypeInfoImpl infoImpl = (ExpectedTypeInfoImpl)info;
@@ -270,14 +258,14 @@ public class ExpectedTypesProvider {
     private final int myMaxCandidates;
     private final ExpectedClassProvider myClassProvider;
     private final boolean myVoidable;
-    final List<ExpectedTypeInfo> myResult = ContainerUtil.newArrayList();
+    final List<ExpectedTypeInfo> myResult = new ArrayList<>();
     @NonNls private static final String LENGTH_SYNTHETIC_ARRAY_FIELD = "length";
 
     private MyParentVisitor(PsiExpression expr,
                             boolean forCompletion,
                             ExpectedClassProvider classProvider,
                             boolean voidable,
-                            boolean usedAfter, 
+                            boolean usedAfter,
                             int maxCandidates) {
       myExpr = expr;
       myForCompletion = forCompletion;
@@ -287,8 +275,7 @@ public class ExpectedTypesProvider {
       myMaxCandidates = maxCandidates;
     }
 
-    @NotNull
-    public ExpectedTypeInfo[] getResult() {
+    public ExpectedTypeInfo @NotNull [] getResult() {
       if (myResult.size() > myMaxCandidates) {
         return myResult.subList(0, myMaxCandidates).toArray(ExpectedTypeInfo.EMPTY_ARRAY);
       }
@@ -361,13 +348,13 @@ public class ExpectedTypesProvider {
     }
 
     @Override
-    public void visitBreakStatement(PsiBreakStatement statement) {
-      PsiElement exitedElement = statement.findExitedElement();
-      if (exitedElement instanceof PsiSwitchExpression) {
-        Collections.addAll(myResult, getExpectedTypes((PsiSwitchExpression)exitedElement, myForCompletion));
+    public void visitYieldStatement(PsiYieldStatement statement) {
+      PsiSwitchExpression expression = statement.findEnclosingExpression();
+      if (expression != null) {
+        Collections.addAll(myResult, getExpectedTypes(expression, myForCompletion));
       }
     }
-
+    
     @Override
     public void visitMethodCallExpression(@NotNull PsiMethodCallExpression expression) {
       myExpr = (PsiExpression)myExpr.getParent();
@@ -510,7 +497,7 @@ public class ExpectedTypesProvider {
         PsiType type = statement.getIterationParameter().getType();
 
         if (PsiType.NULL.equals(type)) return;
-          
+
         PsiType arrayType = type.createArrayType();
         myResult.add(createInfoImpl(arrayType, arrayType));
 
@@ -591,7 +578,7 @@ public class ExpectedTypesProvider {
 
         PsiExpression rExpr = assignment.getRExpression();
         if (rExpr != null) {
-          PsiType type = MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(assignment, false, () -> rExpr.getType());
+          PsiType type = rExpr.getType();
           if (type != null && type != PsiType.NULL) {
             if (type instanceof PsiClassType) {
               final PsiClass resolved = ((PsiClassType)type).resolve();
@@ -630,7 +617,7 @@ public class ExpectedTypesProvider {
       if (parent instanceof PsiMethodCallExpression) {
         PsiMethodCallExpression methodCall = (PsiMethodCallExpression)parent;
         CandidateInfo[] candidates = helper.getReferencedMethodCandidates(methodCall, false, true);
-        Collections.addAll(myResult, getExpectedArgumentTypesForMethodCall(candidates, list, myExpr, myForCompletion, methodCall.resolveMethod()));
+        Collections.addAll(myResult, getExpectedArgumentTypesForMethodCall(candidates, list, myExpr, myForCompletion));
       }
       else if (parent instanceof PsiEnumConstant) {
         getExpectedArgumentsTypesForEnumConstant((PsiEnumConstant)parent, list);
@@ -660,19 +647,17 @@ public class ExpectedTypesProvider {
       final PsiClass aClass = enumConstant.getContainingClass();
       if (aClass != null) {
         LOG.assertTrue(aClass.isEnum());
-        getExpectedTypesForConstructorCall(aClass, list, PsiSubstitutor.EMPTY, enumConstant.resolveMethod());
+        getExpectedTypesForConstructorCall(aClass, list, PsiSubstitutor.EMPTY);
       }
     }
 
     private void getExpectedArgumentsTypesForNewExpression(@NotNull final PsiNewExpression newExpr,
                                                            @NotNull final PsiExpressionList list) {
       if (PsiDiamondType.hasDiamond(newExpr)) {
-        final JavaResolveResult[] candidates = PsiDiamondTypeImpl.collectStaticFactories(newExpr, DuplicateConflictResolver.INSTANCE);
+        final List<CandidateInfo> candidates = PsiDiamondTypeImpl.collectStaticFactories(newExpr);
         if (candidates != null) {
           final PsiExpressionList argumentList = Objects.requireNonNull(newExpr.getArgumentList());
-          CandidateInfo[] converted = ContainerUtil.map(candidates, candidate -> (CandidateInfo)candidate, CandidateInfo.EMPTY_ARRAY);
-          Collections.addAll(myResult, getExpectedArgumentTypesForMethodCall(converted, argumentList, myExpr, myForCompletion, 
-                                                                             newExpr.resolveMethod()));
+          Collections.addAll(myResult, getExpectedArgumentTypesForMethodCall(candidates.toArray(CandidateInfo.EMPTY_ARRAY), argumentList, myExpr, myForCompletion));
         }
         return;
       }
@@ -693,19 +678,19 @@ public class ExpectedTypesProvider {
         else {
           return;
         }
-        getExpectedTypesForConstructorCall(newClass, list, substitutor, newExpr.resolveMethod());
+        getExpectedTypesForConstructorCall(newClass, list, substitutor);
       }
     }
 
-    private void getExpectedTypesForConstructorCall(@NotNull final PsiClass referencedClass,
-                                                    @NotNull final PsiExpressionList argumentList,
-                                                    @NotNull PsiSubstitutor substitutor, PsiMethod method) {
+    private void getExpectedTypesForConstructorCall(@NotNull PsiClass referencedClass,
+                                                    @NotNull PsiExpressionList argumentList,
+                                                    @NotNull PsiSubstitutor substitutor) {
       List<CandidateInfo> array = new ArrayList<>();
       for (PsiMethod constructor : referencedClass.getConstructors()) {
         array.add(new MethodCandidateInfo(constructor, substitutor, false, false, argumentList, null, argumentList.getExpressionTypes(), null));
       }
       CandidateInfo[] candidates = array.toArray(CandidateInfo.EMPTY_ARRAY);
-      Collections.addAll(myResult, getExpectedArgumentTypesForMethodCall(candidates, argumentList, myExpr, myForCompletion, method));
+      Collections.addAll(myResult, getExpectedArgumentTypesForMethodCall(candidates, argumentList, myExpr, myForCompletion));
     }
 
     @Override
@@ -1008,12 +993,10 @@ public class ExpectedTypesProvider {
       }
     }
 
-    @NotNull
-    private ExpectedTypeInfo[] getExpectedArgumentTypesForMethodCall(@NotNull CandidateInfo[] allCandidates,
-                                                                     @NotNull PsiExpressionList argumentList,
-                                                                     @NotNull PsiExpression argument,
-                                                                     boolean forCompletion,
-                                                                     @Nullable PsiMethod targetMethod) {
+    private ExpectedTypeInfo @NotNull [] getExpectedArgumentTypesForMethodCall(CandidateInfo @NotNull [] allCandidates,
+                                                                               @NotNull PsiExpressionList argumentList,
+                                                                               @NotNull PsiExpression argument,
+                                                                               boolean forCompletion) {
       if (allCandidates.length == 0) {
         return ExpectedTypeInfo.EMPTY_ARRAY;
       }
@@ -1035,7 +1018,6 @@ public class ExpectedTypesProvider {
       }
       if (methodCandidates.isEmpty()) {
         Collections.addAll(methodCandidates, allCandidates);
-        methodCandidates.remove(toExclude);
       }
 
       final PsiExpression[] args = argumentList.getExpressions().clone();
@@ -1061,15 +1043,12 @@ public class ExpectedTypesProvider {
         PsiMethod method = (PsiMethod)candidateInfo.getElement();
         PsiSubstitutor substitutor;
         if (candidateInfo instanceof MethodCandidateInfo) {
-          final MethodCandidateInfo info = (MethodCandidateInfo)candidateInfo;
-          Computable<PsiSubstitutor> computable = () -> info.inferSubstitutorFromArgs(policy, args);
-          substitutor = info.isInferencePossible() && targetMethod == method
-                        ? computable.compute()
-                        : MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(argumentList, false, computable);
+          MethodCandidateInfo info = (MethodCandidateInfo)candidateInfo;
+          substitutor = info.inferSubstitutorFromArgs(policy, args);
           if (!info.isStaticsScopeCorrect() && !method.hasModifierProperty(PsiModifier.STATIC) || info.getInferenceErrorMessage() != null) continue;
         }
         else {
-          substitutor = MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(argumentList, false, candidateInfo::getSubstitutor);
+          substitutor = candidateInfo.getSubstitutor();
         }
         if (substitutor == null) {
           return ExpectedTypeInfo.EMPTY_ARRAY;
@@ -1078,10 +1057,7 @@ public class ExpectedTypesProvider {
         if (set.size() >= myMaxCandidates) break;
 
         if (leftArgs != null && candidateInfo instanceof MethodCandidateInfo) {
-          Computable<PsiSubstitutor> computable = () -> ((MethodCandidateInfo)candidateInfo).inferSubstitutorFromArgs(policy, leftArgs);
-          substitutor = ((MethodCandidateInfo)candidateInfo).isInferencePossible() && targetMethod == method
-                        ? computable.compute()
-                        : MethodCandidateInfo.ourOverloadGuard.doPreventingRecursion(argumentList, false, computable);
+          substitutor = ((MethodCandidateInfo)candidateInfo).inferSubstitutorFromArgs(policy, leftArgs);
           if (substitutor != null) {
             inferMethodCallArgumentTypes(argument, forCompletion, leftArgs, index, method, substitutor, set);
             if (set.size() >= myMaxCandidates) break;
@@ -1109,8 +1085,7 @@ public class ExpectedTypesProvider {
       return set.toArray(ExpectedTypeInfo.EMPTY_ARRAY);
     }
 
-    @NotNull
-    private static CandidateInfo[] selectCandidateChosenOnCompletion(@Nullable PsiElement call, @NotNull CandidateInfo[] candidates) {
+    private static CandidateInfo @NotNull [] selectCandidateChosenOnCompletion(@Nullable PsiElement call, CandidateInfo @NotNull [] candidates) {
       if (call instanceof PsiCall) {
         PsiCall originalCall = CompletionUtil.getOriginalElement((PsiCall)call);
         if (originalCall != null) {
@@ -1130,7 +1105,7 @@ public class ExpectedTypesProvider {
                                                       final int index,
                                                       @NotNull final PsiMethod method,
                                                       @NotNull final PsiSubstitutor substitutor,
-                                                      @NotNull final PsiParameter[] params) {
+                                                      final PsiParameter @NotNull [] params) {
       if (index >= params.length || index == params.length - 2 && params[index + 1].isVarArgs()) {
         return TailType.NONE;
       }
@@ -1147,7 +1122,7 @@ public class ExpectedTypesProvider {
         PsiCall completedOuterCall = getCompletedOuterCall(argument);
         if (completedOuterCall != null) return new CommaTailTypeWithSyncHintUpdate(completedOuterCall);
       }
-      return TailType.COMMA;
+      return CommaTailType.INSTANCE;
     }
 
     @Nullable
@@ -1167,7 +1142,7 @@ public class ExpectedTypesProvider {
 
     private static void inferMethodCallArgumentTypes(@NotNull final PsiExpression argument,
                                                      final boolean forCompletion,
-                                                     @NotNull final PsiExpression[] args,
+                                                     final PsiExpression @NotNull [] args,
                                                      final int index,
                                                      @NotNull final PsiMethod method,
                                                      @NotNull final PsiSubstitutor substitutor,
@@ -1204,7 +1179,7 @@ public class ExpectedTypesProvider {
 
     @Nullable
     private static PsiType getDefaultType(@NotNull final PsiMethod method, final PsiSubstitutor substitutor, @NotNull final PsiType parameterType,
-                                          @NotNull final PsiExpression argument, @NotNull PsiExpression[] args, int index) {
+                                          @NotNull final PsiExpression argument, PsiExpression @NotNull [] args, int index) {
       final PsiClass containingClass = method.getContainingClass();
       if (containingClass == null) return parameterType;
 
@@ -1286,8 +1261,7 @@ public class ExpectedTypesProvider {
       return Arrays.asList(info, info1, info2);
     }
 
-    @NotNull
-    private ExpectedTypeInfo[] findClassesWithDeclaredMethod(@NotNull final PsiMethodCallExpression methodCallExpr) {
+    private ExpectedTypeInfo @NotNull [] findClassesWithDeclaredMethod(@NotNull final PsiMethodCallExpression methodCallExpr) {
       PsiUtilCore.ensureValid(methodCallExpr);
       final PsiReferenceExpression reference = methodCallExpr.getMethodExpression();
       if (reference.getQualifierExpression() instanceof PsiClassObjectAccessExpression) {
@@ -1295,7 +1269,7 @@ public class ExpectedTypesProvider {
       }
       final PsiManager manager = methodCallExpr.getManager();
       final JavaPsiFacade facade = JavaPsiFacade.getInstance(manager.getProject());
-      Set<PsiMethod> psiMethods = mapToDeepestSuperMethods(myClassProvider.findDeclaredMethods(manager, reference.getReferenceName()));
+      Set<PsiMethod> psiMethods = mapToDeepestSuperMethods(myClassProvider.findDeclaredMethods(manager, Objects.requireNonNull(reference.getReferenceName())));
       Set<ExpectedTypeInfo> types = new THashSet<>();
       for (PsiMethod method : psiMethods) {
         final PsiClass aClass = method.getContainingClass();
@@ -1335,10 +1309,9 @@ public class ExpectedTypesProvider {
       return psiMethods;
     }
 
-    @NotNull
-    private ExpectedTypeInfo[] findClassesWithDeclaredField(@NotNull PsiReferenceExpression expression) {
+    private ExpectedTypeInfo @NotNull [] findClassesWithDeclaredField(@NotNull PsiReferenceExpression expression) {
       final JavaPsiFacade facade = JavaPsiFacade.getInstance(expression.getProject());
-      PsiField[] fields = myClassProvider.findDeclaredFields(expression.getManager(), expression.getReferenceName());
+      PsiField[] fields = myClassProvider.findDeclaredFields(expression.getManager(), Objects.requireNonNull(expression.getReferenceName()));
       List<ExpectedTypeInfo> types = new ArrayList<>();
       for (PsiField field : fields) {
         final PsiClass aClass = field.getContainingClass();
@@ -1364,11 +1337,9 @@ public class ExpectedTypesProvider {
    * By default searches in the global scope (see ourGlobalScopeClassProvider), but caller can provide its own algorithm e.g. to narrow search scope
    */
   public interface ExpectedClassProvider {
-    @NotNull
-    PsiField[] findDeclaredFields(@NotNull PsiManager manager, @NotNull String name);
+    PsiField @NotNull [] findDeclaredFields(@NotNull PsiManager manager, @NotNull String name);
 
-    @NotNull
-    PsiMethod[] findDeclaredMethods(@NotNull PsiManager manager, @NotNull String name);
+    PsiMethod @NotNull [] findDeclaredMethods(@NotNull PsiManager manager, @NotNull String name);
   }
 
   @NotNull
@@ -1398,12 +1369,12 @@ public class ExpectedTypesProvider {
 
     @Override
     public boolean isApplicable(@NotNull InsertionContext context) {
-      return TailType.COMMA.isApplicable(context);
+      return CommaTailType.INSTANCE.isApplicable(context);
     }
 
     @Override
     public int processTail(Editor editor, int tailOffset) {
-      int result = TailType.COMMA.processTail(editor, tailOffset);
+      int result = CommaTailType.INSTANCE.processTail(editor, tailOffset);
       if (myOriginalCall.isValid()) {
         PsiDocumentManager.getInstance(myOriginalCall.getProject()).commitDocument(editor.getDocument());
         if (myOriginalCall.isValid()) ParameterHintsPass.syncUpdate(myOriginalCall, editor);

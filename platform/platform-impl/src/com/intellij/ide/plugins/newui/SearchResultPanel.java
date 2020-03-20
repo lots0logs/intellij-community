@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins.newui;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.util.text.StringUtil;
@@ -22,10 +23,12 @@ public abstract class SearchResultPanel {
 
   protected final PluginsGroupComponent myPanel;
   private JScrollBar myVerticalScrollBar;
-  private final PluginsGroup myGroup = new PluginsGroup("Search Results");
+  private PluginsGroup myGroup = new PluginsGroup(IdeBundle.message("title.search.results"));
   private String myQuery;
   private AtomicBoolean myRunQuery;
   private boolean myEmpty = true;
+
+  protected Runnable myPostFillGroupCallback;
 
   public SearchResultPanel(@Nullable SearchPopupController controller,
                            @NotNull PluginsGroupComponent panel,
@@ -36,11 +39,21 @@ public abstract class SearchResultPanel {
     this.tabIndex = tabIndex;
     this.backTabIndex = backTabIndex;
 
-    setEmptyText();
+    setEmptyText("");
 
     if (isProgressMode()) {
       loading(false);
     }
+  }
+
+  @NotNull
+  public PluginsGroupComponent getPanel() {
+    return myPanel;
+  }
+
+  @NotNull
+  public PluginsGroup getGroup() {
+    return myGroup;
   }
 
   @NotNull
@@ -53,8 +66,16 @@ public abstract class SearchResultPanel {
     return pane;
   }
 
-  private void setEmptyText() {
-    myPanel.getEmptyText().setText("Nothing to show");
+  @NotNull
+  public JComponent createVScrollPane() {
+    JBScrollPane pane = (JBScrollPane)createScrollPane();
+    pane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+    pane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+    return pane;
+  }
+
+  protected void setEmptyText(@NotNull String query) {
+    myPanel.getEmptyText().setText(IdeBundle.message("empty.text.nothing.found"));
   }
 
   public boolean isEmpty() {
@@ -63,6 +84,7 @@ public abstract class SearchResultPanel {
 
   public void setEmpty() {
     myEmpty = true;
+    myQuery = "";
   }
 
   @NotNull
@@ -71,7 +93,9 @@ public abstract class SearchResultPanel {
   }
 
   public void setQuery(@NotNull String query) {
-    setEmptyText();
+    assert SwingUtilities.isEventDispatchThread();
+
+    setEmptyText(query);
 
     if (query.equals(myQuery)) {
       myEmpty = query.isEmpty();
@@ -93,17 +117,18 @@ public abstract class SearchResultPanel {
   }
 
   private void handleQuery(@NotNull String query) {
-    myGroup.clear();
-
     if (isProgressMode()) {
       loading(true);
 
       AtomicBoolean runQuery = myRunQuery = new AtomicBoolean(true);
+      PluginsGroup group = myGroup;
 
       ApplicationManager.getApplication().executeOnPooledThread(() -> {
-        handleQuery(myQuery, myGroup);
+        handleQuery(query, group);
 
         ApplicationManager.getApplication().invokeLater(() -> {
+          assert SwingUtilities.isEventDispatchThread();
+
           if (!runQuery.get()) {
             return;
           }
@@ -119,6 +144,7 @@ public abstract class SearchResultPanel {
           }
 
           myPanel.initialSelection(false);
+          runPostFillGroupCallback();
           fullRepaint();
         }, ModalityState.any());
       });
@@ -132,11 +158,19 @@ public abstract class SearchResultPanel {
         myPanel.initialSelection(false);
       }
 
+      runPostFillGroupCallback();
       fullRepaint();
     }
   }
 
   protected abstract void handleQuery(@NotNull String query, @NotNull PluginsGroup result);
+
+  private void runPostFillGroupCallback() {
+    if (myPostFillGroupCallback != null) {
+      myPostFillGroupCallback.run();
+      myPostFillGroupCallback = null;
+    }
+  }
 
   private void loading(boolean start) {
     PluginsGroupComponentWithProgress panel = (PluginsGroupComponentWithProgress)myPanel;
@@ -163,9 +197,10 @@ public abstract class SearchResultPanel {
       myPanel.removeGroup(myGroup);
       fullRepaint();
     }
+    myGroup = new PluginsGroup(IdeBundle.message("title.search.results"));
   }
 
-  private void fullRepaint() {
+  public void fullRepaint() {
     myPanel.doLayout();
     myPanel.revalidate();
     myPanel.repaint();

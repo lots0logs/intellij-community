@@ -18,7 +18,7 @@ import java.util.*;
  * @author dsl
  */
 public abstract class AutomaticRenamer {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.rename.naming.AutomaticRenamer");
+  private static final Logger LOG = Logger.getInstance(AutomaticRenamer.class);
 
   private final LinkedHashMap<PsiNamedElement, String> myRenames = new LinkedHashMap<>();
   protected final List<PsiNamedElement> myElements;
@@ -58,10 +58,10 @@ public abstract class AutomaticRenamer {
   }
 
   private boolean findUsagesForElement(PsiNamedElement element,
-                                       List<UsageInfo> result,
+                                       List<? super UsageInfo> result,
                                        final boolean searchInStringsAndComments,
                                        final boolean searchInNonJavaFiles,
-                                       List<UnresolvableCollisionUsageInfo> unresolvedUsages,
+                                       List<? super UnresolvableCollisionUsageInfo> unresolvedUsages,
                                        Map<PsiElement, String> allRenames) {
     final String newName = getNewName(element);
     if (newName != null) {

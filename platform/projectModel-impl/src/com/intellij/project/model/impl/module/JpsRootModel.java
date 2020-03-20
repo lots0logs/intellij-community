@@ -21,41 +21,24 @@ import com.intellij.openapi.roots.ContentEntry;
 import com.intellij.openapi.roots.ModuleRootModel;
 import com.intellij.openapi.roots.OrderEntry;
 import com.intellij.openapi.roots.impl.RootModelBase;
-import com.intellij.openapi.vfs.pointers.VirtualFilePointer;
 import com.intellij.project.model.impl.module.content.JpsContentEntry;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.jps.model.module.JpsDependencyElement;
 import org.jetbrains.jps.model.module.JpsModule;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class JpsRootModel extends RootModelBase implements ModuleRootModel {
   private final Module myModule;
-  private final JpsModule myJpsModule;
-  public VirtualFilePointer myExplodedDirectoryPointer;
   private final List<ContentEntry> myContentEntries;
-  private final List<OrderEntry> myOrderEntries;
 
   public JpsRootModel(Module module, JpsModule jpsModule) {
     myModule = module;
-    myJpsModule = jpsModule;
     myContentEntries = new ArrayList<>();
-    for (String contentRoot : myJpsModule.getContentRootsList().getUrls()) {
+    for (String contentRoot : jpsModule.getContentRootsList().getUrls()) {
       myContentEntries.add(new JpsContentEntry(jpsModule, this, contentRoot));
     }
-    myOrderEntries = new ArrayList<>();
-    for (JpsDependencyElement element : myJpsModule.getDependenciesList().getDependencies()) {
-      myOrderEntries.add(JpsOrderEntryFactory.createOrderEntry(this, element));
-    }
-  }
-
-  public JpsModule getJpsModule() {
-    return myJpsModule;
   }
 
   @NotNull
@@ -69,10 +52,9 @@ public class JpsRootModel extends RootModelBase implements ModuleRootModel {
     return myContentEntries;
   }
 
-  @NotNull
   @Override
-  public OrderEntry[] getOrderEntries() {
-    return myOrderEntries.toArray(OrderEntry.EMPTY_ARRAY);
+  public OrderEntry @NotNull [] getOrderEntries() {
+    return OrderEntry.EMPTY_ARRAY;
   }
 
   @Override
@@ -82,9 +64,5 @@ public class JpsRootModel extends RootModelBase implements ModuleRootModel {
 
   public Project getProject() {
     return myModule.getProject();
-  }
-
-  public boolean isExcludeExplodedDirectory() {
-    return false;
   }
 }

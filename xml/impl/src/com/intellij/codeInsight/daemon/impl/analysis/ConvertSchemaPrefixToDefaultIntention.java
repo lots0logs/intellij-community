@@ -101,7 +101,7 @@ public class ConvertSchemaPrefixToDefaultIntention extends PsiElementBaseIntenti
     WriteCommandAction.writeCommandAction(project, xmlns.getContainingFile()).withName(NAME).run(() -> xmlns.setName("xmlns"));
   }
 
-  private static void convertTagsAndAttributes(String ns, final List<XmlTag> tags, final List<XmlAttribute> attrs, Project project) {
+  private static void convertTagsAndAttributes(String ns, final List<? extends XmlTag> tags, final List<? extends XmlAttribute> attrs, Project project) {
     final int localNameIndex = ns.length() + 1;
     final int totalCount = tags.size() + attrs.size();
 
@@ -109,10 +109,6 @@ public class ConvertSchemaPrefixToDefaultIntention extends PsiElementBaseIntenti
     progressTask.setTask(new SequentialTask() {
       int tagIndex = 0;
       int attrIndex = 0;
-
-      @Override
-      public void prepare() {
-      }
 
       @Override
       public boolean isDone() {
@@ -138,11 +134,6 @@ public class ConvertSchemaPrefixToDefaultIntention extends PsiElementBaseIntenti
         });
 
         return isDone();
-      }
-
-      @Override
-      public void stop() {
-
       }
     });
     ProgressManager.getInstance().run(progressTask);

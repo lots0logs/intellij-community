@@ -5,18 +5,19 @@ import com.intellij.CommonBundle;
 import com.intellij.coverage.*;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.actionSystem.ex.ComboBoxAction;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.*;
 import com.intellij.util.IconUtil;
 import com.intellij.util.PlatformIcons;
+import com.intellij.util.containers.TreeTraversal;
 import com.intellij.util.text.DateFormatUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NonNls;
@@ -38,7 +39,6 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
   private final Project myProject;
   private final CheckboxTree mySuitesTree;
   private final CoverageDataManager myCoverageManager;
-  private static final Logger LOG = Logger.getInstance(CoverageSuiteChooserDialog.class);
   private final CheckedTreeNode myRootNode;
   private CoverageEngine myEngine;
 
@@ -62,16 +62,16 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
         });
       }
     };
-    mySuitesTree.getEmptyText().appendText("No coverage suites configured.");
+    mySuitesTree.getEmptyText().appendText(CoverageBundle.message("no.coverage.suites.configured"));
     mySuitesTree.setRootVisible(false);
     mySuitesTree.setShowsRootHandles(false);
     TreeUtil.installActions(mySuitesTree);
     TreeUtil.expandAll(mySuitesTree);
-    TreeUtil.selectFirstNode(mySuitesTree);
+    TreeUtil.promiseSelectFirst(mySuitesTree);
     mySuitesTree.setMinimumSize(new Dimension(25, -1));
-    setOKButtonText("Show selected");
+    setOKButtonText(CoverageBundle.message("coverage.data.show.selected.button"));
     init();
-    setTitle("Choose Coverage Suite to Display");
+    setTitle(CoverageBundle.message("choose.coverage.suite.to.display"));
   }
 
   @Override
@@ -96,15 +96,29 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
   @Override
   protected void doOKAction() {
     final List<CoverageSuite> suites = collectSelectedSuites();
-    myCoverageManager
-      .chooseSuitesBundle(suites.isEmpty() ? null : new CoverageSuitesBundle(suites.toArray(new CoverageSuite[0])));
+    myCoverageManager.chooseSuitesBundle(suites.isEmpty() ? null : new CoverageSuitesBundle(suites.toArray(new CoverageSuite[0])));
     ((CoverageDataManagerImpl)myCoverageManager).addRootsToWatch(suites);
     super.doOKAction();
   }
 
   @NotNull
   @Override
-  protected Action[] createActions() {
+  protected List<ValidationInfo> doValidateAll() {
+    CoverageEngine engine = null;
+    for (CoverageSuite suite : collectSelectedSuites()) {
+      if (engine == null) {
+        engine = suite.getCoverageEngine();
+        continue;
+      }
+      if (!Comparing.equal(engine, suite.getCoverageEngine())) {
+        return Collections.singletonList(new ValidationInfo(CoverageBundle.message("cannot.show.coverage.reports.from.different.engines"), mySuitesTree));
+      }
+    }
+    return super.doValidateAll();
+  }
+
+  @Override
+  protected Action @NotNull [] createActions() {
     return new Action[]{getOKAction(), new NoCoverageAction(), getCancelAction()};
   }
 
@@ -117,7 +131,7 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
   }
 
   private static String getCoverageRunnerTitle(CoverageRunner coverageRunner) {
-    return coverageRunner.getPresentableName() + " Coverage";
+    return CoverageBundle.message("coverage.data.runner.name", coverageRunner.getPresentableName());
   }
 
   @Nullable
@@ -132,7 +146,7 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
 
   private List<CoverageSuite> collectSelectedSuites() {
     final List<CoverageSuite> suites = new ArrayList<>();
-    TreeUtil.traverse(myRootNode, treeNode -> {
+    TreeUtil.treeNodeTraverser(myRootNode).traverse(TreeTraversal.PRE_ORDER_DFS).processEach(treeNode -> {
       if (treeNode instanceof CheckedTreeNode && ((CheckedTreeNode)treeNode).isChecked()) {
         final Object userObject = ((CheckedTreeNode)treeNode).getUserObject();
         if (userObject instanceof CoverageSuite) {
@@ -244,7 +258,7 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
 
   private class NoCoverageAction extends DialogWrapperAction {
     NoCoverageAction() {
-      super("&No Coverage");
+      super(CoverageBundle.message("coverage.data.no.coverage.button"));
     }
 
     @Override
@@ -256,7 +270,7 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
 
   private class AddExternalSuiteAction extends AnAction {
     AddExternalSuiteAction() {
-      super("Add", "Add", IconUtil.getAddIcon());
+      super(CommonBundle.message("button.add"), CommonBundle.message("button.add"), IconUtil.getAddIcon());
       registerCustomShortcutSet(CommonShortcuts.INSERT, mySuitesTree);
     }
 
@@ -275,7 +289,7 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
 
         final CoverageRunner coverageRunner = getCoverageRunner(file);
         if (coverageRunner == null) {
-          Messages.showErrorDialog(myProject, "No coverage runner available for " + file.getName(), CommonBundle.getErrorTitle());
+          Messages.showErrorDialog(myProject, CoverageBundle.message("no.coverage.runner.available.for", file.getName()), CommonBundle.getErrorTitle());
           return;
         }
 
@@ -325,7 +339,7 @@ public class CoverageSuiteChooserDialog extends DialogWrapper {
 
   private class DeleteSuiteAction extends AnAction {
     DeleteSuiteAction() {
-      super("Delete", "Delete", PlatformIcons.DELETE_ICON);
+      super(CommonBundle.message("button.delete"), CommonBundle.message("button.delete"), PlatformIcons.DELETE_ICON);
       registerCustomShortcutSet(CommonShortcuts.getDelete(), mySuitesTree);
     }
 

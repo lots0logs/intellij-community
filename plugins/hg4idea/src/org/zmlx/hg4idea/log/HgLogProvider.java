@@ -13,12 +13,14 @@ import com.intellij.openapi.vcs.VcsKey;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.CollectConsumer;
 import com.intellij.util.Consumer;
+import com.intellij.util.EmptyConsumer;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import com.intellij.vcs.log.*;
 import com.intellij.vcs.log.impl.LogDataImpl;
 import com.intellij.vcs.log.util.UserNameRegex;
 import com.intellij.vcs.log.util.VcsUserUtil;
+import org.jetbrains.annotations.CalledInAny;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.zmlx.hg4idea.HgFileRevision;
@@ -64,7 +66,7 @@ public final class HgLogProvider implements VcsLogProvider {
   @Override
   @NotNull
   public LogData readAllHashes(@NotNull VirtualFile root, @NotNull final Consumer<? super TimedVcsCommit> commitConsumer) throws VcsException {
-    Set<VcsUser> userRegistry = ContainerUtil.newHashSet();
+    Set<VcsUser> userRegistry = new HashSet<>();
     List<TimedVcsCommit> commits = HgHistoryUtil.readAllHashes(myProject, root, new CollectConsumer<>(userRegistry),
                                                                Collections.emptyList());
     for (TimedVcsCommit commit : commits) {
@@ -74,15 +76,9 @@ public final class HgLogProvider implements VcsLogProvider {
   }
 
   @Override
-  public void readAllFullDetails(@NotNull VirtualFile root, @NotNull Consumer<? super VcsFullCommitDetails> commitConsumer) throws VcsException {
-    readFullDetails(root, ContainerUtil.newArrayList(), commitConsumer);
-  }
-
-  @Override
   public void readFullDetails(@NotNull VirtualFile root,
                               @NotNull List<String> hashes,
-                              @NotNull Consumer<? super VcsFullCommitDetails> commitConsumer,
-                              boolean isForIndexing)
+                              @NotNull Consumer<? super VcsFullCommitDetails> commitConsumer)
     throws VcsException {
     // parameter isForIndexing is currently not used
     // since this method is not called from index yet, fast always is false
@@ -202,7 +198,7 @@ public final class HgLogProvider implements VcsLogProvider {
   public List<TimedVcsCommit> getCommitsMatchingFilter(@NotNull final VirtualFile root,
                                                        @NotNull VcsLogFilterCollection filterCollection,
                                                        int maxCount) {
-    List<String> filterParameters = ContainerUtil.newArrayList();
+    List<String> filterParameters = new ArrayList<>();
 
     // branch filter and user filter may be used several times without delimiter
     VcsLogBranchFilter branchFilter = filterCollection.get(VcsLogFilterCollection.BRANCH_FILTER);
@@ -215,7 +211,7 @@ public final class HgLogProvider implements VcsLogProvider {
 
       Collection<String> branchNames = repository.getBranches().keySet();
       Collection<String> bookmarkNames = HgUtil.getNamesWithoutHashes(repository.getBookmarks());
-      Collection<String> predefinedNames = ContainerUtil.list(TIP_REFERENCE);
+      Collection<String> predefinedNames = Collections.singletonList(TIP_REFERENCE);
 
       boolean atLeastOneBranchExists = false;
       for (String branchName : ContainerUtil.concat(branchNames, bookmarkNames, predefinedNames)) {
@@ -288,7 +284,7 @@ public final class HgLogProvider implements VcsLogProvider {
       }
     }
 
-    return HgHistoryUtil.readAllHashes(myProject, root, Consumer.EMPTY_CONSUMER, filterParameters);
+    return HgHistoryUtil.readHashes(myProject, root, EmptyConsumer.getInstance(), maxCount, filterParameters);
   }
 
   @Nullable
@@ -320,8 +316,9 @@ public final class HgLogProvider implements VcsLogProvider {
 
   @Nullable
   @Override
+  @CalledInAny
   public String getCurrentBranch(@NotNull VirtualFile root) {
-    HgRepository repository = getHgRepoManager(myProject).getRepositoryForRoot(root);
+    HgRepository repository = getHgRepoManager(myProject).getRepositoryForRootQuick(root);
     if (repository == null) return null;
     return repository.getCurrentBranchName();
   }
@@ -329,12 +326,6 @@ public final class HgLogProvider implements VcsLogProvider {
   @NotNull
   private static HgRepositoryManager getHgRepoManager(@NotNull Project project) {
     return ServiceManager.getService(project, HgRepositoryManager.class);
-  }
-
-  @Nullable
-  @Override
-  public VcsLogDiffHandler getDiffHandler() {
-    return null;
   }
 
   @Nullable

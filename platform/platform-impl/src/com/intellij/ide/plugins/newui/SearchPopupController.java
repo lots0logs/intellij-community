@@ -1,7 +1,6 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins.newui;
 
-import com.intellij.openapi.ui.popup.JBPopupAdapter;
 import com.intellij.openapi.ui.popup.JBPopupListener;
 import com.intellij.openapi.ui.popup.LightweightWindowEvent;
 import com.intellij.openapi.util.Pair;
@@ -21,9 +20,9 @@ import java.util.List;
  * @author Alexander Lobas
  */
 public abstract class SearchPopupController {
-  private final PluginSearchTextField myTextField;
+  protected final PluginSearchTextField myTextField;
   protected SearchPopup myPopup;
-  private final JBPopupListener mySearchPopupListener = new JBPopupAdapter() {
+  private final JBPopupListener mySearchPopupListener = new JBPopupListener() {
     @Override
     public void onClosed(@NotNull LightweightWindowEvent event) {
       myPopup = null;
@@ -40,20 +39,13 @@ public abstract class SearchPopupController {
     int position = getCaretPosition();
 
     if (position < length) {
-      if (query.charAt(position) == ' ') {
-        if (position == 0 || query.charAt(position - 1) == ' ') {
-          showAttributesPopup(null, position);
-          return;
-        }
-      }
-      else {
-        hidePopup();
-        handleAppendToQuery();
+      if (query.charAt(position) != ' ') {
+        handleShowPopupForQuery();
         return;
       }
     }
     else if (query.charAt(position - 1) == ' ') {
-      showAttributesPopup(null, position);
+      handleShowPopupForQuery();
       return;
     }
 
@@ -72,7 +64,7 @@ public abstract class SearchPopupController {
   }
 
   @NotNull
-  private static Pair<String, String> parseAttributeInQuery(@NotNull String query, int end, @NotNull Ref<Integer> startPosition) {
+  private static Pair<String, String> parseAttributeInQuery(@NotNull String query, int end, @NotNull Ref<? super Integer> startPosition) {
     int index = end - 1;
     String value = null;
 
@@ -97,13 +89,11 @@ public abstract class SearchPopupController {
       index--;
     }
 
-    String name = StringUtil.trimStart(query.substring(index + 1, end), "-");
-
     if (startPosition.isNull()) {
-      startPosition.set(index + (query.charAt(index + 1) == '-' ? 2 : 1));
+      startPosition.set(index + 1);
     }
 
-    return Pair.create(name, value);
+    return Pair.create(query.substring(index + 1, end), value);
   }
 
   public void showAttributesPopup(@Nullable String namePrefix, int caretPosition) {
@@ -131,7 +121,7 @@ public abstract class SearchPopupController {
   private void handleShowAttributeValuesPopup(@NotNull String name, @Nullable String valuePrefix, int caretPosition) {
     List<String> values = getValues(name);
     if (ContainerUtil.isEmpty(values)) {
-      showPopupForQuery();
+      handleShowPopupForQuery();
       return;
     }
 
@@ -148,11 +138,8 @@ public abstract class SearchPopupController {
     createAndShow(true, new SearchPopupCallback(valuePrefix) {
       @Override
       public void consume(String value) {
-        if (StringUtil.containsAnyChar(value, " ,:")) {
-          value = "\"" + value + "\"";
-        }
-        appendSearchText(value, prefix);
-        handleAppendAttributeValue();
+        appendSearchText(SearchQueryParser.wrapAttribute(value), prefix);
+        handleShowPopupForQuery();
       }
     });
   }
@@ -211,7 +198,7 @@ public abstract class SearchPopupController {
     }
 
     if (model.isEmpty()) {
-      showPopupForQuery();
+      handleShowPopupForQuery();
       return true;
     }
 
@@ -224,13 +211,12 @@ public abstract class SearchPopupController {
   @Nullable
   protected abstract List<String> getValues(@NotNull String attribute);
 
+  private void handleShowPopupForQuery() {
+    hidePopup();
+    showPopupForQuery();
+  }
+
   protected abstract void showPopupForQuery();
-
-  protected void handleAppendToQuery() {
-  }
-
-  protected void handleAppendAttributeValue() {
-  }
 
   public boolean isPopupShow() {
     return myPopup != null && myPopup.isValid();

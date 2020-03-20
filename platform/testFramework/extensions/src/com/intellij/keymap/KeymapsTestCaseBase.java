@@ -15,6 +15,7 @@
  */
 package com.intellij.keymap;
 
+import com.intellij.execution.ExecutorRegistry;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.keymap.Keymap;
 import com.intellij.openapi.keymap.KeymapManager;
@@ -43,6 +44,7 @@ import static com.intellij.testFramework.assertions.Assertions.assertThat;
 public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
   private static final Set<String> LINUX_KEYMAPS = ContainerUtil.newHashSet("Default for XWin", "Default for GNOME", "Default for KDE");
   protected static final String SECOND_STROKE = "SECOND_STROKE_SHORTCUT";
+  public static final String NO_DUPLICATES = "<no duplicates>";
 
   /**
    * @return Keymap -> Shortcut -> [ActionId]
@@ -68,12 +70,15 @@ public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
                             values.length > 0);
         TestCase.assertTrue("known duplicates list entry for '" + keymapName + "', shortcut '" + values[0] +
                             "' must contain at least two conflicting action ids",
-                            values.length > 2);
+                            values.length > 2 || values.length == 2 && NO_DUPLICATES.equals(values[1]));
         TestCase.assertFalse("known duplicates list entry for '" + keymapName + "', shortcut '" + values[0] +
                              "' must not contain duplicated shortcuts",
                              mapping.containsKey(values[0]));
 
-        mapping.put(values[0], ContainerUtil.newArrayList(values, 1, values.length));
+        List<String> actions = ContainerUtil.newArrayList(values);
+        actions.remove(0); // shortcut
+        actions.remove(NO_DUPLICATES);
+        mapping.put(values[0], actions);
       }
     }
     return result;
@@ -98,10 +103,13 @@ public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
       if (baseMap == null) continue;
 
       Keymap keymap = km.getKeymap(keymapName);
+      assertNotNull(keymap);
+
       for (String shortcut : baseMap.keySet()) {
-        List<String> actionIds = ContainerUtil.filter(
-          baseMap.get(shortcut),
-          actionId -> ActionManager.getInstance().getAction(actionId) != null || keymap.getShortcuts(actionId).length > 0);
+        List<String> actionIds = ContainerUtil.filter(baseMap.get(shortcut),
+                                                      actionId -> SECOND_STROKE.equals(actionId) ||
+                                                                  ActionManager.getInstance().getAction(actionId) != null ||
+                                                                  keymap.getShortcuts(actionId).length > 0);
 
         if (actionIds.size() >= 2) {
           map.put(shortcut, actionIds);
@@ -192,31 +200,27 @@ public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
 
 
     for (String keymap : ContainerUtil.sorted(allKeymaps)) {
-      Map<Shortcut, List<String>> actual = actualDuplicates.get(keymap);
-      Map<Shortcut, List<String>> expected = expectedDuplicates.get(keymap);
+      Map<Shortcut, List<String>> actual = ContainerUtil.notNullize(actualDuplicates.get(keymap));
+      Map<Shortcut, List<String>> expected = ContainerUtil.notNullize(expectedDuplicates.get(keymap));
 
       StringBuilder keymapFailure = new StringBuilder();
       for (Shortcut shortcut : ContainerUtil.union(actual.keySet(), expected.keySet())) {
-        List<String> expectedActions = expected.get(shortcut);
-        List<String> actualActions = actual.get(shortcut);
-        if (expectedActions == null || actualActions == null || !Comparing.haveEqualElements(expectedActions, actualActions)) {
+        List<String> expectedActions = ContainerUtil.notNullize(expected.get(shortcut));
+        List<String> actualActions = ContainerUtil.notNullize(actual.get(shortcut));
+        if (!Comparing.haveEqualElements(expectedActions, actualActions)) {
           String key = getText(shortcut);
 
-          if (actualActions == null) {
-            keymapFailure.append("    ").append(key).append(" - <empty>\n");
-          }
-          else {
-            int keyLength = 24;
+          int keyLength = 24;
 
-            keymapFailure.append("    { ");
-            keymapFailure.append("\"").append(key).append("\"").append(", ");
-            keymapFailure.append(StringUtil.repeat(" ", Math.max(0, keyLength - key.length())));
+          keymapFailure.append("    { ");
+          keymapFailure.append("\"").append(key).append("\"").append(", ");
+          keymapFailure.append(StringUtil.repeat(" ", Math.max(0, keyLength - key.length())));
 
-            List<String> values = ContainerUtil.map(ContainerUtil.sorted(actualActions), it -> "\"" + it + "\"");
-            keymapFailure.append(StringUtil.join(ContainerUtil.sorted(values), ", "));
+          List<String> values = actualActions.isEmpty() ? Collections.singletonList(NO_DUPLICATES)
+                                                        : ContainerUtil.map(ContainerUtil.sorted(actualActions), it -> "\"" + it + "\"");
+          keymapFailure.append(StringUtil.join(ContainerUtil.sorted(values), ", "));
 
-            keymapFailure.append("},\n");
-          }
+          keymapFailure.append("},\n");
         }
       }
 
@@ -233,6 +237,12 @@ public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
                     "Please specify 'use-shortcut-of' attribute for your action if it is similar to another action (but it won't appear in Settings/Keymap),\n" +
                     "reassign shortcut or, if absolutely must, modify the 'known duplicates list'");
     }
+  }
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    ExecutorRegistry.getInstance();
   }
 
   @NotNull
@@ -342,6 +352,9 @@ public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
 
   @NotNull
   private static Shortcut parseShortcut(@NotNull String s) {
+    if (s.equals("Force touch")) {
+      return KeymapUtil.parseMouseShortcut(s);
+    }
     if (s.contains("button")) {
       return KeymapUtil.parseMouseShortcut(s);
     }
@@ -380,7 +393,7 @@ public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
     String text = KeyStrokeAdapter.toString(fst);
     int offset = text.lastIndexOf(' ');
     if (offset == -1) offset = 0;
-    return text.substring(0, offset) + text.substring(offset).toUpperCase(Locale.ENGLISH);
+    return text.substring(0, offset) + StringUtil.toUpperCase(text.substring(offset));
   }
 
   private static Shortcut convertShortcutForParent(Shortcut key, @NotNull Keymap keymap) {
@@ -438,11 +451,8 @@ public abstract class KeymapsTestCaseBase extends LightPlatformTestCase {
 
       for (String actionId : keymapImpl.getActionIds()) {
         if (knownBoundActions.contains(actionId)) continue;
-
-        Shortcut[] ownShortcuts = keymapImpl.getOwnShortcuts(actionId);
         boolean isBound = keymapImpl.isActionBound(actionId);
-
-        if (isBound && ownShortcuts != null) {
+        if (isBound) {
           unboundActionsWithShortcut.add(actionId);
         }
       }

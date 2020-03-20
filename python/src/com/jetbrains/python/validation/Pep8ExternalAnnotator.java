@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.validation;
 
 import com.google.common.collect.ImmutableMap;
@@ -26,11 +12,11 @@ import com.intellij.codeInspection.ex.CustomEditInspectionToolsSettingsAction;
 import com.intellij.codeInspection.ex.InspectionProfileModifiableModelKt;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.process.ProcessOutput;
-import com.intellij.lang.annotation.Annotation;
+import com.intellij.lang.annotation.AnnotationBuilder;
 import com.intellij.lang.annotation.AnnotationHolder;
 import com.intellij.lang.annotation.ExternalAnnotator;
+import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.openapi.application.ApplicationInfo;
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
@@ -43,21 +29,16 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
-import com.intellij.psi.PsiDocumentManager;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiWhiteSpace;
+import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.CommonCodeStyleSettings;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
-import com.jetbrains.python.PyTokenTypes;
-import com.jetbrains.python.PythonFileType;
-import com.jetbrains.python.PythonHelper;
-import com.jetbrains.python.PythonLanguage;
+import com.jetbrains.python.*;
 import com.jetbrains.python.codeInsight.imports.OptimizeImportsQuickFix;
 import com.jetbrains.python.formatter.PyCodeStyleSettings;
 import com.jetbrains.python.inspections.PyPep8Inspection;
+import com.jetbrains.python.inspections.flake8.Flake8InspectionSuppressor;
 import com.jetbrains.python.inspections.quickfix.PyFillParagraphFix;
 import com.jetbrains.python.inspections.quickfix.ReformatFix;
 import com.jetbrains.python.inspections.quickfix.RemoveTrailingBlankLinesFix;
@@ -67,17 +48,18 @@ import com.jetbrains.python.psi.impl.PyPsiUtils;
 import com.jetbrains.python.sdk.PreferredSdkComparator;
 import com.jetbrains.python.sdk.PySdkUtil;
 import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import com.jetbrains.python.sdk.flavors.PythonSdkFlavor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static com.jetbrains.python.psi.PyUtil.as;
 
 /**
  * @author yole
@@ -150,6 +132,11 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
 
   private boolean myReportedMissingInterpreter;
 
+  @Override
+  public String getPairedBatchInspectionShortName() {
+    return PyPep8Inspection.INSPECTION_SHORT_NAME;
+  }
+
   @Nullable
   @Override
   public State collectInformation(@NotNull PsiFile file) {
@@ -181,7 +168,7 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
     if (file instanceof PyFileImpl && !((PyFileImpl)file).isAcceptedFor(PyPep8Inspection.class)) {
       return null;
     }
-    final PyPep8Inspection inspection = (PyPep8Inspection)profile.getUnwrappedTool(PyPep8Inspection.KEY.toString(), file);
+    final PyPep8Inspection inspection = (PyPep8Inspection)profile.getUnwrappedTool(PyPep8Inspection.INSPECTION_SHORT_NAME, file);
     final CodeStyleSettings commonSettings = CodeStyle.getSettings(file);
     final PyCodeStyleSettings customSettings = CodeStyle.getCustomSettings(file, PyCodeStyleSettings.class);
 
@@ -201,10 +188,10 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
 
   private static void reportMissingInterpreter() {
     LOG.info("Found no suitable interpreter to run pycodestyle.py. Available interpreters are: [");
-    List<Sdk> allSdks = PythonSdkType.getAllSdks();
+    List<Sdk> allSdks = PythonSdkUtil.getAllSdks();
     Collections.sort(allSdks, PreferredSdkComparator.INSTANCE);
     for (Sdk sdk : allSdks) {
-      LOG.info("  Path: " + sdk.getHomePath() + "; Flavor: " + PythonSdkFlavor.getFlavor(sdk) + "; Remote: " + PythonSdkType.isRemote(sdk));
+      LOG.info("  Path: " + sdk.getHomePath() + "; Flavor: " + PythonSdkFlavor.getFlavor(sdk) + "; Remote: " + PythonSdkUtil.isRemote(sdk));
     }
     LOG.info("]");
   }
@@ -229,7 +216,7 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
     ProcessOutput output = PySdkUtil.getProcessOutput(cmd, new File(collectedInfo.interpreterPath).getParent(),
                                                       ImmutableMap.of("PYTHONBUFFERED", "1"),
                                                       10000,
-                                                      collectedInfo.fileText.getBytes(), false);
+                                                      collectedInfo.fileText.getBytes(StandardCharsets.UTF_8), false);
 
     Results results = new Results(collectedInfo.level);
     if (output.isTimeout()) {
@@ -275,18 +262,13 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
         problemElement = file.findElementAt(Math.max(0, offset - 1));
       }
 
-      if (ignoreDueToSettings(file, problem, problemElement) || ignoredDueToProblemSuppressors(problem, file, problemElement)) {
+      if (ignoreDueToSettings(file, problem, problemElement) ||
+          ignoredDueToProblemSuppressors(problem, file, problemElement) ||
+          ignoredDueToNoqaComment(problem, file, document)) {
         continue;
       }
 
       if (problemElement != null) {
-        // TODO Remove: a workaround until the bundled pycodestyle.py supports Python 3.6 variable annotations by itself
-        if (problem.myCode.equals("E701") &&
-            problemElement.getNode().getElementType() == PyTokenTypes.COLON &&
-            problemElement.getParent() instanceof PyAnnotation) {
-          continue;
-        }
-        
         TextRange problemRange = problemElement.getTextRange();
         // Multi-line warnings are shown only in the gutter and it's not the desired behavior from the usability point of view.
         // So we register it only on that line where pycodestyle.py found the problem originally.
@@ -304,33 +286,47 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
           }
           problemRange = new TextRange(offset, lineEndOffset);
         }
-        final Annotation annotation;
-        final boolean inInternalMode = ApplicationManager.getApplication().isInternal();
-        final String message = "PEP 8: " + (inInternalMode ? problem.myCode + " " : "") + problem.myDescription;
+
+        final String message = "PEP 8: " + problem.myCode + " " + problem.myDescription;
+        HighlightSeverity severity;
         if (annotationResult.level == HighlightDisplayLevel.ERROR) {
-          annotation = holder.createErrorAnnotation(problemRange, message);
+          severity = HighlightSeverity.ERROR;
         }
         else if (annotationResult.level == HighlightDisplayLevel.WARNING) {
-          annotation = holder.createWarningAnnotation(problemRange, message);
+          severity = HighlightSeverity.WARNING;
         }
         else {
-          annotation = holder.createWeakWarningAnnotation(problemRange, message);
+          severity = HighlightSeverity.WEAK_WARNING;
         }
+        IntentionAction fix;
+        boolean universal;
         if (problem.myCode.equals("E401")) {
-          annotation.registerUniversalFix(new OptimizeImportsQuickFix(), null, null);
+          fix = new OptimizeImportsQuickFix();
+          universal = true;
         }
         else if (problem.myCode.equals("W391")) {
-          annotation.registerUniversalFix(new RemoveTrailingBlankLinesFix(), null, null);
+          fix = new RemoveTrailingBlankLinesFix();
+          universal = true;
         }
         else if (problem.myCode.equals("E501")) {
-          annotation.registerFix(new PyFillParagraphFix());
+          fix = new PyFillParagraphFix();
+          universal = false;
         }
         else {
-          annotation.registerUniversalFix(new ReformatFix(), null, null);
+          fix = new ReformatFix();
+          universal = true;
         }
-        annotation.registerFix(new IgnoreErrorFix(problem.myCode));
-        annotation.registerFix(new CustomEditInspectionToolsSettingsAction(HighlightDisplayKey.find(PyPep8Inspection.INSPECTION_SHORT_NAME),
-                                                                           () -> "Edit inspection profile setting"));
+        AnnotationBuilder builder = holder.newAnnotation(severity, message).range(problemRange);
+        if (universal) {
+          builder = builder.newFix(fix).universal().registerFix();
+        }
+        else {
+          builder = builder.withFix(fix);
+        }
+        builder
+          .withFix(new IgnoreErrorFix(problem.myCode))
+          .withFix(new CustomEditInspectionToolsSettingsAction(HighlightDisplayKey.find(PyPep8Inspection.INSPECTION_SHORT_NAME),
+                                                               () -> "Edit inspection profile setting")).create();
       }
     }
   }
@@ -340,6 +336,22 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
                                                         @Nullable PsiElement element) {
     final Pep8ProblemSuppressor[] suppressors = Pep8ProblemSuppressor.EP_NAME.getExtensions();
     return Arrays.stream(suppressors).anyMatch(p -> p.isProblemSuppressed(problem, file, element));
+  }
+
+  private static boolean ignoredDueToNoqaComment(@NotNull Problem problem, @NotNull PsiFile file, @Nullable Document document) {
+    if (document == null) {
+      return false;
+    }
+    final int reportedLine = problem.myLine - 1;
+    final int lineLastOffset = Math.max(document.getLineStartOffset(reportedLine), document.getLineEndOffset(reportedLine) - 1);
+    final PsiComment comment = as(file.findElementAt(lineLastOffset), PsiComment.class);
+    if (comment != null) {
+      final Set<String> codes = Flake8InspectionSuppressor.extractNoqaCodes(comment);
+      if (codes != null) {
+        return codes.isEmpty() || ContainerUtil.exists(codes, code -> problem.myCode.startsWith(code));
+      }
+    }
+    return false;
   }
 
   private static boolean crossesLineBoundary(@Nullable Document document, String text, TextRange problemRange) {
@@ -362,7 +374,7 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
 
     final CommonCodeStyleSettings commonSettings = CodeStyle.getLanguageSettings(file, PythonLanguage.getInstance());
     final PyCodeStyleSettings pySettings = CodeStyle.getCustomSettings(file, PyCodeStyleSettings.class);
-    
+
     if (element instanceof PsiWhiteSpace) {
       // E303 too many blank lines (num)
       if (problem.myCode.equals("E303")) {
@@ -391,14 +403,14 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
       }
 
       // E251 unexpected spaces around keyword / parameter equals
-      // Note that E222 (multiple spaces after operator) is not suppressed, though. 
+      // Note that E222 (multiple spaces after operator) is not suppressed, though.
       if (problem.myCode.equals("E251") &&
           (element.getParent() instanceof PyParameter && pySettings.SPACE_AROUND_EQ_IN_NAMED_PARAMETER ||
            element.getParent() instanceof PyKeywordArgument && pySettings.SPACE_AROUND_EQ_IN_KEYWORD_ARGUMENT)) {
         return true;
       }
     }
-    // W191 (indentation contains tabs) is reported also for indents inside multiline string literals, 
+    // W191 (indentation contains tabs) is reported also for indents inside multiline string literals,
     // thus underlying PSI element is not necessarily a whitespace
     if (problem.myCode.equals("W191") && CodeStyle.getIndentOptions(file).USE_TAB_CHARACTER) {
       return true;
@@ -432,7 +444,7 @@ public class Pep8ExternalAnnotator extends ExternalAnnotator<Pep8ExternalAnnotat
     @NotNull
     @Override
     public String getText() {
-      return "Ignore errors like this";
+      return PyBundle.message("ANN.ignore.errors.like.this");
     }
 
     @NotNull

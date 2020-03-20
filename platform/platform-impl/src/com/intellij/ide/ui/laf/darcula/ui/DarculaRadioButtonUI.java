@@ -1,6 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.ui.laf.darcula.ui;
 
+import com.intellij.ide.ui.laf.darcula.DarculaLaf;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.*;
 
 import javax.swing.*;
@@ -26,9 +28,10 @@ public class DarculaRadioButtonUI extends MetalRadioButtonUI {
     return new DarculaRadioButtonUI();
   }
 
-  @Override public void installDefaults(AbstractButton b) {
+  @Override
+  public void installDefaults(AbstractButton b) {
     super.installDefaults(b);
-    b.setIconTextGap(textIconGap());
+    b.setIconTextGap(textIconGap(b));
     updateTextPosition(b);
   }
 
@@ -44,8 +47,16 @@ public class DarculaRadioButtonUI extends MetalRadioButtonUI {
     button.removePropertyChangeListener(AbstractButton.TEXT_CHANGED_PROPERTY, textChangedListener);
   }
 
-  protected int textIconGap() {
-    return JBUI.scale(4);
+  protected int textIconGap(AbstractButton b) {
+    Object gap = UIManager.get("RadioButton.iconTextGap");
+    if (gap != null) {
+      try {
+        return JBUIScale.scale(Integer.parseInt(gap.toString()));
+      }
+      catch (NumberFormatException ignored) {
+      }
+    }
+    return JBUIScale.scale(4);
   }
 
   private static void updateTextPosition(AbstractButton b) {
@@ -58,7 +69,7 @@ public class DarculaRadioButtonUI extends MetalRadioButtonUI {
     Graphics2D g = (Graphics2D)g2d;
     Dimension size = c.getSize();
 
-    AbstractButton b = (AbstractButton) c;
+    AbstractButton b = (AbstractButton)c;
     Rectangle viewRect = updateViewRect(b, new Rectangle(size));
     Rectangle iconRect = new Rectangle();
     Rectangle textRect = new Rectangle();
@@ -73,7 +84,7 @@ public class DarculaRadioButtonUI extends MetalRadioButtonUI {
       b.getVerticalTextPosition(), b.getHorizontalTextPosition(),
       viewRect, iconRect, textRect, b.getIconTextGap());
 
-    if(c.isOpaque()) {
+    if (c.isOpaque()) {
       g.setColor(c.getBackground());
       g.fillRect(0, 0, size.width, size.height);
     }
@@ -95,26 +106,31 @@ public class DarculaRadioButtonUI extends MetalRadioButtonUI {
   }
 
   protected void drawText(AbstractButton b, Graphics2D g, String text, Rectangle textRect, FontMetrics fm) {
-    if(text != null) {
-      View v = (View) b.getClientProperty(BasicHTML.propertyKey);
+    if (text != null) {
+      View v = (View)b.getClientProperty(BasicHTML.propertyKey);
       if (v != null) {
         v.paint(g, textRect);
-      } else {
-        int mnemonicIndex = b.getDisplayedMnemonicIndex();
+      }
+      else {
         g.setColor(b.isEnabled() ? b.getForeground() : getDisabledTextColor());
-        UIUtilities.drawStringUnderlineCharAt(b, g, text, mnemonicIndex, textRect.x, textRect.y + fm.getAscent());
+        UIUtilities.drawStringUnderlineCharAt(b, g, text, getMnemonicIndex(b), textRect.x, textRect.y + fm.getAscent());
       }
     }
 
-    if(b.hasFocus() && b.isFocusPainted() &&
-       textRect.width > 0 && textRect.height > 0 ) {
-        paintFocus(g, textRect, b.getSize());
+    if (b.hasFocus() && b.isFocusPainted() &&
+        textRect.width > 0 && textRect.height > 0) {
+      paintFocus(g, textRect, b.getSize());
     }
+  }
+
+  protected int getMnemonicIndex(AbstractButton b) {
+    return DarculaLaf.isAltPressed() ? b.getDisplayedMnemonicIndex() : -1;
   }
 
   @Override
   public Dimension getPreferredSize(JComponent c) {
-    return updatePreferredSize(c, super.getPreferredSize(c));
+    Dimension dimension = computeOurPreferredSize(c);
+    return dimension != null ? dimension : super.getPreferredSize(c);
   }
 
   @Override
@@ -122,11 +138,8 @@ public class DarculaRadioButtonUI extends MetalRadioButtonUI {
     return getPreferredSize(c);
   }
 
-  protected Dimension updatePreferredSize(JComponent c, Dimension size) {
-    if (c.getBorder() instanceof DarculaRadioButtonBorder) {
-      JBInsets.removeFrom(size, c.getInsets());
-    }
-    return size;
+  protected Dimension computeOurPreferredSize(JComponent c) {
+    return DarculaCheckBoxUI.computeCheckboxPreferredSize(c, getDefaultIcon());
   }
 
   @Override

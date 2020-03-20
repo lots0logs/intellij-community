@@ -15,7 +15,6 @@
  */
 package org.jetbrains.idea.maven.project;
 
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -56,8 +55,10 @@ public class MavenGeneralSettings implements Cloneable {
   private MavenExecutionOptions.FailureMode failureBehavior = MavenExecutionOptions.FailureMode.NOT_SET;
   private MavenExecutionOptions.PluginUpdatePolicy pluginUpdatePolicy = MavenExecutionOptions.PluginUpdatePolicy.DEFAULT;
 
-  private File myEffectiveLocalRepositoryCache;
-  private Set<String> myDefaultPluginsCache;
+  private transient File myEffectiveLocalRepositoryCache;
+  private transient File myEffectiveLocalHomeCache;
+  private transient VirtualFile myEffectiveSuperPomCache;
+  private transient Set<String> myDefaultPluginsCache;
 
   private int myBulkUpdateLevel = 0;
   private List<Listener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
@@ -77,6 +78,8 @@ public class MavenGeneralSettings implements Cloneable {
 
     myEffectiveLocalRepositoryCache = null;
     myDefaultPluginsCache = null;
+    myEffectiveLocalHomeCache = null;
+    myEffectiveSuperPomCache = null;
     fireChanged();
   }
 
@@ -116,9 +119,12 @@ public class MavenGeneralSettings implements Cloneable {
     changed();
   }
 
+  /**
+   * @deprecated use {@link #getOutputLevel()}
+   */
   @Transient
   @NotNull
-  @Deprecated // Use getOutputLevel()
+  @Deprecated
   public MavenExecutionOptions.LoggingLevel getLoggingLevel() {
     return getOutputLevel();
   }
@@ -163,7 +169,10 @@ public class MavenGeneralSettings implements Cloneable {
 
   @Nullable
   public File getEffectiveMavenHome() {
-    return MavenUtil.resolveMavenHomeDirectory(getMavenHome());
+    if (myEffectiveLocalHomeCache == null) {
+      myEffectiveLocalHomeCache = MavenUtil.resolveMavenHomeDirectory(getMavenHome());
+    }
+    return myEffectiveLocalHomeCache;
   }
 
   @NotNull
@@ -237,7 +246,12 @@ public class MavenGeneralSettings implements Cloneable {
 
   @Nullable
   public VirtualFile getEffectiveSuperPom() {
-    return MavenUtil.resolveSuperPomFile(getEffectiveMavenHome());
+    VirtualFile result = myEffectiveSuperPomCache;
+    if (result != null && result.isValid()) {
+      return result;
+    }
+    result = MavenUtil.resolveSuperPomFile(getEffectiveMavenHome());
+    return result;
   }
 
   @SuppressWarnings("unused")

@@ -40,36 +40,17 @@ import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.Query;
 import com.intellij.util.xml.DomElement;
 import com.intellij.util.xml.DomManager;
-import org.intellij.plugins.relaxNG.ApplicationLoader;
+import org.intellij.plugins.relaxNG.RelaxNgMetaDataContributor;
+import org.intellij.plugins.relaxNG.RelaxngBundle;
 import org.intellij.plugins.relaxNG.compact.psi.RncDefine;
 import org.intellij.plugins.relaxNG.compact.psi.RncElementVisitor;
 import org.intellij.plugins.relaxNG.compact.psi.RncGrammar;
 import org.intellij.plugins.relaxNG.compact.psi.impl.RncDefineImpl;
 import org.intellij.plugins.relaxNG.model.resolve.RelaxIncludeIndex;
 import org.intellij.plugins.relaxNG.xml.dom.RngGrammar;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 public class UnusedDefineInspection extends BaseInspection {
-  @Override
-  public boolean isEnabledByDefault() {
-    return false;
-  }
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return "Unused Define";
-  }
-
-  @Override
-  @NonNls
-  @NotNull
-  public String getShortName() {
-    return "UnusedDefine";
-  }
 
   @Override
   @NotNull
@@ -112,7 +93,7 @@ public class UnusedDefineInspection extends BaseInspection {
       if (processRncUsages(pattern, new LocalSearchScope(collector.toArray()))) return;
 
       final ASTNode astNode = ((RncDefineImpl)pattern).getNameNode();
-      myHolder.registerProblem(astNode.getPsi(), "Unreferenced define", ProblemHighlightType.LIKE_UNUSED_SYMBOL, new MyFix<>(pattern));
+      myHolder.registerProblem(astNode.getPsi(), RelaxngBundle.message("unreferenced.define"), ProblemHighlightType.LIKE_UNUSED_SYMBOL, new MyFix<>(pattern));
     }
 
     private static boolean processRncUsages(PsiElement tag, LocalSearchScope scope) {
@@ -135,7 +116,7 @@ public class UnusedDefineInspection extends BaseInspection {
       if (!tag.getLocalName().equals("define")) {
         return;
       }
-      if (!tag.getNamespace().equals(ApplicationLoader.RNG_NAMESPACE)) {
+      if (!tag.getNamespace().equals(RelaxNgMetaDataContributor.RNG_NAMESPACE)) {
         return;
       }
       if (tag.getAttribute("combine") != null) {
@@ -181,7 +162,7 @@ public class UnusedDefineInspection extends BaseInspection {
 
       if (processUsages(tag, value, new LocalSearchScope(collector.toArray()))) return;
 
-      myHolder.registerProblem(value, "Unreferenced define", ProblemHighlightType.LIKE_UNUSED_SYMBOL, new MyFix<>(tag));
+      myHolder.registerProblem(value, RelaxngBundle.message("unreferenced.define"), ProblemHighlightType.LIKE_UNUSED_SYMBOL, new MyFix<>(tag));
     }
 
     private static boolean processUsages(PsiElement tag, XmlAttributeValue value, LocalSearchScope scope) {
@@ -208,7 +189,7 @@ public class UnusedDefineInspection extends BaseInspection {
       @Override
       @NotNull
       public String getFamilyName() {
-        return "Remove define";
+        return RelaxngBundle.message("remove.define");
       }
 
       @Override

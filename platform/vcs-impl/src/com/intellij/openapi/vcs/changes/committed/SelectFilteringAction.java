@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.changes.committed;
 
 import com.intellij.openapi.actionSystem.AnAction;
@@ -28,6 +14,7 @@ import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -37,13 +24,12 @@ public class SelectFilteringAction extends LabeledComboBoxAction implements Dumb
 
   @NotNull private final Project myProject;
   @NotNull private final CommittedChangesTreeBrowser myBrowser;
-  @NotNull private ChangeListFilteringStrategy myPreviousSelection;
+  @NotNull private ChangeListFilteringStrategy myPreviousSelection = NoneChangeListFilteringStrategy.INSTANCE;
 
   public SelectFilteringAction(@NotNull Project project, @NotNull CommittedChangesTreeBrowser browser) {
     super(VcsBundle.message("committed.changes.filter.title"));
     myProject = project;
     myBrowser = browser;
-    myPreviousSelection = ChangeListFilteringStrategy.NONE;
   }
 
   @Override
@@ -66,9 +52,9 @@ public class SelectFilteringAction extends LabeledComboBoxAction implements Dumb
 
   @NotNull
   private List<ChangeListFilteringStrategy> collectStrategies() {
-    List<ChangeListFilteringStrategy> result = ContainerUtil.newArrayList();
+    List<ChangeListFilteringStrategy> result = new ArrayList<>();
 
-    result.add(ChangeListFilteringStrategy.NONE);
+    result.add(NoneChangeListFilteringStrategy.INSTANCE);
     result.add(new StructureFilteringStrategy(myProject));
 
     boolean addNameFilter = false;
@@ -103,10 +89,10 @@ public class SelectFilteringAction extends LabeledComboBoxAction implements Dumb
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-      if (!ChangeListFilteringStrategy.NONE.equals(myPreviousSelection)) {
+      if (!NoneChangeListFilteringStrategy.INSTANCE.equals(myPreviousSelection)) {
         myBrowser.removeFilteringStrategy(myPreviousSelection.getKey());
       }
-      if (!ChangeListFilteringStrategy.NONE.equals(myStrategy)) {
+      if (!NoneChangeListFilteringStrategy.INSTANCE.equals(myStrategy)) {
         myBrowser.setFilteringStrategy(myStrategy);
       }
       myPreviousSelection = myStrategy;

@@ -1,9 +1,9 @@
 package com.intellij.codeInsight.generation.ui;
 
-import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.ide.wizard.AbstractWizard;
 import com.intellij.ide.wizard.Step;
 import com.intellij.ide.wizard.StepAdapter;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiElement;
 import com.intellij.refactoring.classMembers.MemberInfoBase;
@@ -61,12 +61,12 @@ public abstract class AbstractGenerateEqualsWizard <C extends PsiElement, M exte
     protected abstract AbstractMemberSelectionPanel<M, I> getEqualsPanel();
     protected abstract AbstractMemberSelectionPanel<M, I> getHashCodePanel();
     protected abstract AbstractMemberSelectionPanel<M, I> getNonNullPanel();
-    protected abstract void updateHashCodeMemberInfos(Collection<I> equalsMemberInfos);
-    protected abstract void updateNonNullMemberInfos(Collection<I> equalsMemberInfos);
+    protected abstract void updateHashCodeMemberInfos(Collection<? extends I> equalsMemberInfos);
+    protected abstract void updateNonNullMemberInfos(Collection<? extends I> equalsMemberInfos);
   }
 
   public AbstractGenerateEqualsWizard(Project project, Builder<C, M, I> builder) {
-    super(CodeInsightBundle.message("generate.equals.hashcode.wizard.title"), project);
+    super(JavaBundle.message("generate.equals.hashcode.wizard.title"), project);
     myBuilder = builder;
     myClass = builder.getPsiClass();
     myClassFields = builder.getClassFields();

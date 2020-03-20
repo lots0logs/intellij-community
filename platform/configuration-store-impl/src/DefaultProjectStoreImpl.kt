@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore
 
 import com.intellij.openapi.application.ApplicationManager
@@ -13,13 +13,18 @@ import java.nio.file.Paths
 private const val FILE_SPEC = "${APP_CONFIG}/project.default.xml"
 
 private class DefaultProjectStorage(file: Path, fileSpec: String, pathMacroManager: PathMacroManager) : FileBasedStorage(file, fileSpec, "defaultProject", pathMacroManager.createTrackingSubstitutor(), RoamingType.DISABLED) {
-  override val isUseVfsForWrite: Boolean
-    get() = false
+  override val configuration = object: FileBasedStorageConfiguration {
+    override val isUseVfsForRead: Boolean
+      get() = false
+
+    override val isUseVfsForWrite: Boolean
+      get() = false
+  }
 
   public override fun loadLocalData(): Element? {
     val element = super.loadLocalData() ?: return null
     try {
-      return element.getChild("component").getChild("defaultProject")
+      return element.getChild("component")?.getChild("defaultProject")
     }
     catch (e: NullPointerException) {
       LOG.warn("Cannot read default project")
@@ -51,14 +56,16 @@ private class DefaultProjectStorage(file: Path, fileSpec: String, pathMacroManag
 }
 
 // cannot be `internal`, used in Upsource
-class DefaultProjectStoreImpl(override val project: Project, private val pathMacroManager: PathMacroManager) : ChildlessComponentStore() {
+class DefaultProjectStoreImpl(override val project: Project) : ChildlessComponentStore() {
   // see note about default state in project store
   override val loadPolicy: StateLoadPolicy
     get() = if (ApplicationManager.getApplication().isUnitTestMode) StateLoadPolicy.NOT_LOAD else StateLoadPolicy.LOAD
 
-  private val storage by lazy { DefaultProjectStorage(Paths.get(ApplicationManager.getApplication().stateStore.storageManager.expandMacros(FILE_SPEC)), FILE_SPEC, pathMacroManager) }
+  private val storage by lazy {
+    DefaultProjectStorage(Paths.get(ApplicationManager.getApplication().stateStore.storageManager.expandMacros(FILE_SPEC)), FILE_SPEC, PathMacroManager.getInstance(project))
+  }
 
-  override val storageManager: StateStorageManager = object : StateStorageManager {
+  override val storageManager = object : StateStorageManager {
     override val componentManager: ComponentManager?
       get() = null
 
@@ -81,9 +88,9 @@ class DefaultProjectStoreImpl(override val project: Project, private val pathMac
   override fun isUseLoadedStateAsExisting(storage: StateStorage) = false
 
   // don't want to optimize and use already loaded data - it will add unnecessary complexity and implementation-lock (currently we store loaded archived state in memory, but later implementation can be changed)
-  fun getStateCopy(): Element? = storage.loadLocalData()
+  fun getStateCopy() = storage.loadLocalData()
 
-  override fun getPathMacroManagerForDefaults() = pathMacroManager
+  override fun getPathMacroManagerForDefaults() = PathMacroManager.getInstance(project)
 
   override fun <T> getStorageSpecs(component: PersistentStateComponent<T>, stateSpec: State, operation: StateStorageOperation) = listOf(PROJECT_FILE_STORAGE_ANNOTATION)
 
@@ -97,10 +104,8 @@ class DefaultProjectStoreImpl(override val project: Project, private val pathMac
 @State(name = "ProjectManager", storages = [(Storage(FILE_SPEC))])
 internal class DefaultProjectExportableAndSaveTrigger {
   suspend fun save(forceSavingAllSettings: Boolean): SaveResult {
-    val projectManager = ProjectManagerEx.getInstanceEx()
-    val project = if (projectManager.isDefaultProjectInitialized) projectManager.defaultProject else return SaveResult.EMPTY
     val result = SaveResult()
-    (project.stateStore as ComponentStoreImpl).doSave(result, forceSavingAllSettings)
+    (ProjectManagerEx.getInstanceEx().defaultProject.stateStore as ComponentStoreImpl).doSave(result, forceSavingAllSettings)
     return result
   }
 }

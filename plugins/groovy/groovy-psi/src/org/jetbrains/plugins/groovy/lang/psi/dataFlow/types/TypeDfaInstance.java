@@ -8,11 +8,10 @@ import com.intellij.psi.PsiType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyMethodResult;
 import org.jetbrains.plugins.groovy.lang.psi.api.GroovyResolveResult;
-import org.jetbrains.plugins.groovy.lang.psi.controlFlow.Instruction;
-import org.jetbrains.plugins.groovy.lang.psi.controlFlow.MixinTypeInstruction;
-import org.jetbrains.plugins.groovy.lang.psi.controlFlow.NegatingGotoInstruction;
-import org.jetbrains.plugins.groovy.lang.psi.controlFlow.ReadWriteVariableInstruction;
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.GrVariable;
+import org.jetbrains.plugins.groovy.lang.psi.controlFlow.*;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.ArgumentsInstruction;
+import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.ResolvedVariableDescriptor;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.DFAType;
 import org.jetbrains.plugins.groovy.lang.psi.dataFlow.DfaInstance;
 import org.jetbrains.plugins.groovy.lang.resolve.api.Argument;
@@ -29,18 +28,23 @@ class TypeDfaInstance implements DfaInstance<TypeDfaState> {
   private final Set<Instruction> myInteresting;
   private final Set<Instruction> myAcyclicInstructions;
   private final InferenceCache myCache;
+  private final InitialTypeProvider myInitialTypeProvider;
 
-  TypeDfaInstance(@NotNull Instruction[] flow, @NotNull Couple<Set<Instruction>> interesting, @NotNull InferenceCache cache) {
+  TypeDfaInstance(Instruction @NotNull [] flow,
+                  @NotNull Couple<Set<Instruction>> interesting,
+                  @NotNull InferenceCache cache,
+                  @NotNull InitialTypeProvider initialTypeProvider) {
     myFlow = flow;
     myInteresting = interesting.first;
     myAcyclicInstructions = interesting.second;
     myCache = cache;
+    myInitialTypeProvider = initialTypeProvider;
   }
 
   @Override
   public void fun(@NotNull final TypeDfaState state, @NotNull final Instruction instruction) {
     if (instruction instanceof ReadWriteVariableInstruction) {
-      handleVariableWrite(state, (ReadWriteVariableInstruction)instruction);
+      handleReadWriteVariable(state, (ReadWriteVariableInstruction)instruction);
     }
     else if (instruction instanceof MixinTypeInstruction) {
       handleMixin(state, (MixinTypeInstruction)instruction);
@@ -54,40 +58,61 @@ class TypeDfaInstance implements DfaInstance<TypeDfaState> {
   }
 
   private void handleMixin(@NotNull final TypeDfaState state, @NotNull final MixinTypeInstruction instruction) {
-    final String varName = instruction.getVariableName();
-    if (varName == null) return;
+    final VariableDescriptor descriptor = instruction.getVariableDescriptor();
+    if (descriptor == null) return;
 
-    updateVariableType(state, instruction, varName, () -> {
+    updateVariableType(state, instruction, descriptor, () -> {
       ReadWriteVariableInstruction originalInstr = instruction.getInstructionToMixin(myFlow);
       assert originalInstr != null && !originalInstr.isWrite();
 
-      DFAType original = state.getOrCreateVariableType(varName);
+      DFAType original = state.getOrCreateVariableType(descriptor);
       original.addMixin(instruction.inferMixinType(), instruction.getConditionInstruction());
       return original;
     });
   }
 
-  private void handleVariableWrite(TypeDfaState state, ReadWriteVariableInstruction instruction) {
+  private void handleReadWriteVariable(@NotNull TypeDfaState state, @NotNull ReadWriteVariableInstruction instruction) {
     final PsiElement element = instruction.getElement();
-    if (element != null && instruction.isWrite()) {
+    if (element == null) return;
+    VariableDescriptor descriptor = instruction.getDescriptor();
+    if (instruction.isWrite()) {
       updateVariableType(
-        state, instruction, instruction.getVariableName(),
-        () -> DFAType.create(TypeInferenceHelper.getInitializerType(element))
+        state, instruction, descriptor,
+        () -> {
+          PsiType initializerType = TypeInferenceHelper.getInitializerType(element);
+          if (initializerType == null && descriptor instanceof ResolvedVariableDescriptor) {
+            GrVariable variable = ((ResolvedVariableDescriptor)descriptor).getVariable();
+            PsiType augmentedType = TypeAugmenter.Companion.inferAugmentedType(variable);
+            return DFAType.create(augmentedType);
+          }
+          else {
+            return DFAType.create(initializerType);
+          }
+        }
       );
+    }
+    else {
+      DFAType type = state.getVariableType(descriptor);
+      if (type == null) {
+        PsiType initialType = myInitialTypeProvider.initialType(descriptor);
+        if (initialType != null) {
+          updateVariableType(state, instruction, descriptor, () -> DFAType.create(initialType));
+        }
+      }
     }
   }
 
   private void handleArguments(TypeDfaState state, ArgumentsInstruction instruction) {
-    for (Map.Entry<String, Collection<Argument>> entry : instruction.getArguments().entrySet()) {
-      final String variableName = entry.getKey();
+    for (Map.Entry<VariableDescriptor, Collection<Argument>> entry : instruction.getArguments().entrySet()) {
+      final VariableDescriptor descriptor = entry.getKey();
       final Collection<Argument> arguments = entry.getValue();
-      handleArgument(state, instruction, variableName, arguments);
+      handleArgument(state, instruction, descriptor, arguments);
     }
   }
 
-  private void handleArgument(TypeDfaState state, ArgumentsInstruction instruction, String variableName, Collection<Argument> arguments) {
-    updateVariableType(state, instruction, variableName, () -> {
-      final DFAType result = state.getOrCreateVariableType(variableName);
+  private void handleArgument(TypeDfaState state, ArgumentsInstruction instruction, VariableDescriptor descriptor, Collection<Argument> arguments) {
+    updateVariableType(state, instruction, descriptor, () -> {
+      final DFAType result = state.getOrCreateVariableType(descriptor);
       final GroovyResolveResult[] results = instruction.getElement().multiResolve(false);
       for (GroovyResolveResult variant : results) {
         if (!(variant instanceof GroovyMethodResult)) continue;
@@ -112,14 +137,14 @@ class TypeDfaInstance implements DfaInstance<TypeDfaState> {
 
   private void updateVariableType(@NotNull TypeDfaState state,
                                   @NotNull Instruction instruction,
-                                  @NotNull String variableName,
+                                  @NotNull VariableDescriptor descriptor,
                                   @NotNull Computable<? extends DFAType> computation) {
     if (!myInteresting.contains(instruction)) {
-      state.removeBinding(variableName);
+      state.removeBinding(descriptor);
       return;
     }
 
-    DFAType type = myCache.getCachedInferredType(variableName, instruction);
+    DFAType type = myCache.getCachedInferredType(descriptor, instruction);
     if (type == null) {
       if (myAcyclicInstructions.contains(instruction)) {
         type = computation.compute();
@@ -128,18 +153,12 @@ class TypeDfaInstance implements DfaInstance<TypeDfaState> {
         type = TypeInferenceHelper.doInference(state.getBindings(), computation);
       }
     }
-    state.putType(variableName, type);
+    state.putType(descriptor, type);
   }
 
   private static void handleNegation(@NotNull TypeDfaState state, @NotNull NegatingGotoInstruction negation) {
-    for (Map.Entry<String, DFAType> entry : state.getVarTypes().entrySet()) {
+    for (Map.Entry<VariableDescriptor, DFAType> entry : state.getVarTypes().entrySet()) {
       entry.setValue(entry.getValue().negate(negation));
     }
-  }
-
-  @Override
-  @NotNull
-  public TypeDfaState initial() {
-    return new TypeDfaState();
   }
 }

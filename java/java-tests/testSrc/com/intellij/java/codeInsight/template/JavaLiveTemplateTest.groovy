@@ -6,41 +6,37 @@ import com.intellij.codeInsight.CodeInsightSettings
 import com.intellij.codeInsight.daemon.impl.quickfix.EmptyExpression
 import com.intellij.codeInsight.lookup.Lookup
 import com.intellij.codeInsight.template.JavaCodeContextType
+import com.intellij.codeInsight.template.JavaStringContextType
 import com.intellij.codeInsight.template.Template
-import com.intellij.codeInsight.template.TemplateManager
+import com.intellij.codeInsight.template.TemplateContextType
 import com.intellij.codeInsight.template.actions.SaveAsTemplateAction
-import com.intellij.codeInsight.template.impl.ConstantNode
-import com.intellij.codeInsight.template.impl.EmptyNode
-import com.intellij.codeInsight.template.impl.MacroCallNode
-import com.intellij.codeInsight.template.impl.TemplateImpl
-import com.intellij.codeInsight.template.impl.TemplateManagerImpl
-import com.intellij.codeInsight.template.impl.TemplateSettings
-import com.intellij.codeInsight.template.impl.TextExpression
-import com.intellij.codeInsight.template.macro.ClassNameCompleteMacro
-import com.intellij.codeInsight.template.macro.CompleteMacro
-import com.intellij.codeInsight.template.macro.CompleteSmartMacro
-import com.intellij.codeInsight.template.macro.MethodReturnTypeMacro
-import com.intellij.codeInsight.template.macro.VariableOfTypeMacro
+import com.intellij.codeInsight.template.impl.*
+import com.intellij.codeInsight.template.macro.*
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.impl.DocumentImpl
 import com.intellij.psi.PsiDocumentManager
+import com.intellij.testFramework.LightProjectDescriptor
 import groovy.transform.CompileStatic
 
 import static com.intellij.codeInsight.template.Template.Property.USE_STATIC_IMPORT_IF_POSSIBLE
-
 /**
  * @author peter
  */
 @CompileStatic
 class JavaLiveTemplateTest extends LiveTemplateTestCase {
+
+  @Override
+  protected LightProjectDescriptor getProjectDescriptor() {
+    return JAVA_13
+  }
+
   final String basePath = JavaTestUtil.getRelativeJavaTestDataPath() + "/codeInsight/template/"
   
   void "test not to go to next tab after insert if element is a psi package"() {
     myFixture.configureByText 'a.java', '''
 <caret>
 '''
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("imp", "user", 'import $MODIFIER$ java.$NAME$;')
+    Template template = templateManager.createTemplate("imp", "user", 'import $MODIFIER$ java.$NAME$;')
     template.addVariable('NAME', new MacroCallNode(new CompleteMacro(true)), new EmptyNode(), true)
     template.addVariable('MODIFIER', new EmptyExpression(), true)
     startTemplate(template)
@@ -62,8 +58,7 @@ public class Main {
     }
 }
 '''
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("for", "user", 'for ($ELEMENT_TYPE$ $VAR$ : $ITERABLE_TYPE$) {\n' +
+    Template template = templateManager.createTemplate("for", "user", 'for ($ELEMENT_TYPE$ $VAR$ : $ITERABLE_TYPE$) {\n' +
                                                                     '$END$;\n' +
                                                                     '}')
     template.addVariable('ITERABLE_TYPE', new MacroCallNode(new CompleteSmartMacro()), new EmptyNode(), true)
@@ -98,8 +93,7 @@ public class Main {
     }
 }
 '''
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("for", "user", 'for ($ELEMENT_TYPE$ $VAR$ : $ITERABLE_TYPE$) {\n' +
+    Template template = templateManager.createTemplate("for", "user", 'for ($ELEMENT_TYPE$ $VAR$ : $ITERABLE_TYPE$) {\n' +
                                                                     '$END$;\n' +
                                                                     '}')
     template.addVariable('ITERABLE_TYPE', new MacroCallNode(new CompleteSmartMacro()), new EmptyNode(), true)
@@ -108,6 +102,7 @@ public class Main {
     template.setToReformat(true)
     startTemplate(template)
     myFixture.type('in\n')
+    BaseCompleteMacro.waitForNextTab()
     myFixture.checkResult """
 import  java.util.*;
 public class Main {
@@ -131,8 +126,7 @@ class Foo {
   { <caret> }
 }
 '''
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("frm", "user", '$VAR$')
+    Template template = templateManager.createTemplate("frm", "user", '$VAR$')
     template.addVariable('VAR', new MacroCallNode(new ClassNameCompleteMacro()), new EmptyNode(), true)
     startTemplate(template)
     assert !state.finished
@@ -156,8 +150,7 @@ class Outer {
 }
 '''
 
-    TemplateManager manager = TemplateManager.getInstance(getProject())
-    Template template = manager.createTemplate("myCbDo", "user", 'MyUtils.doSomethingWithCallback($CB$)')
+    Template template = templateManager.createTemplate("myCbDo", "user", 'MyUtils.doSomethingWithCallback($CB$)')
 
     MacroCallNode call = new MacroCallNode(new VariableOfTypeMacro())
     call.addParameter(new ConstantNode("MyCallback"))
@@ -273,6 +266,15 @@ class Outer {
     assert !isApplicable("class Foo extends <caret>t {}", template)
   }
 
+  void testJavaStringContext() {
+    TemplateImpl template = (TemplateImpl)templateManager.createTemplate("a", "b")
+    template.templateContext.setEnabled(TemplateContextType.EP_NAME.findExtension(JavaStringContextType), true)
+    assert !isApplicable('class Foo {{ <caret> }}', template)
+    assert !isApplicable('class Foo {{ <caret>1 }}', template)
+    assert isApplicable('class Foo {{ "<caret>" }}', template)
+    assert isApplicable('class Foo {{ """<caret>""" }}', template)
+  }
+
   void testJavaDeclarationContext() {
     final TemplateImpl template = TemplateSettings.getInstance().getTemplate("psvm", "other")
     assertFalse(isApplicable("class Foo {{ <caret>xxx }}", template))
@@ -320,8 +322,7 @@ class Foo {
 }
 '''
 
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("result", "user", '$T$ result;')
+    Template template = templateManager.createTemplate("result", "user", '$T$ result;')
     template.addVariable('T', new MacroCallNode(new MethodReturnTypeMacro()), new EmptyNode(), false)
     template.toReformat = true
 
@@ -374,8 +375,7 @@ class Foo {
   }
 }
 """
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("xxx", "user", 'foo.Bar.someMethod($END$)')
+    Template template = templateManager.createTemplate("xxx", "user", 'foo.Bar.someMethod($END$)')
     template.setValue(USE_STATIC_IMPORT_IF_POSSIBLE, true)
 
     startTemplate(template)
@@ -405,8 +405,7 @@ class Foo {
   }
 }
 """
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("xxx", "user", 'foo.Bar.someMethod($END$)')
+    Template template = templateManager.createTemplate("xxx", "user", 'foo.Bar.someMethod($END$)')
     template.setValue(USE_STATIC_IMPORT_IF_POSSIBLE, true)
 
     startTemplate(template)
@@ -429,8 +428,7 @@ class Foo {
   }
 }
 """
-    final TemplateManager manager = TemplateManager.getInstance(getProject())
-    final Template template = manager.createTemplate("xxx", "user", 'java.lang.Math.abs(java.lang.Math.PI);')
+    Template template = templateManager.createTemplate("xxx", "user", 'java.lang.Math.abs(java.lang.Math.PI);')
     template.setValue(USE_STATIC_IMPORT_IF_POSSIBLE, true)
 
     startTemplate(template)
@@ -511,7 +509,7 @@ class A {
     myFixture.checkResult '''
 class A {
   {
-    String s = "";
+    String s = "null";
     s.toString();
   }
 }'''
@@ -525,5 +523,22 @@ class A {
 
     myFixture.configureByText "b.java", 'import foo.*; <selection>@Anno(value="")</selection> class T {}'
     assert SaveAsTemplateAction.suggestTemplateText(myFixture.editor, myFixture.file) == '@foo.Anno(value="")'
+  }
+
+  void "test reformat with virtual space"() {
+    myFixture.configureByText 'a.java', '''class C {
+    public static void main(String ...args) {
+        <caret>
+    }
+}'''
+    getEditor().getSettings().setVirtualSpace(true)
+    myFixture.type('iter\t')
+    myFixture.checkResult '''class C {
+    public static void main(String ...args) {
+        for (String arg : args) {
+            
+        }
+    }
+}'''
   }
 }

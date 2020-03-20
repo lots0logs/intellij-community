@@ -32,7 +32,7 @@ import org.jetbrains.jps.incremental.messages.DoneSomethingNotification;
 import org.jetbrains.jps.incremental.messages.FileDeletedEvent;
 import org.jetbrains.jps.incremental.storage.BuildDataManager;
 import org.jetbrains.jps.incremental.storage.BuildTargetConfiguration;
-import org.jetbrains.jps.incremental.storage.Timestamps;
+import org.jetbrains.jps.incremental.storage.StampsStorage;
 
 import java.io.File;
 import java.io.IOException;
@@ -46,34 +46,44 @@ import java.util.*;
 public class BuildOperations {
   private BuildOperations() { }
 
-  public static void ensureFSStateInitialized(CompileContext context, BuildTarget<?> target) throws IOException {
+  public static void ensureFSStateInitialized(CompileContext context, BuildTarget<?> target, boolean readOnly) throws IOException {
     final ProjectDescriptor pd = context.getProjectDescriptor();
-    final Timestamps timestamps = pd.timestamps.getStorage();
+    final StampsStorage<? extends StampsStorage.Stamp> stampsStorage = pd.getProjectStamps().getStampStorage();
     final BuildTargetConfiguration configuration = pd.getTargetsState().getTargetConfiguration(target);
     if (JavaBuilderUtil.isForcedRecompilationAllJavaModules(context)) {
-      FSOperations.markDirtyFiles(context, target, CompilationRound.CURRENT, timestamps, true, null, null);
+      FSOperations.markDirtyFiles(context, target, CompilationRound.CURRENT, stampsStorage, true, null, null);
       pd.fsState.markInitialScanPerformed(target);
-      configuration.save(context);
-    }
-    else if (context.getScope().isBuildForced(target) || configuration.isTargetDirty(context) || configuration.outputRootWasDeleted(context)) {
-      initTargetFSState(context, target, true);
-      if (!context.getScope().isBuildForced(target)) {
-        // case when target build is forced, is handled separately
-        IncProjectBuilder.clearOutputFiles(context, target);
+      if (!readOnly) {
+        configuration.save(context);
       }
-      pd.dataManager.cleanTargetStorages(target);
-      configuration.save(context);
     }
-    else if (!pd.fsState.isInitialScanPerformed(target)) {
-      initTargetFSState(context, target, false);
+    else {
+      boolean isTargetDirty = false;
+      if (context.getScope().isBuildForced(target) || (isTargetDirty = configuration.isTargetDirty(context.getProjectDescriptor())) || configuration.outputRootWasDeleted(context)) {
+        if (isTargetDirty) {
+          configuration.logDiagnostics(context);
+        }
+        initTargetFSState(context, target, true);
+        if (!readOnly) {
+          if (!context.getScope().isBuildForced(target)) {
+            // case when target build is forced, is handled separately
+            IncProjectBuilder.clearOutputFiles(context, target);
+          }
+          pd.dataManager.cleanTargetStorages(target);
+          configuration.save(context);
+        }
+      }
+      else if (!pd.fsState.isInitialScanPerformed(target)) {
+        initTargetFSState(context, target, false);
+      }
     }
   }
 
   private static void initTargetFSState(CompileContext context, BuildTarget<?> target, final boolean forceMarkDirty) throws IOException {
     final ProjectDescriptor pd = context.getProjectDescriptor();
-    final Timestamps timestamps = pd.timestamps.getStorage();
+    final StampsStorage<? extends StampsStorage.Stamp> stampsStorage = pd.getProjectStamps().getStampStorage();
     final THashSet<File> currentFiles = new THashSet<>(FileUtil.FILE_HASHING_STRATEGY);
-    FSOperations.markDirtyFiles(context, target, CompilationRound.CURRENT, timestamps, forceMarkDirty, currentFiles, null);
+    FSOperations.markDirtyFiles(context, target, CompilationRound.CURRENT, stampsStorage, forceMarkDirty, currentFiles, null);
 
     // handle deleted paths
     final BuildFSState fsState = pd.fsState;
@@ -83,7 +93,7 @@ public class BuildOperations {
       // can check if the file exists
       final File file = new File(path);
       if (!currentFiles.contains(file)) {
-        fsState.registerDeleted(context, target, file, timestamps);
+        fsState.registerDeleted(context, target, file, stampsStorage);
       }
     }
     pd.fsState.markInitialScanPerformed(target);
@@ -101,9 +111,9 @@ public class BuildOperations {
         if (target instanceof ModuleBuildTarget) {
           context.clearNonIncrementalMark((ModuleBuildTarget)target);
         }
-        final Timestamps timestamps = pd.timestamps.getStorage();
+        final StampsStorage<? extends StampsStorage.Stamp>  stampsStorage = pd.getProjectStamps().getStampStorage();
         for (BuildRootDescriptor rd : pd.getBuildRootIndex().getTargetRoots(target, context)) {
-          marked |= fsState.markAllUpToDate(context, rd, timestamps);
+          marked |= fsState.markAllUpToDate(context, rd, stampsStorage);
         }
       }
 
@@ -201,7 +211,7 @@ public class BuildOperations {
     }
   }
 
-  public static boolean deleteRecursively(@NotNull String path, @NotNull Collection<String> deletedPaths, @Nullable Set<? super File> parentDirs) {
+  public static boolean deleteRecursively(@NotNull String path, @NotNull Collection<? super String> deletedPaths, @Nullable Set<? super File> parentDirs) {
     File file = new File(path);
     boolean deleted = deleteRecursively(file, deletedPaths);
     if (deleted && parentDirs != null) {
@@ -213,7 +223,7 @@ public class BuildOperations {
     return deleted;
   }
 
-  private static boolean deleteRecursively(final File file, final Collection<String> deletedPaths) {
+  private static boolean deleteRecursively(final File file, final Collection<? super String> deletedPaths) {
     try {
       Files.walkFileTree(file.toPath(), EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE, new SimpleFileVisitor<Path>() {
         @Override

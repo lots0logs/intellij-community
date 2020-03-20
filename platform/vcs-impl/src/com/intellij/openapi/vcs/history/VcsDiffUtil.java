@@ -1,46 +1,38 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.vcs.history;
 
 import com.intellij.diff.DiffManager;
 import com.intellij.diff.requests.MessageDiffRequest;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.ProgressManager;
+import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogBuilder;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsBundle;
+import com.intellij.openapi.vcs.VcsException;
+import com.intellij.openapi.vcs.VcsNotifier;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.changes.CurrentContentRevision;
 import com.intellij.openapi.vcs.changes.actions.diff.ShowDiffAction;
 import com.intellij.openapi.vcs.changes.actions.diff.ShowDiffContext;
 import com.intellij.openapi.vcs.changes.ui.SimpleChangesBrowser;
-import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.hash.HashMap;
+import com.intellij.openapi.vcs.diff.DiffProvider;
+import com.intellij.openapi.vcs.impl.BackgroundableActionLock;
+import com.intellij.openapi.vcs.impl.VcsBackgroundableActions;
+import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static com.intellij.diff.util.DiffUserDataKeysEx.VCS_DIFF_LEFT_CONTENT_TITLE;
 import static com.intellij.diff.util.DiffUserDataKeysEx.VCS_DIFF_RIGHT_CONTENT_TITLE;
+import static com.intellij.vcsUtil.VcsUtil.getShortRevisionString;
 
 public class VcsDiffUtil {
 
@@ -51,7 +43,7 @@ public class VcsDiffUtil {
                                  @NotNull final String revNumTitle2,
                                  @NotNull final FilePath filePath) {
     if (filePath.isDirectory()) {
-      showChangesDialog(project, getDialogTitle(filePath, revNumTitle1, revNumTitle2), ContainerUtil.newArrayList(changes));
+      showChangesDialog(project, getDialogTitle(filePath, revNumTitle1, revNumTitle2), new ArrayList<>(changes));
     }
     else {
       if (changes.isEmpty()) {
@@ -103,5 +95,57 @@ public class VcsDiffUtil {
   public static List<Change> createChangesWithCurrentContentForFile(@NotNull FilePath filePath,
                                                                     @Nullable ContentRevision beforeContentRevision) {
     return Collections.singletonList(new Change(beforeContentRevision, CurrentContentRevision.create(filePath)));
+  }
+
+  public static void showChangesWithWorkingDirLater(@NotNull final Project project,
+                                                    @NotNull final VirtualFile file,
+                                                    @NotNull final VcsRevisionNumber targetRevNumber,
+                                                    @NotNull DiffProvider provider) {
+
+    BackgroundableActionLock lock = BackgroundableActionLock.getLock(project, VcsBackgroundableActions.COMPARE_WITH, file);
+
+    final Task.Backgroundable task = new Task.Backgroundable(project, VcsBundle.message("file.history.diff.with.local.process"), true) {
+      private Collection<Change> changes;
+      private VcsRevisionNumber currentRevNumber;
+
+      @Override
+      public void run(@NotNull ProgressIndicator indicator) {
+        try {
+          changes = provider.compareWithWorkingDir(file, targetRevNumber);
+          currentRevNumber = provider.getCurrentRevision(file);
+        }
+        catch (VcsException e) {
+          String title = String.format("Compare with %s failed", getShortRevisionString(targetRevNumber));
+          String message = String.format("Couldn't compare %s with revision [%s];\n %s",
+                                         file, getShortRevisionString(targetRevNumber), e.getMessage());
+          VcsNotifier.getInstance(project).notifyError(title, message);
+        }
+      }
+
+      @Override
+      public void onSuccess() {
+        //if changes null -> then exception occurred before
+        if (changes != null) {
+          String currentRevTitle = currentRevNumber != null
+                                   ? getRevisionTitle(getShortRevisionString(currentRevNumber), true)
+                                   : VcsBundle.message("diff.title.local");
+          showDiffFor(
+            project,
+            changes,
+            getRevisionTitle(getShortRevisionString(targetRevNumber), false),
+            currentRevTitle,
+            VcsUtil.getFilePath(file)
+          );
+        }
+      }
+
+      @Override
+      public void onFinished() {
+        lock.unlock();
+      }
+    };
+
+    lock.lock();
+    ProgressManager.getInstance().run(task);
   }
 }

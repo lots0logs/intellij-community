@@ -1,8 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.refactoring.rename;
 
-import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.FileUtilRt;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiNamedElement;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -10,6 +10,7 @@ import com.intellij.refactoring.rename.naming.AutomaticRenamer;
 import com.intellij.refactoring.rename.naming.AutomaticRenamerFactory;
 import com.intellij.refactoring.rename.naming.NameSuggester;
 import com.intellij.usageView.UsageInfo;
+import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.codeInsight.PyCodeInsightSettings;
 import com.jetbrains.python.codeInsight.controlflow.ScopeOwner;
 import com.jetbrains.python.psi.PyClass;
@@ -31,7 +32,7 @@ public class PyContainingFileRenamerFactory implements AutomaticRenamerFactory {
     ScopeOwner scopeOwner = PsiTreeUtil.getParentOfType(element, ScopeOwner.class);
     if (scopeOwner instanceof PyFile) {
       String className = ((PyClass) element).getName();
-      String fileName = FileUtil.getNameWithoutExtension(scopeOwner.getName());
+      String fileName = FileUtilRt.getNameWithoutExtension(scopeOwner.getName());
       return fileName.equalsIgnoreCase(className);
     }
     return false;
@@ -39,7 +40,7 @@ public class PyContainingFileRenamerFactory implements AutomaticRenamerFactory {
 
   @Override
   public String getOptionName() {
-    return "Rename containing file";
+    return PyBundle.message("refactoring.rename.containing.file");
   }
 
   @Override
@@ -69,12 +70,12 @@ public class PyContainingFileRenamerFactory implements AutomaticRenamerFactory {
 
     @Override
     public String getDialogTitle() {
-      return "Rename Containing File";
+      return PyBundle.message("refactoring.rename.containing.file.title");
     }
 
     @Override
     public String getDialogDescription() {
-      return "Rename containing file with the following name to: ";
+      return PyBundle.message("refactoring.rename.containing.file.with.the.following.name.to");
     }
 
     @Override
@@ -84,7 +85,7 @@ public class PyContainingFileRenamerFactory implements AutomaticRenamerFactory {
 
     @Override
     protected String nameToCanonicalName(@NonNls String name, PsiNamedElement element) {
-      return FileUtil.getNameWithoutExtension(name);
+      return FileUtilRt.getNameWithoutExtension(name);
     }
 
     @Override
@@ -99,8 +100,8 @@ public class PyContainingFileRenamerFactory implements AutomaticRenamerFactory {
 
     @Override
     protected String suggestNameForElement(PsiNamedElement element, NameSuggester suggester, String newClassName, String oldClassName) {
-      if (element instanceof PyFile && element.getName().equals(oldClassName.toLowerCase() + ".py")) {
-        return newClassName.toLowerCase() + ".py";
+      if (element instanceof PyFile && element.getName().equals(StringUtil.toLowerCase(oldClassName) + ".py")) {
+        return StringUtil.toLowerCase(newClassName) + ".py";
       }
       return super.suggestNameForElement(element, suggester, newClassName, oldClassName);
     }

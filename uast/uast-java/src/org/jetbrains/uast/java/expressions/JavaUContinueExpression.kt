@@ -21,9 +21,13 @@ import org.jetbrains.uast.UContinueExpression
 import org.jetbrains.uast.UElement
 
 class JavaUContinueExpression(
-  override val psi: PsiContinueStatement,
+  override val sourcePsi: PsiContinueStatement,
   givenParent: UElement?
 ) : JavaAbstractUExpression(givenParent), UContinueExpression {
   override val label: String?
-    get() = psi.labelIdentifier?.text
+    get() = sourcePsi.labelIdentifier?.text
+
+  override val jumpTarget: UElement? by lz {
+    sourcePsi.findContinuedStatement().takeIf { it !== sourcePsi }?.let { JavaConverter.convertStatement(it, null) }
+  }
 }

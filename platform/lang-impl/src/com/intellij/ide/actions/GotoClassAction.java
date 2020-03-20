@@ -11,7 +11,6 @@ import com.intellij.ide.structureView.StructureViewTreeElement;
 import com.intellij.ide.util.EditSourceUtil;
 import com.intellij.ide.util.gotoByName.*;
 import com.intellij.ide.util.treeView.smartTree.TreeElement;
-import com.intellij.lang.Language;
 import com.intellij.lang.LanguageStructureViewBuilder;
 import com.intellij.lang.PsiStructureViewFactory;
 import com.intellij.navigation.AnonymousElementProvider;
@@ -35,6 +34,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.codeStyle.MinusculeMatcher;
 import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.psi.util.PsiUtilCore;
+import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -44,26 +44,47 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GotoClassAction extends GotoActionBase implements DumbAware {
+  public GotoClassAction() {
+    //we need to change the template presentation to show the proper text for the action in Settings | Keymap
+    Presentation presentation = getTemplatePresentation();
+    presentation.setText(GotoClassPresentationUpdater.getActionTitle() + "...");
+    presentation.setDescription(IdeBundle.messagePointer("go.to.class.action.description",
+                                                  StringUtil.join(GotoClassPresentationUpdater.getElementKinds(), "/")));
+  }
+
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
     Project project = e.getProject();
     if (project == null) return;
 
-    if (!DumbService.getInstance(project).isDumb()) {
-      if (Registry.is("new.search.everywhere")) {
+    boolean dumb = DumbService.isDumb(project);
+    if (Registry.is("new.search.everywhere")) {
+      if (!dumb || new ClassSearchEverywhereContributor(e).isDumbAware()) {
         showInSearchEverywherePopup(ClassSearchEverywhereContributor.class.getSimpleName(), e, true, true);
-      } else {
-        super.actionPerformed(e);
+      }
+      else {
+        invokeGoToFile(project, e);
       }
     }
     else {
-      String message = IdeBundle.message("go.to.class.dumb.mode.message", GotoClassPresentationUpdater.getActionTitle());
-      DumbService.getInstance(project).showDumbModeNotification(message);
-      AnAction action = ActionManager.getInstance().getAction(GotoFileAction.ID);
-      InputEvent event = ActionCommand.getInputEvent(GotoFileAction.ID);
-      Component component = e.getData(PlatformDataKeys.CONTEXT_COMPONENT);
-      ActionManager.getInstance().tryToExecute(action, event, component, e.getPlace(), true);
+      if (!dumb) {
+        super.actionPerformed(e);
+      }
+      else {
+        invokeGoToFile(project, e);
+      }
     }
+  }
+
+  static void invokeGoToFile(@NotNull Project project, @NotNull AnActionEvent e) {
+    String actionTitle = StringUtil.trimEnd(ObjectUtils.notNull(
+      e.getPresentation().getText(), GotoClassPresentationUpdater.getActionTitle()), "...");
+    String message = IdeBundle.message("go.to.class.dumb.mode.message", actionTitle);
+    DumbService.getInstance(project).showDumbModeNotification(message);
+    AnAction action = ActionManager.getInstance().getAction(GotoFileAction.ID);
+    InputEvent event = ActionCommand.getInputEvent(GotoFileAction.ID);
+    Component component = e.getData(PlatformDataKeys.CONTEXT_COMPONENT);
+    ActionManager.getInstance().tryToExecute(action, event, component, e.getPlace(), true);
   }
 
   @Override
@@ -79,9 +100,9 @@ public class GotoClassAction extends GotoActionBase implements DumbAware {
     String pluralKinds = StringUtil.capitalize(
       StringUtil.join(GotoClassPresentationUpdater.getElementKinds(), s -> StringUtil.pluralize(s), "/"));
     String title = IdeBundle.message("go.to.class.toolwindow.title", pluralKinds);
-    showNavigationPopup(e, model, new GotoActionCallback<Language>() {
+    showNavigationPopup(e, model, new GotoActionCallback<LanguageRef>() {
       @Override
-      protected ChooseByNameFilter<Language> createFilter(@NotNull ChooseByNamePopup popup) {
+      protected ChooseByNameFilter<LanguageRef> createFilter(@NotNull ChooseByNamePopup popup) {
         return new ChooseByNameLanguageFilter(popup, model, GotoClassSymbolConfiguration.getInstance(project), project);
       }
 
@@ -220,8 +241,7 @@ public class GotoClassAction extends GotoActionBase implements DumbAware {
     return current;
   }
 
-  @NotNull
-  private static PsiElement[] getAnonymousClasses(@NotNull PsiElement element) {
+  private static PsiElement @NotNull [] getAnonymousClasses(@NotNull PsiElement element) {
     for (AnonymousElementProvider provider : AnonymousElementProvider.EP_NAME.getExtensionList()) {
       final PsiElement[] elements = provider.getAnonymousElements(element);
       if (elements.length > 0) {

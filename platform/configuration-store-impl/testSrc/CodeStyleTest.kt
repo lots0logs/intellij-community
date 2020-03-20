@@ -6,7 +6,7 @@ import com.intellij.psi.codeStyle.CodeStyleSettings
 import com.intellij.psi.codeStyle.CodeStyleSettingsProvider
 import com.intellij.psi.codeStyle.CustomCodeStyleSettings
 import com.intellij.testFramework.DisposableRule
-import com.intellij.testFramework.PlatformTestUtil
+import com.intellij.testFramework.ExtensionTestUtil
 import com.intellij.testFramework.ProjectRule
 import com.intellij.testFramework.assertions.Assertions.assertThat
 import com.intellij.util.containers.ContainerUtil
@@ -37,14 +37,43 @@ internal class CodeStyleTest {
       <codeStyleSettings language="CoffeeScript">
         <option name="KEEP_SIMPLE_METHODS_IN_ONE_LINE" value="true" />
       </codeStyleSettings>
+      <codeStyleSettings language="DB2">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
+      <codeStyleSettings language="Derby">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
       <codeStyleSettings language="Gherkin">
         <indentOptions>
           <option name="USE_TAB_CHARACTER" value="true" />
         </indentOptions>
       </codeStyleSettings>
+      <codeStyleSettings language="H2">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
+      <codeStyleSettings language="HSQLDB">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
+      <codeStyleSettings language="MySQL">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
+      <codeStyleSettings language="Oracle">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
+      <codeStyleSettings language="PostgreSQL">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
       <codeStyleSettings language="SQL">
         <option name="KEEP_LINE_BREAKS" value="false" />
-        <option name="KEEP_BLANK_LINES_IN_CODE" value="10" />
+      </codeStyleSettings>
+      <codeStyleSettings language="SQLite">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
+      <codeStyleSettings language="Sybase">
+        <option name="KEEP_LINE_BREAKS" value="false" />
+      </codeStyleSettings>
+      <codeStyleSettings language="TSQL">
+        <option name="KEEP_LINE_BREAKS" value="false" />
       </codeStyleSettings>
     </code_scheme>""".trimIndent()
     settings.readExternal(JDOMUtil.load(loaded))
@@ -92,7 +121,7 @@ internal class CodeStyleTest {
       }
     }
 
-    PlatformTestUtil.maskExtensions(CodeStyleSettingsProvider.EXTENSION_POINT_NAME, listOf(newProvider), disposableRule.disposable)
+    ExtensionTestUtil.maskExtensions(CodeStyleSettingsProvider.EXTENSION_POINT_NAME, listOf(newProvider), disposableRule.disposable)
     val settings = CodeStyleSettings()
     fun text(param: String): String {
       return """
@@ -106,14 +135,43 @@ internal class CodeStyleTest {
         <codeStyleSettings language="CoffeeScript">
           <option name="KEEP_SIMPLE_METHODS_IN_ONE_LINE" value="true" />
         </codeStyleSettings>
+        <codeStyleSettings language="DB2">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
+        <codeStyleSettings language="Derby">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
         <codeStyleSettings language="Gherkin">
           <indentOptions>
             <option name="USE_TAB_CHARACTER" value="true" />
           </indentOptions>
         </codeStyleSettings>
+        <codeStyleSettings language="H2">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
+        <codeStyleSettings language="HSQLDB">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
+        <codeStyleSettings language="MySQL">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
+        <codeStyleSettings language="Oracle">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
+        <codeStyleSettings language="PostgreSQL">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
         <codeStyleSettings language="SQL">
           <option name="KEEP_LINE_BREAKS" value="false" />
-          <option name="KEEP_BLANK_LINES_IN_CODE" value="10" />
+        </codeStyleSettings>
+        <codeStyleSettings language="SQLite">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
+        <codeStyleSettings language="Sybase">
+          <option name="KEEP_LINE_BREAKS" value="false" />
+        </codeStyleSettings>
+        <codeStyleSettings language="TSQL">
+          <option name="KEEP_LINE_BREAKS" value="false" />
         </codeStyleSettings>
       </code_scheme>""".trimIndent()
     }

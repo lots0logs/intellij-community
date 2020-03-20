@@ -34,7 +34,7 @@ import java.util.*;
  * @author Vladimir Kondratyev
  */
 public final class ErrorAnalyzer {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.ErrorAnalyzer");
+  private static final Logger LOG = Logger.getInstance(ErrorAnalyzer.class);
 
   /**
    * Value {@link ErrorInfo}
@@ -365,7 +365,7 @@ public final class ErrorAnalyzer {
     return null;
   }
 
-  @NotNull public static ErrorInfo[] getAllErrorsForComponent(@NotNull IComponent component) {
+  public static ErrorInfo @NotNull [] getAllErrorsForComponent(@NotNull IComponent component) {
     List<ErrorInfo> result = new ArrayList<>();
     ErrorInfo errorInfo = (ErrorInfo)component.getClientProperty(CLIENT_PROP_CLASS_TO_BIND_ERROR);
     if (errorInfo != null) {

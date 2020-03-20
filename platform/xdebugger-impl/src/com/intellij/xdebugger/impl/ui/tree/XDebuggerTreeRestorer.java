@@ -32,9 +32,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author nik
- */
 public class XDebuggerTreeRestorer implements XDebuggerTreeListener, TreeSelectionListener {
   public static final String SELECTION_PATH_PROPERTY = "selection.path";
   private final XDebuggerTree myTree;
@@ -165,7 +162,7 @@ public class XDebuggerTreeRestorer implements XDebuggerTreeListener, TreeSelecti
   }
 
   @Override
-  public void childrenLoaded(@NotNull final XDebuggerTreeNode node, @NotNull final List<XValueContainerNode<?>> children, final boolean last) {
+  public void childrenLoaded(@NotNull final XDebuggerTreeNode node, @NotNull final List<? extends XValueContainerNode<?>> children, final boolean last) {
     XDebuggerTreeState.NodeInfo nodeInfo = myNode2State.get(node);
     if (nodeInfo != null) {
       for (XDebuggerTreeNode child : children) {

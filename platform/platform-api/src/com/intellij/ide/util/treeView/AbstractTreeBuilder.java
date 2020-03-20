@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ide.util.treeView;
 
@@ -15,6 +15,7 @@ import com.intellij.util.Consumer;
 import com.intellij.util.concurrency.EdtExecutorService;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.MergingUpdateQueue;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -31,6 +32,11 @@ import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.*;
 
+/**
+ * @deprecated use {@link com.intellij.ui.tree.AsyncTreeModel} and {@link com.intellij.ui.tree.StructureTreeModel} instead.
+ */
+@ApiStatus.ScheduledForRemoval(inVersion = "2020.3")
+@Deprecated
 public class AbstractTreeBuilder implements Disposable {
   private AbstractTreeUi myUi;
   @NonNls private static final String TREE_BUILDER = "TreeBuilder";
@@ -39,14 +45,14 @@ public class AbstractTreeBuilder implements Disposable {
   public AbstractTreeBuilder(@NotNull JTree tree,
                              @NotNull DefaultTreeModel treeModel,
                              AbstractTreeStructure treeStructure,
-                             @Nullable Comparator<NodeDescriptor> comparator) {
+                             @Nullable Comparator<? super NodeDescriptor<?>> comparator) {
     this(tree, treeModel, treeStructure, comparator, DEFAULT_UPDATE_INACTIVE);
   }
 
   public AbstractTreeBuilder(@NotNull JTree tree,
                              @NotNull DefaultTreeModel treeModel,
                              AbstractTreeStructure treeStructure,
-                             @Nullable Comparator<NodeDescriptor> comparator,
+                             @Nullable Comparator<? super NodeDescriptor<?>> comparator,
                              boolean updateIfInactive) {
     init(tree, treeModel, treeStructure, comparator, updateIfInactive);
   }
@@ -58,7 +64,7 @@ public class AbstractTreeBuilder implements Disposable {
   protected void init(@NotNull JTree tree,
                       @NotNull DefaultTreeModel treeModel,
                       AbstractTreeStructure treeStructure,
-                      @Nullable final Comparator<NodeDescriptor> comparator,
+                      @Nullable final Comparator<? super NodeDescriptor<?>> comparator,
                       final boolean updateIfInactive) {
 
     tree.putClientProperty(TREE_BUILDER, new WeakReference<>(this));
@@ -165,9 +171,11 @@ public class AbstractTreeBuilder implements Disposable {
     return ui == null ? null : ui.getRootNode();
   }
 
-  public final void setNodeDescriptorComparator(Comparator<? super NodeDescriptor> nodeDescriptorComparator) {
+  public final void setNodeDescriptorComparator(Comparator<? super NodeDescriptor<?>> nodeDescriptorComparator) {
     AbstractTreeUi ui = getUi();
-    if (ui != null) ui.setNodeDescriptorComparator(nodeDescriptorComparator);
+    if (ui != null) {
+      ui.setNodeDescriptorComparator(nodeDescriptorComparator);
+    }
   }
 
   /**
@@ -216,8 +224,7 @@ public class AbstractTreeBuilder implements Disposable {
   }
 
   /**
-   * @see #queueUpdateFrom
-   * @deprecated
+   * @deprecated use {@link #queueUpdate()}
    */
   @Deprecated
   public void updateFromRoot() {
@@ -247,15 +254,19 @@ public class AbstractTreeBuilder implements Disposable {
   @NotNull
   public ActionCallback queueUpdateFrom(final Object element, final boolean forceResort, final boolean updateStructure) {
     AbstractTreeUi ui = getUi();
-    if (ui == null) return ActionCallback.REJECTED;
+    if (ui == null) {
+      return ActionCallback.REJECTED;
+    }
 
     final ActionCallback result = new ActionCallback();
-
     ui.invokeLaterIfNeeded(false, new TreeRunnable("AbstractTreeBuilder.queueUpdateFrom") {
       @Override
       public void perform() {
         AbstractTreeUi ui = getUi();
-        if (ui == null) return;
+        if (ui == null) {
+          result.reject("ui is null");
+          return;
+        }
 
         if (updateStructure && forceResort) {
           ui.incComparatorStamp();
@@ -263,13 +274,11 @@ public class AbstractTreeBuilder implements Disposable {
         ui.queueUpdate(element, updateStructure).notify(result);
       }
     });
-
-
     return result;
   }
 
   /**
-   * @deprecated
+   * @deprecated use {@link AbstractTreeUi#buildNodeForElement(Object)}
    */
   @Deprecated
   public void buildNodeForElement(@NotNull Object element) {
@@ -278,7 +287,7 @@ public class AbstractTreeBuilder implements Disposable {
   }
 
   /**
-   * @deprecated
+   * @deprecated use {@link AbstractTreeUi#getNodeForElement(Object, boolean)}
    */
   @Deprecated
   @Nullable
@@ -353,7 +362,7 @@ public class AbstractTreeBuilder implements Disposable {
     }
   }
 
-  protected void yield(@NotNull Runnable runnable) {
+  protected void yieldToEDT(@NotNull Runnable runnable) {
     AbstractTreeUi ui = getUi();
     if (ui == null) return;
 
@@ -460,7 +469,7 @@ public class AbstractTreeBuilder implements Disposable {
 
     @Override
     @NotNull
-    public Collection<AbstractTreeNode> getChildren() {
+    public Collection<AbstractTreeNode<?>> getChildren() {
       return Collections.emptyList();
     }
 

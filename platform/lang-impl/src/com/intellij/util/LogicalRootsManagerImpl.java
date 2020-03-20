@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.util;
 
@@ -22,12 +22,12 @@ import java.util.*;
  */
 public class LogicalRootsManagerImpl extends LogicalRootsManager {
   private Map<Module, MultiValuesMap<LogicalRootType, LogicalRoot>> myRoots = null;
-  private final MultiValuesMap<LogicalRootType, NotNullFunction> myProviders = new MultiValuesMap<>();
+  private final MultiValuesMap<LogicalRootType, NotNullFunction<? super Module, ? extends List<? extends LogicalRoot>>> myProviders = new MultiValuesMap<>();
   private final ModuleManager myModuleManager;
   private final Project myProject;
 
-  public LogicalRootsManagerImpl(final ModuleManager moduleManager, final Project project) {
-    myModuleManager = moduleManager;
+  public LogicalRootsManagerImpl(Project project) {
+    myModuleManager = ModuleManager.getInstance(project);
     myProject = project;
 
     registerLogicalRootProvider(LogicalRootType.SOURCE_ROOT,
@@ -45,10 +45,10 @@ public class LogicalRootsManagerImpl extends LogicalRootsManager {
       final Module[] modules = moduleManager.getModules();
       for (Module module : modules) {
         final MultiValuesMap<LogicalRootType, LogicalRoot> map = new MultiValuesMap<>();
-        for (Map.Entry<LogicalRootType, Collection<NotNullFunction>> entry : myProviders.entrySet()) {
-          final Collection<NotNullFunction> functions = entry.getValue();
-          for (NotNullFunction function : functions) {
-            map.putAll(entry.getKey(), (List<LogicalRoot>) function.fun(module));
+        for (Map.Entry<LogicalRootType, Collection<NotNullFunction<? super Module, ? extends List<? extends LogicalRoot>>>> entry : myProviders.entrySet()) {
+          Collection<NotNullFunction<? super Module, ? extends List<? extends LogicalRoot>>> functions = entry.getValue();
+          for (NotNullFunction<? super Module, ? extends List<? extends LogicalRoot>> function : functions) {
+            map.putAll(entry.getKey(), function.fun(module));
           }
         }
         myRoots.put(module, map);
@@ -91,7 +91,7 @@ public class LogicalRootsManagerImpl extends LogicalRootsManager {
     return new ArrayList<>(valuesMap.values());
   }
 
-  public <T extends LogicalRoot> void registerLogicalRootProvider(@NotNull final LogicalRootType<T> rootType, @NotNull NotNullFunction<Module, List<T>> provider) {
+  public <T extends LogicalRoot> void registerLogicalRootProvider(@NotNull final LogicalRootType<T> rootType, @NotNull NotNullFunction<? super Module, ? extends List<T>> provider) {
     myProviders.put(rootType, provider);
     clear();
   }

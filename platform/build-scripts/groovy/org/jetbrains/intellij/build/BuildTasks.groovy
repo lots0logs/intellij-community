@@ -21,9 +21,6 @@ import org.codehaus.gant.GantBinding
 import org.jetbrains.intellij.build.impl.BuildTasksImpl
 import org.jetbrains.intellij.build.impl.BuildUtils
 import org.jetbrains.jps.idea.IdeaProjectLoader
-/**
- * @author nik
- */
 @CompileStatic
 abstract class BuildTasks {
   /**
@@ -44,6 +41,18 @@ abstract class BuildTasks {
 
   abstract void compileModulesFromProduct()
 
+  /**
+   * Compiles required modules and builds zip archives of the specified plugins in {@link BuildPaths#artifacts artifacts}/&lt;product-code&gt;-plugins
+   * directory.
+   */
+  abstract void buildNonBundledPlugins(List<String> mainPluginModules)
+
+  /**
+   * Generates a JSON file containing mapping between files in the product distribution and modules and libraries in the project configuration
+   * @see org.jetbrains.intellij.build.impl.projectStructureMapping.ProjectStructureMapping
+   */
+  abstract void generateProjectStructureMapping(File targetFile)
+
   abstract void compileProjectAndTests(List<String> includingTestsInModules)
 
   abstract void compileModules(List<String> moduleNames, List<String> includingTestsInModules = [])
@@ -55,7 +64,14 @@ abstract class BuildTasks {
    */
   abstract void buildFullUpdaterJar()
 
-  abstract void buildUnpackedDistribution(String targetDirectory)
+  /**
+   * Performs a fast dry run to check that the build scripts a properly configured. It'll run compilation, build platform and plugin JAR files,
+   * build searchable options index and scramble the main JAR, but won't produce the product archives and installation files which occupy a lot
+   * of disk space and take a long time to build.
+   */
+  abstract void runTestBuild()
+
+  abstract void buildUnpackedDistribution(String targetDirectory, boolean includeBinAndRuntime)
 
   static BuildTasks create(BuildContext context) {
     return new BuildTasksImpl(context)
@@ -95,6 +111,7 @@ abstract class BuildTasks {
       BuildUtils.addToClassPath("$projectHome/$it", binding.ant)
     }
     ProductProperties productProperties = (ProductProperties) Class.forName(productPropertiesClassName).constructors[0].newInstance(projectHome)
+
     BuildContext context = BuildContext.createContext("$projectHome/$communityHomeRelativePath", projectHome,
                                                       productProperties, proprietaryBuildTools)
     return context

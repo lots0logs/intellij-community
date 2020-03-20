@@ -1,9 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.inspections
 
 import com.intellij.testFramework.LightProjectDescriptor
 import groovy.transform.CompileStatic
-import org.jetbrains.plugins.groovy.GroovyLightProjectDescriptor
+import org.jetbrains.plugins.groovy.GroovyProjectDescriptors
 import org.jetbrains.plugins.groovy.LightGroovyTestCase
 import org.jetbrains.plugins.groovy.codeInspection.changeToOperator.ChangeToOperatorInspection
 import org.jetbrains.plugins.groovy.lang.psi.GroovyFile
@@ -15,7 +15,7 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrUnaryE
 @CompileStatic
 class GrChangeToOperatorTest extends LightGroovyTestCase {
 
-  final LightProjectDescriptor projectDescriptor = GroovyLightProjectDescriptor.GROOVY_LATEST
+  final LightProjectDescriptor projectDescriptor = GroovyProjectDescriptors.GROOVY_LATEST
 
   final ChangeToOperatorInspection inspection = new ChangeToOperatorInspection()
 
@@ -208,6 +208,11 @@ class Operators {
     doTest "a.asType(UnknownClass)"
   }
 
+  void 'test asType with context'() {
+    fixture.addClass 'package com.foo; class Node {}'
+    doTest 'import com.foo.Node\n\na.asType(Node)', 'import com.foo.Node\n\na as Node'
+  }
+
   void testComplex() {
     doTest "a.eq<caret>uals(b * c) == 1", "a == b * c == 1"
 
@@ -220,21 +225,30 @@ class Operators {
     doTest(/!(1.toString().replace('1', '2')+"").equals(2.toString())/, /(1.toString().replace('1', '2') + "") != 2.toString()/)
   }
 
-  void testCompareTo() {
+  void 'test compareTo'() {
     doTest "a.compareTo(b)", "a <=> b"
-    doTest "a.compareTo(b) < 0", "a < b"
-
-    doTest "a.compareTo(b) <= 0", "a <= b"
-    doTest "a.compareTo(b) == 0", "a == b"
-    doTest "a.compareTo(b) != 0", "a != b"
-    doTest "a.compareTo(b) >= 0", "a >= b"
-    doTest "a.compareTo(b) > 0", "a > b"
-    doTest "if ((2-1).compa<caret>reTo(3) > 0);", /if ((2 - 1) > 3);/
-    doTest "! (a.compar<caret>eTo(b) < 0)", "!(a < b)"
-    doTest "(2 - 1).compa<caret>reTo(2 | 1) > 0", "(2 - 1) > (2 | 1)"
+    doTest "a.compareTo(b) < 1", "(a <=> b) < 1"
+    doTest "a.compareTo(b) <= 1", "(a <=> b) <= 1"
+    doTest "a.compareTo(b) == 1", "a <=> b == 1"
+    doTest "a.compareTo(b) != 1", "a <=> b != 1"
+    doTest "a.compareTo(b) >= 1", "(a <=> b) >= 1"
+    doTest "a.compareTo(b) > 1", "(a <=> b) > 1"
   }
 
-  void testCompareToOption() {
+  void 'test compareTo 0'() {
+    doTest "a.compareTo(b) < 0", "a < b"
+    doTest "a.compareTo(b) <= 0l", "a <= b"
+    doTest "a.compareTo(b) == 0g", "a == b"
+    doTest "a.compareTo(b) != 0f", "a != b"
+    doTest "a.compareTo(b) >= 0d", "a >= b"
+    doTest "a.compareTo(b) > 0.0g", "a > b"
+
+    doTest "if ((2-1).<caret>compareTo(3) > 0);", /if ((2 - 1) > 3);/
+    doTest "! (a.<caret>compareTo(b) < 0)", "!(a < b)"
+    doTest "(2 - 1).<caret>compareTo(2 | 1) > 0", "(2 - 1) > (2 | 1)"
+  }
+
+  void 'test compareTo 0 off'() {
     inspection.shouldChangeCompareToEqualityToEquals = false
     doTest "a.compareTo(b) == 0"
     doTest "a.compareTo(b) != 0"

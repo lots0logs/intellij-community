@@ -1,21 +1,8 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.graph.impl.facade;
 
 import com.intellij.util.NotNullFunction;
+import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcs.log.graph.GraphCommit;
 import com.intellij.vcs.log.graph.GraphCommitImpl;
@@ -36,10 +23,7 @@ import com.intellij.vcs.log.graph.utils.impl.IntTimestampGetter;
 import gnu.trove.TObjectIntHashMap;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static com.intellij.vcs.log.graph.utils.LinearGraphUtils.asLiteLinearGraph;
 
@@ -72,13 +56,13 @@ public class SimpleGraphInfo<CommitId> implements PermanentGraphInfo<CommitId> {
     int start = Math.max(0, visibleRow - visibleRange);
     int end = Math.min(linearGraph.nodesCount(), start + 2 * visibleRange); // no more than 2*visibleRange commits;
 
-    List<GraphCommit<CommitId>> graphCommits = ContainerUtil.newArrayListWithCapacity(end - start);
-    List<CommitId> commitsIdMap = ContainerUtil.newArrayListWithCapacity(end - start);
+    List<GraphCommit<CommitId>> graphCommits = new ArrayList<>(end - start);
+    List<CommitId> commitsIdMap = new ArrayList<>(end - start);
 
     for (int row = start; row < end; row++) {
       int nodeId = linearGraph.getNodeId(row);
       CommitId commit = permanentCommitsInfo.getCommitId(nodeId);
-      List<CommitId> parents = ContainerUtil.newSmartList();
+      List<CommitId> parents = new SmartList<>();
       parents.addAll(ContainerUtil.mapNotNull(asLiteLinearGraph(linearGraph).getNodes(row, LiteLinearGraph.NodeFilter.DOWN),
                                               row1 -> {
                                                 if (row1 < start || row1 >= end) return null;
@@ -93,7 +77,7 @@ public class SimpleGraphInfo<CommitId> implements PermanentGraphInfo<CommitId> {
     PermanentLinearGraphImpl newLinearGraph = PermanentLinearGraphBuilder.newInstance(graphCommits).build();
 
     int[] layoutIndexes = new int[end - start];
-    List<Integer> headNodeIndexes = ContainerUtil.newArrayList();
+    List<Integer> headNodeIndexes = new ArrayList<>();
 
     TObjectIntHashMap<CommitId> commitIdToInteger = reverseCommitIdMap(permanentCommitsInfo, permanentGraphSize);
     for (int row = start; row < end; row++) {
@@ -130,7 +114,8 @@ public class SimpleGraphInfo<CommitId> implements PermanentGraphInfo<CommitId> {
   }
 
   @NotNull
-  private static <CommitId> TObjectIntHashMap<CommitId> reverseCommitIdMap(@NotNull PermanentCommitsInfo<CommitId> permanentCommitsInfo, int size) {
+  private static <CommitId> TObjectIntHashMap<CommitId> reverseCommitIdMap(@NotNull PermanentCommitsInfo<CommitId> permanentCommitsInfo,
+                                                                           int size) {
     TObjectIntHashMap<CommitId> result = new TObjectIntHashMap<>();
     for (int i = 0; i < size; i++) {
       result.put(permanentCommitsInfo.getCommitId(i), i);
@@ -166,7 +151,7 @@ public class SimpleGraphInfo<CommitId> implements PermanentGraphInfo<CommitId> {
       @NotNull
       @Override
       public Set<Integer> convertToNodeIds(@NotNull Collection<? extends CommitId> heads) {
-        Set<Integer> result = ContainerUtil.newHashSet();
+        Set<Integer> result = new HashSet<>();
         for (int id = 0; id < myLinearGraph.nodesCount(); id++) {
           if (heads.contains(myFunction.fun(id))) {
             result.add(id);

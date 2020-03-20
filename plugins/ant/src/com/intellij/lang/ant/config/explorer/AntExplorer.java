@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.ant.config.explorer;
 
 import com.intellij.execution.ExecutionBundle;
@@ -11,6 +11,7 @@ import com.intellij.ide.CommonActionsManager;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.TreeExpander;
 import com.intellij.ide.dnd.FileCopyPasteUtil;
+import com.intellij.lang.ant.AntActionsUsagesCollector;
 import com.intellij.lang.ant.AntBundle;
 import com.intellij.lang.ant.config.*;
 import com.intellij.lang.ant.config.actions.AntBuildFilePropertiesAction;
@@ -26,6 +27,7 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
+import com.intellij.openapi.fileTypes.FileTypeRegistry;
 import com.intellij.openapi.fileTypes.StdFileTypes;
 import com.intellij.openapi.keymap.KeymapManagerListener;
 import com.intellij.openapi.keymap.impl.ui.EditKeymapsDialog;
@@ -107,7 +109,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
     myConfig = config;
     myTreeStructure = new AntExplorerTreeStructure(project);
     myTreeStructure.setFilteredTargets(AntConfigurationBase.getInstance(project).isFilterTargets());
-    final StructureTreeModel treeModel = new StructureTreeModel(myTreeStructure);
+    final StructureTreeModel treeModel = new StructureTreeModel<>(myTreeStructure, this);
     myTreeModel = treeModel;
     myTree = new Tree(new AsyncTreeModel(treeModel, this));
     myTree.setRootVisible(false);
@@ -166,7 +168,6 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
       }
     }, KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), WHEN_FOCUSED);
 
-    myTree.setLineStyleAngled();
     myAntBuildFilePropertiesAction = new AntBuildFilePropertiesAction(this);
     setToolbar(createToolbarPanel());
     setContent(ScrollPaneFactory.createScrollPane(myTree));
@@ -211,10 +212,10 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
     group.add(new RunAction());
     group.add(new ShowAllTargetsAction());
     AnAction action = CommonActionsManager.getInstance().createExpandAllAction(myTreeExpander, this);
-    action.getTemplatePresentation().setDescription(AntBundle.message("ant.explorer.expand.all.nodes.action.description"));
+    action.getTemplatePresentation().setDescription(AntBundle.messagePointer("ant.explorer.expand.all.nodes.action.description"));
     group.add(action);
     action = CommonActionsManager.getInstance().createCollapseAllAction(myTreeExpander, this);
-    action.getTemplatePresentation().setDescription(AntBundle.message("ant.explorer.collapse.all.nodes.action.description"));
+    action.getTemplatePresentation().setDescription(AntBundle.messagePointer("ant.explorer.collapse.all.nodes.action.description"));
     group.add(action);
     group.add(myAntBuildFilePropertiesAction);
 
@@ -302,7 +303,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
 
   public void setBuildFileProperties() {
     final AntBuildFileBase buildFile = getCurrentBuildFile();
-    if (buildFile != null && BuildFilePropertiesPanel.editBuildFile(buildFile, myProject)) {
+    if (buildFile != null && BuildFilePropertiesPanel.editBuildFile(buildFile)) {
       myConfig.updateBuildFile(buildFile);
     }
   }
@@ -314,6 +315,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
     final AntBuildFileBase buildFile = getCurrentBuildFile();
     if (buildFile != null) {
       final List<String> targets = getTargetNamesFromPaths(myTree.getSelectionPaths());
+      AntActionsUsagesCollector.trigger(myProject, AntActionsUsagesCollector.ActionID.RunSelectedBuild);
       ExecutionHandler.runBuild(buildFile, targets, null, dataContext, Collections.emptyList(), AntBuildListener.NULL);
     }
   }
@@ -362,7 +364,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
       }
       final AntBuildTarget target = ((AntTargetNodeDescriptor)userObject).getTarget();
       if (target instanceof MetaTarget) {
-        ContainerUtil.addAll(targets, target.getTargetNames());
+        targets.addAll(target.getTargetNames());
       }
       else {
         targets.add(target.getName());
@@ -460,7 +462,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
     if (userObject instanceof AntTargetNodeDescriptor) {
       final AntBuildTargetBase target = ((AntTargetNodeDescriptor)userObject).getTarget();
       final DefaultActionGroup executeOnGroup =
-        new DefaultActionGroup(AntBundle.message("ant.explorer.execute.on.action.group.name"), true);
+        DefaultActionGroup.createPopupGroup(AntBundle.messagePointer("ant.explorer.execute.on.action.group.name"));
       executeOnGroup.add(new ExecuteOnEventAction(target, ExecuteBeforeCompilationEvent.getInstance()));
       executeOnGroup.add(new ExecuteOnEventAction(target, ExecuteAfterCompilationEvent.getInstance()));
       executeOnGroup.addSeparator();
@@ -530,7 +532,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
     return super.getData(dataId);
   }
 
-  private <T> List<T> collectAntFiles(final Function<AntBuildFile, T> function) {
+  private <T> List<T> collectAntFiles(final Function<? super AntBuildFile, ? extends T> function) {
     final TreePath[] paths = myTree.getSelectionPaths();
     if (paths == null) {
       return null;
@@ -562,7 +564,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
       public boolean isFileVisible(VirtualFile file, boolean showHiddenFiles) {
         boolean b = super.isFileVisible(file, showHiddenFiles);
         if (!file.isDirectory()) {
-          b &= StdFileTypes.XML.equals(file.getFileType());
+          b &= FileTypeRegistry.getInstance().isFileOfType(file, StdFileTypes.XML);
         }
         return b;
       }
@@ -591,7 +593,8 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
 
   private final class AddAction extends AnAction {
     AddAction() {
-      super(AntBundle.message("add.ant.file.action.name"), AntBundle.message("add.ant.file.action.description"), IconUtil.getAddIcon());
+      super(AntBundle.messagePointer("add.ant.file.action.name"), AntBundle.messagePointer("add.ant.file.action.description"),
+            IconUtil.getAddIcon());
     }
 
     @Override
@@ -602,7 +605,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
 
   private final class RemoveAction extends AnAction {
     RemoveAction() {
-      super(AntBundle.message("remove.ant.file.action.name"), AntBundle.message("remove.ant.file.action.description"),
+      super(AntBundle.messagePointer("remove.ant.file.action.name"), AntBundle.messagePointer("remove.ant.file.action.description"),
             IconUtil.getRemoveIcon());
     }
 
@@ -619,8 +622,8 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
 
   private final class RunAction extends AnAction {
     RunAction() {
-      super(AntBundle.message("run.ant.file.or.target.action.name"), AntBundle.message("run.ant.file.or.target.action.description"),
-            AllIcons.Actions.Execute);
+      super(AntBundle.messagePointer("run.ant.file.or.target.action.name"),
+            AntBundle.messagePointer("run.ant.file.or.target.action.description"), AllIcons.Actions.Execute);
     }
 
     @Override
@@ -633,20 +636,20 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
       final Presentation presentation = event.getPresentation();
       final String place = event.getPlace();
       if (ActionPlaces.ANT_EXPLORER_TOOLBAR.equals(place)) {
-        presentation.setText(AntBundle.message("run.ant.file.or.target.action.name"));
+        presentation.setText(AntBundle.messagePointer("run.ant.file.or.target.action.name"));
       }
       else {
         final TreePath[] paths = myTree.getSelectionPaths();
         if (paths != null && paths.length == 1 &&
             ((DefaultMutableTreeNode)paths[0].getLastPathComponent()).getUserObject() instanceof AntBuildFileNodeDescriptor) {
-          presentation.setText(AntBundle.message("run.ant.build.action.name"));
+          presentation.setText(AntBundle.messagePointer("run.ant.build.action.name"));
         }
         else {
           if (paths == null || paths.length == 1) {
-            presentation.setText(AntBundle.message("run.ant.target.action.name"));
+            presentation.setText(AntBundle.messagePointer("run.ant.target.action.name"));
           }
           else {
-            presentation.setText(AntBundle.message("run.ant.targets.action.name"));
+            presentation.setText(AntBundle.messagePointer("run.ant.targets.action.name"));
           }
         }
       }
@@ -656,12 +659,11 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
   }
   private final class MakeAntRunConfigurationAction extends AnAction {
     MakeAntRunConfigurationAction() {
-      super(AntBundle.message("make.ant.runconfiguration.name"), null, AntIcons.Build);
+      super(AntBundle.messagePointer("make.ant.runconfiguration.name"), AntIcons.Build);
     }
 
     @Override
     public void update(@NotNull AnActionEvent e) {
-      super.update(e);
 
       final Presentation presentation = e.getPresentation();
       presentation.setEnabled(myTree.getSelectionCount() == 1 && canRunSelection());
@@ -706,7 +708,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
 
   private final class ShowAllTargetsAction extends ToggleAction {
     ShowAllTargetsAction() {
-      super(AntBundle.message("filter.ant.targets.action.name"), AntBundle.message("filter.ant.targets.action.description"),
+      super(AntBundle.messagePointer("filter.ant.targets.action.name"), AntBundle.messagePointer("filter.ant.targets.action.description"),
             AllIcons.General.Filter);
     }
 
@@ -792,8 +794,8 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
   private final class CreateMetaTargetAction extends AnAction {
 
     CreateMetaTargetAction() {
-      super(AntBundle.message("ant.create.meta.target.action.name"), AntBundle.message("ant.create.meta.target.action.description"), null
-/*IconLoader.getIcon("/actions/execute.png")*/);
+      super(AntBundle.messagePointer("ant.create.meta.target.action.name"),
+            AntBundle.messagePointer("ant.create.meta.target.action.description"), null);
     }
 
     @Override
@@ -909,7 +911,7 @@ public class AntExplorer extends SimpleToolWindowPanel implements DataProvider, 
         presentation.setEnabled(enabled);
       }
       else {
-        presentation.setText(AntBundle.message("remove.selected.meta.targets.action.name"));
+        presentation.setText(AntBundle.messagePointer("remove.selected.meta.targets.action.name"));
         final AntBuildTarget[] targets = getTargetObjectsFromPaths(paths);
         boolean enabled = targets.length > 0;
         for (final AntBuildTarget buildTarget : targets) {

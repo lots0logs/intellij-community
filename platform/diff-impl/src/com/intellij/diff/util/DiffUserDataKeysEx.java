@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff.util;
 
+import com.intellij.diff.DiffEditorTitleCustomizer;
 import com.intellij.diff.DiffTool;
 import com.intellij.diff.comparison.ComparisonPolicy;
 import com.intellij.diff.fragments.LineFragment;
@@ -43,9 +30,14 @@ public interface DiffUserDataKeysEx extends DiffUserDataKeys {
   // DiffContent
   //
 
-  Key<TIntFunction> LINE_NUMBER_CONVERTOR = Key.create("Diff.LineNumberConvertor"); // Document line -> line number in Editor gutter
+  /**
+   * Override line numbers in editor gutter (function "document line -> user-visible line number")
+   */
+  Key<TIntFunction> LINE_NUMBER_CONVERTOR = Key.create("Diff.LineNumberConvertor");
   Key<Pair<FilePath, VcsRevisionNumber>> REVISION_INFO = Key.create("Diff.RevisionInfo");
   Key<String> FILE_NAME = Key.create("Diff.FileName");
+
+  Key<Boolean> DIFF_IN_EDITOR = Key.create("Diff.DiffInEditor");
 
   //
   // DiffRequest
@@ -64,6 +56,8 @@ public interface DiffUserDataKeysEx extends DiffUserDataKeys {
   Key<ScrollToPolicy> SCROLL_TO_CHANGE = Key.create("Diff.ScrollToChange");
   Key<LogicalPosition[]> EDITORS_CARET_POSITION = Key.create("Diff.EditorsCaretPosition");
 
+  Key<List<DiffEditorTitleCustomizer>> EDITORS_TITLE_CUSTOMIZER = Key.create("Diff.EditorsTitleCustomizer");
+
   Key<DiffNavigationContext> NAVIGATION_CONTEXT = Key.create("Diff.NavigationContext");
 
   interface DiffComputer {
@@ -74,27 +68,48 @@ public interface DiffUserDataKeysEx extends DiffUserDataKeys {
                                boolean innerChanges,
                                @NotNull ProgressIndicator indicator);
   }
+
   Key<DiffComputer> CUSTOM_DIFF_COMPUTER = Key.create("Diff.CustomDiffComputer");
 
   //
   // DiffContext
   //
 
-  Key<JComponent> BOTTOM_PANEL = Key.create("Diff.BottomPanel"); // Could implement Disposable
+  /**
+   * Add panel to the bottom of diff window.
+   * If passed panel implements Disposable, it will be disposed when window is closed.
+   */
+  Key<JComponent> BOTTOM_PANEL = Key.create("Diff.BottomPanel");
+  /**
+   * Force viewer to a single DiffTool and prohibit switching to another one.
+   */
   Key<DiffTool> FORCE_DIFF_TOOL = Key.create("Diff.ForceDiffTool");
-
+  /**
+   * Show "Disable Editing" action on toolbar, that allows to prevent accidental file modifications.
+   */
   Key<Boolean> SHOW_READ_ONLY_LOCK = Key.create("Diff.ShowReadOnlyLock");
+  /**
+   * Whether "Local Changes" are shown in this view (and {@link com.intellij.openapi.vcs.ex.LineStatusTrackerI} can be used to show diff).
+   */
   Key<Boolean> LAST_REVISION_WITH_LOCAL = Key.create("Diff.LastWithLocal");
+
+  Key<Float> TWO_SIDE_SPLITTER_PROPORTION = Key.create("Diff.TwoSideSplitterProportion");
 
   //
   // MergeContext / MergeRequest
   //
 
-  // return false if merge window should be prevented from closing and canceling resolve.
+  /**
+   * @return false if merge window should be prevented from closing and canceling resolve.
+   */
   Key<Condition<MergeTool.MergeViewer>> MERGE_CANCEL_HANDLER = Key.create("Diff.MergeCancelHandler");
-  // (title, message)
+  /**
+   * Pair(title, message) for message dialog
+   */
   Key<Couple<String>> MERGE_CANCEL_MESSAGE = Key.create("Diff.MergeCancelMessage");
-  // null -> default
+  /**
+   * Return {@code null} to use defaults.
+   */
   Key<Function<MergeResult, String>> MERGE_ACTION_CAPTIONS = Key.create("Diff.MergeActionCaptions");
 
 

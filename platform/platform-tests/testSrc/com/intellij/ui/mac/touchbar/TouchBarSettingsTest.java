@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.mac.touchbar;
 
 import com.intellij.execution.ExecutionException;
@@ -11,12 +11,15 @@ import junit.framework.TestCase;
 import org.junit.Assume;
 import org.junit.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class TouchBarSettingsTest extends TestCase {
   private static final String testAppID = "com.apple.terminal";
 
   @Test
   public void testGetProcessOutput() {
-    Assume.assumeTrue(NST.isSupportedOS());
+    Assume.assumeTrue("NST-unsupported OS", NST.isSupportedOS());
 
     final GeneralCommandLine cmdLine = new GeneralCommandLine("pgrep", "ser");
     try {
@@ -36,7 +39,7 @@ public class TouchBarSettingsTest extends TestCase {
 
   @Test
   public void testSettingsRead() {
-    Assume.assumeTrue(SystemInfo.isMac);
+    Assume.assumeTrue("mac only", SystemInfo.isMac);
 
     final String sysVer = NSDefaults.readStringVal("loginwindow", "SystemVersionStampAsString");
     assertNotNull(sysVer);
@@ -45,9 +48,19 @@ public class TouchBarSettingsTest extends TestCase {
 
   @Test
   public void testTouchBarSettingsWrite() {
-    Assume.assumeTrue(NST.isSupportedOS());
+    Assume.assumeTrue("NST-unsupported OS", NST.isSupportedOS());
 
-    Assume.assumeTrue(NSDefaults.isDomainExists(NSDefaults.ourTouchBarDomain));
+    if (NSDefaults.isDomainExists(NSDefaults.ourTouchBarDomain)) {
+      NSDefaults.removePersistentDomain(NSDefaults.ourTouchBarDomain);
+      Assume.assumeTrue("can't delete domain: " + NSDefaults.ourTouchBarDomain, !NSDefaults.isDomainExists(NSDefaults.ourTouchBarDomain));
+    }
+
+    final Map<String, Object> vals = new HashMap<>();
+    vals.put("TestNSDefaultsKey", "TestNSDefaultsValue");
+    vals.put("PresentationModePerApp", new HashMap<>());
+    NSDefaults.createPersistentDomain(NSDefaults.ourTouchBarDomain, vals);
+
+    Assume.assumeTrue("can't create domain: " + NSDefaults.ourTouchBarDomain, NSDefaults.isDomainExists(NSDefaults.ourTouchBarDomain));
 
     final boolean enabled = NSDefaults.isShowFnKeysEnabled(testAppID);
     NSDefaults.setShowFnKeysEnabled(testAppID, !enabled);

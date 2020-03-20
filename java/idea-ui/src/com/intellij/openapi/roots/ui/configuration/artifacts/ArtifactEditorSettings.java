@@ -13,9 +13,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-/**
- * @author nik
- */
 public class ArtifactEditorSettings implements PersistentStateComponent<ArtifactEditorSettings.ArtifactEditorSettingsState> {
   private boolean mySortElements = true;
   private final List<ComplexPackagingElementType<?>> myTypesToShowContent = new ArrayList<>();
@@ -62,7 +59,7 @@ public class ArtifactEditorSettings implements PersistentStateComponent<Artifact
     mySortElements = sortElements;
   }
 
-  public void setTypesToShowContent(Collection<ComplexPackagingElementType<?>> typesToShowContent) {
+  public void setTypesToShowContent(Collection<? extends ComplexPackagingElementType<?>> typesToShowContent) {
     myTypesToShowContent.clear();
     myTypesToShowContent.addAll(typesToShowContent);
   }

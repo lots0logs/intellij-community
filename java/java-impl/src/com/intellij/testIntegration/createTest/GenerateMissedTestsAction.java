@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testIntegration.createTest;
 
 import com.intellij.codeInsight.CodeInsightUtil;
@@ -7,6 +7,7 @@ import com.intellij.codeInsight.TestFrameworks;
 import com.intellij.codeInsight.hint.HintManager;
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction;
 import com.intellij.ide.util.PsiClassListCellRenderer;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -22,6 +23,7 @@ import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.Collection;
 
 public class GenerateMissedTestsAction extends PsiElementBaseIntentionAction {
@@ -29,7 +31,7 @@ public class GenerateMissedTestsAction extends PsiElementBaseIntentionAction {
   @Override
   @NotNull
   public String getText() {
-    return "Generate missed test methods";
+    return JavaBundle.message("intention.text.generate.missed.test.methods");
   }
 
   @Override
@@ -73,10 +75,10 @@ public class GenerateMissedTestsAction extends PsiElementBaseIntentionAction {
     }
 
     JBPopupFactory.getInstance()
-      .createPopupChooserBuilder(ContainerUtil.newArrayList(testClasses))
+      .createPopupChooserBuilder(new ArrayList<>(testClasses))
       .setRenderer(new PsiClassListCellRenderer())
       .setItemChosenCallback((selectedClass) -> generateMissedTests((PsiClass)selectedClass, srcClass, editor))
-      .setTitle("Choose Test")
+      .setTitle(JavaBundle.message("popup.title.choose.test"))
       .createPopup()
       .showInBestPositionFor(editor);
   }

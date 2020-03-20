@@ -1,30 +1,21 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.sdk.flavors;
 
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.SystemProperties;
+import com.jetbrains.python.sdk.BasePySdkExtKt;
 import com.jetbrains.python.sdk.PySdkExtKt;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
 import icons.PythonIcons;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -42,29 +33,50 @@ public class VirtualEnvSdkFlavor extends CPythonSdkFlavor {
   }
   private final static String[] NAMES = new String[]{"jython", "pypy", "python.exe", "jython.bat", "pypy.exe"};
 
-  public static VirtualEnvSdkFlavor INSTANCE = new VirtualEnvSdkFlavor();
+  /**
+   * @deprecated Use {@link #getInstance()}
+   */
+  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2020.3")
+  public final static VirtualEnvSdkFlavor INSTANCE = new VirtualEnvSdkFlavor();
+
+  public static VirtualEnvSdkFlavor getInstance() {
+    return PythonSdkFlavor.EP_NAME.findExtension(VirtualEnvSdkFlavor.class);
+  }
 
   @Override
-  public Collection<String> suggestHomePaths(@Nullable Module module) {
-    final List<String> candidates = new ArrayList<>();
-    if (module != null) {
-      final VirtualFile baseDir = PySdkExtKt.getBaseDir(module);
-      if (baseDir != null) {
-        candidates.addAll(findInDirectory(baseDir));
+  public boolean isPlatformIndependent() {
+    return true;
+  }
+
+  @NotNull
+  @Override
+  public Collection<String> suggestHomePaths(@Nullable Module module, @Nullable UserDataHolder context) {
+    return ReadAction.compute(() -> {
+      final List<String> candidates = new ArrayList<>();
+      if (module != null) {
+        VirtualFile baseDir = BasePySdkExtKt.getBaseDir(module);
+        if (baseDir == null && context != null && context.getUserData(PySdkExtKt.getBASE_DIR()) != null) {
+          //noinspection ConstantConditions
+          baseDir = VfsUtil.findFile(context.getUserData(PySdkExtKt.getBASE_DIR()), false);
+        }
+        if (baseDir != null) {
+          candidates.addAll(findInBaseDirectory(baseDir));
+        }
       }
-    }
 
-    final VirtualFile path = getDefaultLocation();
-    if (path != null) {
-      candidates.addAll(findInDirectory(path));
-    }
+      final VirtualFile path = getDefaultLocation();
+      if (path != null) {
+        candidates.addAll(findInBaseDirectory(path));
+      }
 
-    final VirtualFile pyEnvLocation = getPyEnvDefaultLocations();
-    if (pyEnvLocation != null) {
-      candidates.addAll(findInDirectory(pyEnvLocation));
-    }
+      final VirtualFile pyEnvLocation = getPyEnvDefaultLocations();
+      if (pyEnvLocation != null) {
+        candidates.addAll(findInBaseDirectory(pyEnvLocation));
+      }
 
-    return candidates;
+      return candidates;
+    });
   }
 
   @Nullable
@@ -99,24 +111,35 @@ public class VirtualEnvSdkFlavor extends CPythonSdkFlavor {
     return null;
   }
 
-  public static Collection<String> findInDirectory(VirtualFile rootDir) {
+  public static Collection<String> findInBaseDirectory(@Nullable VirtualFile baseDir) {
     List<String> candidates = new ArrayList<>();
-    if (rootDir != null) {
-      rootDir.refresh(true, false);
-      VirtualFile[] suspects = rootDir.getChildren();
+    if (baseDir != null) {
+      baseDir.refresh(true, false);
+      VirtualFile[] suspects = baseDir.getChildren();
       for (VirtualFile child : suspects) {
-        if (child.isDirectory()) {
-          final VirtualFile bin = child.findChild("bin");
-          final VirtualFile scripts = child.findChild("Scripts");
-          if (bin != null) {
-            final String interpreter = findInterpreter(bin);
-            if (interpreter != null) candidates.add(interpreter);
-          }
-          if (scripts != null) {
-            final String interpreter = findInterpreter(scripts);
-            if (interpreter != null) candidates.add(interpreter);
-          }
-        }
+        candidates.addAll(findInRootDirectory(child));
+      }
+    }
+    return candidates;
+  }
+
+  @NotNull
+  public static Collection<String> findInRootDirectory(@Nullable VirtualFile rootDir) {
+    final List<String> candidates = new ArrayList<>();
+    if (rootDir != null && rootDir.isDirectory()) {
+      final VirtualFile bin = rootDir.findChild("bin");
+      final VirtualFile scripts = rootDir.findChild("Scripts");
+      if (bin != null) {
+        final String interpreter = findInterpreter(bin);
+        if (interpreter != null) candidates.add(interpreter);
+      }
+      if (scripts != null) {
+        final String interpreter = findInterpreter(scripts);
+        if (interpreter != null) candidates.add(interpreter);
+      }
+      if (candidates.isEmpty()) {
+        final String interpreter = findInterpreter(rootDir);
+        if (interpreter != null) candidates.add(interpreter);
       }
     }
     return candidates;
@@ -126,7 +149,7 @@ public class VirtualEnvSdkFlavor extends CPythonSdkFlavor {
   private static String findInterpreter(VirtualFile dir) {
     for (VirtualFile child : dir.getChildren()) {
       if (!child.isDirectory()) {
-        final String childName = child.getName().toLowerCase();
+        final String childName = StringUtil.toLowerCase(child.getName());
         for (String name : NAMES) {
           if (SystemInfo.isWindows) {
             if (childName.equals(name)) {
@@ -149,7 +172,7 @@ public class VirtualEnvSdkFlavor extends CPythonSdkFlavor {
   @Override
   public boolean isValidSdkPath(@NotNull File file) {
     if (!super.isValidSdkPath(file)) return false;
-    return PythonSdkType.getVirtualEnvRoot(file.getPath()) != null;
+    return PythonSdkUtil.getVirtualEnvRoot(file.getPath()) != null;
   }
 
   @Override

@@ -11,25 +11,22 @@ import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.keymap.KeymapManager
 import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.openapi.vcs.vfs.ContentRevisionVirtualFile
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
-import com.intellij.ui.ColoredListCellRenderer
+import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.util.BitUtil
 import com.intellij.util.Url
-import com.intellij.util.containers.ContainerUtil
+import com.intellij.xml.XmlBundle
 import com.intellij.xml.util.HtmlUtil
 import org.jetbrains.concurrency.AsyncPromise
 import org.jetbrains.concurrency.Promise
 import org.jetbrains.concurrency.resolvedPromise
 import java.awt.event.InputEvent
-import javax.swing.JList
 
 private val LOG = logger<BaseOpenInBrowserAction>()
 
@@ -45,7 +42,7 @@ internal fun openInBrowser(request: OpenInBrowserRequest, preferLocalUrl: Boolea
     }
   }
   catch (e: WebBrowserUrlProvider.BrowserException) {
-    Messages.showErrorDialog(e.message, IdeBundle.message("browser.error"))
+    Messages.showErrorDialog(e.message, XmlBundle.message("browser.error"))
   }
   catch (e: Exception) {
     LOG.error(e)
@@ -63,7 +60,7 @@ internal class BaseOpenInBrowserAction(private val browser: WebBrowser) : DumbAw
     @JvmStatic
     fun doUpdate(event: AnActionEvent): OpenInBrowserRequest? {
       val request = createRequest(event.dataContext, isForceFileUrlIfNoUrlProvider = false)
-      val applicable = request != null && WebBrowserServiceImpl.getProvider(request) != null
+      val applicable = request != null && WebBrowserServiceImpl.getProviders(request).findAny().isPresent
       event.presentation.isEnabledAndVisible = applicable
       return if (applicable) request else  null
     }
@@ -101,19 +98,20 @@ internal class BaseOpenInBrowserAction(private val browser: WebBrowser) : DumbAw
 
     var description = templatePresentation.text
     if (ActionPlaces.CONTEXT_TOOLBAR == e.place) {
-      val builder = StringBuilder(description)
-      builder.append(" (")
-      val shortcuts = KeymapManager.getInstance().activeKeymap.getShortcuts("WebOpenInAction")
-      val exists = shortcuts.isNotEmpty()
-      if (exists) {
-        builder.append(KeymapUtil.getShortcutText(shortcuts[0]))
-      }
+      val shortcutInfo = buildString {
+        val shortcut = KeymapUtil.getPrimaryShortcut("WebOpenInAction")
+        if (shortcut != null) {
+          append(KeymapUtil.getShortcutText(shortcut))
+        }
 
-      if (HtmlUtil.isHtmlFile(result.file)) {
-        builder.append(if (exists) ", " else "").append("hold Shift to open URL of local file")
+        if (HtmlUtil.isHtmlFile(result.file)) {
+          append(if (shortcut != null) ", " else "")
+          append(XmlBundle.message("browser.shortcut"))
+        }
       }
-      builder.append(')')
-      description = builder.toString()
+      if (shortcutInfo.isNotEmpty()) {
+        description = "$description ($shortcutInfo)"
+      }
     }
     e.presentation.text = description
   }
@@ -135,7 +133,7 @@ private fun createRequest(context: DataContext, isForceFileUrlIfNoUrlProvider: B
       psiFile = PsiManager.getInstance(project).findFile(virtualFile)
     }
 
-    if (psiFile != null && psiFile.virtualFile !is ContentRevisionVirtualFile) {
+    if (psiFile != null) {
       return createOpenInBrowserRequest(psiFile, isForceFileUrlIfNoUrlProvider)
     }
   }
@@ -143,7 +141,7 @@ private fun createRequest(context: DataContext, isForceFileUrlIfNoUrlProvider: B
     val project = editor.project
     if (project != null && project.isInitialized) {
       val psiFile = CommonDataKeys.PSI_FILE.getData(context) ?: PsiDocumentManager.getInstance(project).getPsiFile(editor.document)
-      if (psiFile != null && psiFile.virtualFile !is ContentRevisionVirtualFile) {
+      if (psiFile != null) {
         return object : OpenInBrowserRequest(psiFile, isForceFileUrlIfNoUrlProvider) {
           private val lazyElement by lazy { file.findElementAt(editor.caretModel.offset) }
 
@@ -163,15 +161,13 @@ private fun chooseUrl(urls: Collection<Url>): Promise<Url> {
 
   val result = AsyncPromise<Url>()
   JBPopupFactory.getInstance()
-    .createPopupChooserBuilder(ContainerUtil.newArrayList(urls))
-    .setRenderer(object : ColoredListCellRenderer<Url>() {
-      override fun customizeCellRenderer(list: JList<out Url>, value: Url?, index: Int, selected: Boolean, hasFocus: Boolean) {
-        // todo icons looks good, but is it really suitable for all URLs providers?
-        icon = AllIcons.Nodes.Servlet
-        append((value as Url).toDecodedForm())
-      }
+    .createPopupChooserBuilder(urls.toMutableList())
+    .setRenderer(SimpleListCellRenderer.create<Url> { label, value, _ ->
+      // todo icons looks good, but is it really suitable for all URLs providers?
+      label.icon = AllIcons.Nodes.Servlet
+      label.text = (value as Url).toDecodedForm()
     })
-    .setTitle("Choose Url")
+    .setTitle(XmlBundle.message("browser.url.popup"))
     .setItemChosenCallback { value ->
       result.setResult(value)
     }

@@ -25,16 +25,14 @@ import com.intellij.util.PairProcessor;
 import com.intellij.util.Processor;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
- * @author nik
- */
 public class ProjectOrderEnumerator extends OrderEnumeratorBase {
   private final Project myProject;
 
-  public ProjectOrderEnumerator(@NotNull Project project, @NotNull OrderRootsCache rootsCache) {
+  public ProjectOrderEnumerator(@NotNull Project project, @Nullable OrderRootsCache rootsCache) {
     super(rootsCache);
     myProject = project;
   }
@@ -48,12 +46,12 @@ public class ProjectOrderEnumerator extends OrderEnumeratorBase {
   }
 
   @Override
-  protected void forEach(@NotNull final PairProcessor<? super OrderEntry, ? super List<OrderEnumerationHandler>> processor) {
+  protected void forEach(@NotNull final PairProcessor<? super OrderEntry, ? super List<? extends OrderEnumerationHandler>> processor) {
     myRecursively = false;
     myWithoutDepModules = true;
     final THashSet<Module> processed = new THashSet<>();
     processRootModules(module -> {
-      processEntries(getRootModel(module), processor, processed, true, getCustomHandlers(module));
+      processEntries(getRootModel(module), processed, true, getCustomHandlers(module), processor);
       return true;
     });
   }

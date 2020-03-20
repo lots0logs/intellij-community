@@ -95,7 +95,8 @@ public class ConvertSwitchToIfIntention implements IntentionAction {
     boolean useEquals = isSwitchOnString;
     if (!useEquals) {
       final PsiClass aClass = PsiUtil.resolveClassInType(switchExpressionType);
-      useEquals = aClass != null && !aClass.isEnum() && !TypeConversionUtil.isPrimitiveWrapper(aClass.getQualifiedName());
+      String fqn;
+      useEquals = aClass != null && !aClass.isEnum() && ((fqn = aClass.getQualifiedName()) == null || !TypeConversionUtil.isPrimitiveWrapper(fqn));
     }
     PsiCodeBlock body = switchStatement.getBody();
     if (body == null) {
@@ -167,9 +168,10 @@ public class ConvertSwitchToIfIntention implements IntentionAction {
         parent = (PsiCodeBlock)(switchStatement.getParent());
       }
     }
+    JavaCodeStyleManager javaCodeStyleManager = JavaCodeStyleManager.getInstance(project);
     if (hadSideEffects) {
       final PsiStatement declarationStatement = factory.createStatementFromText(declarationString, switchStatement);
-      parent.addBefore(declarationStatement, switchStatement);
+      javaCodeStyleManager.shortenClassReferences(parent.addBefore(declarationStatement, switchStatement));
     }
     final PsiStatement ifStatement = factory.createStatementFromText(ifStatementText, switchStatement);
     if (unwrapDefault) {
@@ -189,12 +191,11 @@ public class ConvertSwitchToIfIntention implements IntentionAction {
         addedIf.delete();
       }
       else {
-        JavaCodeStyleManager.getInstance(project).shortenClassReferences(addedIf);
+        javaCodeStyleManager.shortenClassReferences(addedIf);
       }
     }
     else {
-      JavaCodeStyleManager.getInstance(project)
-        .shortenClassReferences(commentTracker.replaceAndRestoreComments(switchStatement, ifStatement));
+      javaCodeStyleManager.shortenClassReferences(commentTracker.replaceAndRestoreComments(switchStatement, ifStatement));
     }
   }
 
@@ -303,6 +304,12 @@ public class ConvertSwitchToIfIntention implements IntentionAction {
       firstCaseValue = false;
       if (useEquals) {
         out.append(caseValue).append(".equals(").append(expressionText).append(')');
+      }
+      else if (caseValue.equals("true")) {
+        out.append(expressionText);
+      }
+      else if (caseValue.equals("false")) {
+        out.append("!(").append(expressionText).append(")");
       }
       else {
         out.append(expressionText).append("==").append(caseValue);

@@ -1,9 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.actions;
 
 import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.find.FindSettings;
-import com.intellij.find.impl.FindDialog;
 import com.intellij.find.impl.FindInProjectUtil;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.PropertiesComponent;
@@ -25,9 +24,6 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.regex.PatternSyntaxException;
 
-/**
- * @author max
- */
 public class LayoutProjectCodeDialog extends DialogWrapper implements ReformatFilesOptions {
   private static @NonNls final String HELP_ID = "Reformat Code on Directory Dialog";
 
@@ -43,7 +39,7 @@ public class LayoutProjectCodeDialog extends DialogWrapper implements ReformatFi
   private ScopeChooserCombo myScopeCombo;
 
   private JCheckBox myEnableFileNameFilterCb;
-  private ComboBox myFileFilter;
+  private ComboBox<String> myFileFilter;
 
   private JCheckBox myCbOptimizeImports;
   private JCheckBox myCbRearrangeEntries;
@@ -111,7 +107,7 @@ public class LayoutProjectCodeDialog extends DialogWrapper implements ReformatFi
   }
 
   private void initFileTypeFilter() {
-    FindDialog.initFileFilter(myFileFilter, myEnableFileNameFilterCb);
+    FindInProjectUtil.initFileFilter(myFileFilter, myEnableFileNameFilterCb);
     myEnableFileNameFilterCb.addActionListener(new ActionListener() {
       @Override
       public void actionPerformed(ActionEvent e) {

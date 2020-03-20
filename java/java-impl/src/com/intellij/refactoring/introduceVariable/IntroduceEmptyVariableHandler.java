@@ -1,25 +1,12 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.refactoring.introduceVariable;
 
 import com.intellij.codeInsight.completion.JavaCompletionUtil;
-import com.intellij.codeInsight.lookup.LookupElement;
-import com.intellij.codeInsight.lookup.LookupElementBuilder;
-import com.intellij.codeInsight.template.*;
+import com.intellij.codeInsight.template.Template;
+import com.intellij.codeInsight.template.TemplateBuilderImpl;
+import com.intellij.codeInsight.template.TemplateManager;
 import com.intellij.codeInsight.template.impl.ConstantNode;
+import com.intellij.java.refactoring.JavaRefactoringBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
@@ -35,9 +22,9 @@ import com.intellij.refactoring.HelpID;
 import com.intellij.refactoring.RefactoringBundle;
 import com.intellij.refactoring.util.CommonRefactoringUtil;
 import com.intellij.refactoring.util.RefactoringUtil;
-import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
 
 public class IntroduceEmptyVariableHandler {
   private static final String VARIABLE_NAME = "IntroducedVariable";
@@ -51,14 +38,14 @@ public class IntroduceEmptyVariableHandler {
     PsiElement anchorStatement = RefactoringUtil.getParentStatement(at, false);
     if (anchorStatement == null) {
       CommonRefactoringUtil.showErrorHint(project, editor, RefactoringBundle.getCannotRefactorMessage(
-        RefactoringBundle.message("invalid.expression.context")),
+        JavaRefactoringBundle.message("invalid.expression.context")),
                                           RefactoringBundle.message("introduce.variable.title"), HelpID.INTRODUCE_VARIABLE);
       return;
     }
 
     SuggestedNameInfo suggestedNameInfo = getSuggestedVariableNames(project, type, at);
     assert suggestedNameInfo.names.length > 0;
-    
+
     ApplicationManager.getApplication().runWriteAction(() -> {
       Document document = editor.getDocument();
       String initialVariableName = suggestedNameInfo.names[0];
@@ -86,12 +73,13 @@ public class IntroduceEmptyVariableHandler {
 
       TemplateBuilderImpl templateBuilder = new TemplateBuilderImpl(context);
       templateBuilder.replaceElement(typeElement, TYPE_NAME, new ConstantNode(typeElement.getText()), true, true);
-      templateBuilder.replaceElement(localVariable.getNameIdentifier(), VARIABLE_NAME, new MyExpression(suggestedNameInfo), true);
+      templateBuilder.replaceElement(localVariable.getNameIdentifier(), VARIABLE_NAME,
+                                     new ConstantNode(suggestedNameInfo.names[0]).withLookupStrings(suggestedNameInfo.names), true);
       templateBuilder.replaceElement(variableReference, VARIABLE_NAME, (String)null, false);
-      templateBuilder.replaceElement(ObjectUtils.assertNotNull(localVariable.getInitializer()), "");
+      templateBuilder.replaceElement(Objects.requireNonNull(localVariable.getInitializer()), "");
       templateBuilder.setEndVariableAfter(variableReference);
       Template template = templateBuilder.buildInlineTemplate();
-      
+
       editor.getCaretModel().moveToOffset(context.getTextOffset());
       TemplateManager.getInstance(project).startTemplate(editor, template);
     });
@@ -105,34 +93,4 @@ public class IntroduceEmptyVariableHandler {
     return codeStyleManager.suggestUniqueVariableName(delegate, at, true);
   }
 
-  private static class MyExpression extends Expression {
-    private final SuggestedNameInfo myNameInfo;
-
-    private MyExpression(SuggestedNameInfo info) {
-      myNameInfo = info;
-    }
-
-    @Nullable
-    @Override
-    public Result calculateResult(ExpressionContext context) {
-      return new TextResult(myNameInfo.names[0]);
-    }
-
-    @Nullable
-    @Override
-    public Result calculateQuickResult(ExpressionContext context) {
-      return calculateResult(context);
-    }
-
-    @Nullable
-    @Override
-    public LookupElement[] calculateLookupItems(ExpressionContext context) {
-      LookupElement[] elements = new LookupElement[myNameInfo.names.length];
-      for (int i = 0; i < myNameInfo.names.length; i++) {
-        String name = myNameInfo.names[i];
-        elements[i] = LookupElementBuilder.create(name);
-      }
-      return elements;
-    }
-  }
 }

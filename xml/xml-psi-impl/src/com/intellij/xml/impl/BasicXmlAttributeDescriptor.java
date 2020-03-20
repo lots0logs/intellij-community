@@ -20,10 +20,14 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.xml.XmlElement;
 import com.intellij.util.ArrayUtilRt;
 import com.intellij.xml.XmlAttributeDescriptor;
+import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.Nullable;
+
+import static com.intellij.util.containers.ContainerUtil.getFirstItem;
 
 public abstract class BasicXmlAttributeDescriptor extends XmlEnumerationDescriptor implements XmlAttributeDescriptor {
   @Override
+  @Nls
   public String validateValue(XmlElement context, String value) {
     return null;
   }
@@ -33,8 +37,7 @@ public abstract class BasicXmlAttributeDescriptor extends XmlEnumerationDescript
     return getName();
   }
 
-  @Nullable
-  public String[] getEnumeratedValues(@Nullable XmlElement context) {
+  public String @Nullable [] getEnumeratedValues(@Nullable XmlElement context) {
     return getEnumeratedValues();
   }
 
@@ -51,12 +54,12 @@ public abstract class BasicXmlAttributeDescriptor extends XmlEnumerationDescript
   @Override
   protected PsiElement getEnumeratedValueDeclaration(XmlElement xmlElement, String value) {
     String[] values = getEnumeratedValues();
-    if (values == null || values.length == 0) return getDeclaration();
-    return ArrayUtilRt.find(values, value) != -1 ? getDeclaration() : null;
+    if (values == null || values.length == 0) return getFirstItem(getDeclarations());
+    return ArrayUtilRt.find(values, value) != -1 ? getFirstItem(getDeclarations()) : null;
   }
 
   @Override
   protected PsiElement getDefaultValueDeclaration() {
-    return getDeclaration();
+    return getFirstItem(getDeclarations());
   }
 }

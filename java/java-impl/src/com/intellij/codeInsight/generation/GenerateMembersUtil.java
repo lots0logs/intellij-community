@@ -25,7 +25,9 @@ import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.util.*;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.*;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.text.UniqueNameGenerator;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,7 +39,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class GenerateMembersUtil {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.generation.GenerateMembersUtil");
+  private static final Logger LOG = Logger.getInstance(GenerateMembersUtil.class);
 
   private GenerateMembersUtil() {
   }
@@ -232,7 +234,7 @@ public class GenerateMembersUtil {
         final PsiClass psiClass = (PsiClass)element;
         if (psiClass.isEnum()) {
           PsiElement lastChild = null;
-          for (PsiElement child : psiClass.getChildren()) {
+          for (PsiElement child = psiClass.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (child instanceof PsiJavaToken && ";".equals(child.getText())) {
               lastChild = child;
               break;
@@ -403,12 +405,11 @@ public class GenerateMembersUtil {
     }
   }
 
-  @NotNull
-  public static PsiParameter[] overriddenParameters(@NotNull PsiParameter[] parameters,
-                                                    @NotNull JVMElementFactory factory,
-                                                    @NotNull JavaCodeStyleManager codeStyleManager,
-                                                    @NotNull PsiSubstitutor substitutor,
-                                                    @Nullable PsiElement target) {
+  public static PsiParameter @NotNull [] overriddenParameters(PsiParameter @NotNull [] parameters,
+                                                              @NotNull JVMElementFactory factory,
+                                                              @NotNull JavaCodeStyleManager codeStyleManager,
+                                                              @NotNull PsiSubstitutor substitutor,
+                                                              @Nullable PsiElement target) {
     PsiParameter[] result = new PsiParameter[parameters.length];
     UniqueNameGenerator generator = new UniqueNameGenerator();
 
@@ -423,8 +424,7 @@ public class GenerateMembersUtil {
         isBaseNameGenerated = false;
       }
 
-      if (paramName == null ||
-          isBaseNameGenerated && !isSubstituted && isBaseNameGenerated(codeStyleManager, parameterType, paramName) ||
+      if (isBaseNameGenerated && !isSubstituted && isBaseNameGenerated(codeStyleManager, parameterType, paramName) ||
           !factory.isValidParameterName(paramName)) {
         String[] names = codeStyleManager.suggestVariableName(VariableKind.PARAMETER, null, null, substituted).names;
         if (names.length > 0) {
@@ -467,7 +467,7 @@ public class GenerateMembersUtil {
     }
     final PsiParameter[] sourceParameters = source.getParameterList().getParameters();
     final PsiParameterList targetParameterList = target.getParameterList();
-    RefactoringUtil.fixJavadocsForParams(target, new HashSet<>(Arrays.asList(targetParameterList.getParameters())), pair -> {
+    RefactoringUtil.fixJavadocsForParams(target, ContainerUtil.set(targetParameterList.getParameters()), pair -> {
       final int parameterIndex = targetParameterList.getParameterIndex(pair.first);
       if (parameterIndex >= 0 && parameterIndex < sourceParameters.length) {
         return Comparing.strEqual(pair.second, sourceParameters[parameterIndex].getName());
@@ -516,14 +516,7 @@ public class GenerateMembersUtil {
     if (PsiUtil.isRawSubstitutor(owner, substitutor)) {
       return TypeConversionUtil.erasure(type);
     }
-    final PsiType psiType = substitutor.substitute(type);
-    if (psiType != null) {
-      final PsiType deepComponentType = psiType.getDeepComponentType();
-      if (!(deepComponentType instanceof PsiCapturedWildcardType || deepComponentType instanceof PsiWildcardType)){
-        return psiType;
-      }
-    }
-    return TypeConversionUtil.erasure(type);
+    return GenericsUtil.eliminateWildcards(substitutor.substitute(type), false, true);
   }
 
   public static boolean isChildInRange(PsiElement child, PsiElement first, PsiElement last) {
@@ -583,8 +576,9 @@ public class GenerateMembersUtil {
   }
 
   /**
-   * to be deleted in 2017.2
+   * @deprecated use {@link #copyOrReplaceModifierList(PsiModifierListOwner, PsiElement, PsiModifierListOwner)}. to be deleted in 2017.2
    */
+  @ApiStatus.ScheduledForRemoval(inVersion = "2017.2")
   @Deprecated
   public static void copyOrReplaceModifierList(@NotNull PsiModifierListOwner sourceParam, @NotNull PsiModifierListOwner targetParam) {
     copyOrReplaceModifierList(sourceParam, null, targetParam);

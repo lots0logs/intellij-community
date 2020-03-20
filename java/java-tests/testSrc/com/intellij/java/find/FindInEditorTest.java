@@ -18,17 +18,21 @@ package com.intellij.java.find;
 import com.intellij.codeInsight.hint.EditorHintListener;
 import com.intellij.find.FindManager;
 import com.intellij.find.FindModel;
+import com.intellij.find.FindUtil;
 import com.intellij.find.impl.livePreview.LivePreview;
 import com.intellij.find.impl.livePreview.LivePreviewController;
 import com.intellij.find.impl.livePreview.SearchResults;
 import com.intellij.openapi.actionSystem.IdeActions;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.EditorFactory;
 import com.intellij.openapi.editor.impl.EditorImpl;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.registry.RegistryValue;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.testFramework.EditorTestUtil;
-import com.intellij.testFramework.LightCodeInsightTestCase;
+import com.intellij.testFramework.LightJavaCodeInsightTestCase;
+import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.fixtures.EditorMouseFixture;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
@@ -37,7 +41,7 @@ import java.awt.*;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 
-public class FindInEditorTest extends LightCodeInsightTestCase {
+public class FindInEditorTest extends LightJavaCodeInsightTestCase {
   private LivePreviewController myLivePreviewController;
   private FindModel myFindModel;
 
@@ -80,7 +84,11 @@ public class FindInEditorTest extends LightCodeInsightTestCase {
   }
 
   private void initFind() {
-    SearchResults searchResults = new SearchResults(getEditor(), getProject());
+    initFind(getEditor());
+  }
+
+  private void initFind(Editor editor) {
+    SearchResults searchResults = new SearchResults(editor, editor.getProject());
     myLivePreviewController = new LivePreviewController(searchResults, null, getTestRootDisposable());
     myFindModel.addObserver(findModel -> myLivePreviewController.updateInBackground(myFindModel, true));
     myLivePreviewController.on();
@@ -92,7 +100,7 @@ public class FindInEditorTest extends LightCodeInsightTestCase {
     myFindModel.setStringToFind("a");
     checkResults();
     myFindModel.setStringToFind("a2");
-    assertFalse(myEditor.getSelectionModel().hasSelection());
+    assertFalse(getEditor().getSelectionModel().hasSelection());
   }
 
   public void testEmacsLikeFallback() {
@@ -147,7 +155,7 @@ public class FindInEditorTest extends LightCodeInsightTestCase {
   public void testSecondFind() {
     configureFromText("<selection>a<caret></selection> b b a");
     invokeFind();
-    new EditorMouseFixture((EditorImpl)myEditor).doubleClickAt(0, 3);
+    new EditorMouseFixture((EditorImpl)getEditor()).doubleClickAt(0, 3);
     invokeFind();
     checkResultByText("a <selection>b<caret></selection> b a");
   }
@@ -206,10 +214,10 @@ public class FindInEditorTest extends LightCodeInsightTestCase {
 
   public void testUndoingReplaceBringsChangePlaceIntoView() {
     configureFromText("abc\n\n\n\n\nabc\n");
-    EditorTestUtil.setEditorVisibleSize(myEditor, 100, 3);
+    EditorTestUtil.setEditorVisibleSize(getEditor(), 100, 3);
     executeAction(IdeActions.ACTION_EDITOR_TEXT_END_WITH_SELECTION);
 
-    EditorTestUtil.testUndoInEditor(myEditor, () -> {
+    EditorTestUtil.testUndoInEditor(getEditor(), () -> {
       initFind();
       myFindModel.setReplaceState(true);
       myFindModel.setGlobal(false);
@@ -228,7 +236,7 @@ public class FindInEditorTest extends LightCodeInsightTestCase {
       executeAction(IdeActions.ACTION_UNDO);
 
       checkResultByText("abc\n\n\n\n\nabc\n");
-      checkOffsetIsVisible(myEditor, 0);
+      checkOffsetIsVisible(getEditor(), 0);
     });
   }
 
@@ -237,17 +245,49 @@ public class FindInEditorTest extends LightCodeInsightTestCase {
     assertTrue(editor.getScrollingModel().getVisibleAreaOnScrollingFinished().contains(point));
   }
 
-  private static void invokeFind() {
+  private void invokeFind() {
     executeAction(IdeActions.ACTION_FIND);
     UIUtil.dispatchAllInvocationEvents();
   }
 
-  private static void configureFromText(String text) {
+  private void configureFromText(String text) {
     configureFromFileText("file.txt", text);
   }
 
   private void checkResults() {
     String name = getTestName(false);
     assertSameLinesWithFile(getTestDataPath() + "/find/findInEditor/" + name + ".gold", myOutputStream.toString());
+  }
+
+
+  public void testReplacePerformance() throws Exception {
+    String aas = StringUtil.repeat("a", 100);
+    String text = StringUtil.repeat(aas + "\n" + StringUtil.repeat("aaaaasdbbbbbbbbbbbbbbbbb\n", 100), 1000);
+    String bbs = StringUtil.repeat("b", 100);
+    String repl = StringUtil.replace(text, aas, bbs);
+    Editor editor = configureFromFileTextWithoutPSI(text);
+    LivePreview.ourTestOutput = null;
+
+    try {
+      initFind(editor);
+      myFindModel.setReplaceState(true);
+      myFindModel.setPromptOnReplace(false);
+
+      PlatformTestUtil.startPerformanceTest("replace", 45000, ()->{
+        for (int i=0; i<25; i++) {
+          myFindModel.   setStringToFind(aas);
+          myFindModel.setStringToReplace(bbs);
+          FindUtil.replace(editor.getProject(), editor, 0, myFindModel);
+          assertEquals(repl, editor.getDocument().getText());
+          myFindModel.   setStringToFind(bbs);
+          myFindModel.setStringToReplace(aas);
+          FindUtil.replace(editor.getProject(), editor, 0, myFindModel);
+          assertEquals(text, editor.getDocument().getText());
+        }
+      }).assertTiming();
+    }
+    finally {
+      EditorFactory.getInstance().releaseEditor(editor);
+    }
   }
 }

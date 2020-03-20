@@ -28,14 +28,12 @@ import com.intellij.packaging.elements.PackagingElementResolvingContext;
 import com.intellij.packaging.impl.artifacts.ArtifactUtil;
 import com.intellij.packaging.impl.elements.ArtifactElementType;
 import com.intellij.packaging.impl.elements.ProductionModuleOutputElementType;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/**
- * @author nik
- */
 public class ArtifactCompileScope {
   private static final Key<Boolean> FORCE_ARTIFACT_BUILD = Key.create("force_artifact_build");
   private static final Key<Artifact[]> ARTIFACTS_KEY = Key.create("artifacts");
@@ -50,22 +48,22 @@ public class ArtifactCompileScope {
   }
 
   public static CompileScope createArtifactsScope(@NotNull Project project,
-                                                  @NotNull Collection<Artifact> artifacts) {
+                                                  @NotNull Collection<? extends Artifact> artifacts) {
     return createArtifactsScope(project, artifacts, false);
   }
 
   public static CompileScope createArtifactsScope(@NotNull Project project,
-                                                  @NotNull Collection<Artifact> artifacts,
+                                                  @NotNull Collection<? extends Artifact> artifacts,
                                                   final boolean forceArtifactBuild) {
     return createScopeWithArtifacts(createScopeForModulesInArtifacts(project, artifacts), artifacts, forceArtifactBuild);
   }
 
   public static CompileScope createScopeWithArtifacts(final CompileScope baseScope,
-                                                      @NotNull Collection<Artifact> artifacts) {
+                                                      @NotNull Collection<? extends Artifact> artifacts) {
     return createScopeWithArtifacts(baseScope, artifacts, false);
   }
 
-  public static CompileScope createScopeWithArtifacts(final CompileScope baseScope, @NotNull Collection<Artifact> artifacts, final boolean forceArtifactBuild) {
+  public static CompileScope createScopeWithArtifacts(final CompileScope baseScope, @NotNull Collection<? extends Artifact> artifacts, final boolean forceArtifactBuild) {
     baseScope.putUserData(ARTIFACTS_KEY, artifacts.toArray(new Artifact[0]));
     if (forceArtifactBuild) {
       baseScope.putUserData(FORCE_ARTIFACT_BUILD, Boolean.TRUE);
@@ -89,7 +87,7 @@ public class ArtifactCompileScope {
     }
 
     Set<Artifact> artifacts = new HashSet<>();
-    final Set<Module> modules = new HashSet<>(Arrays.asList(compileScope.getAffectedModules()));
+    final Set<Module> modules = ContainerUtil.set(compileScope.getAffectedModules());
     final List<Module> allModules = Arrays.asList(ModuleManager.getInstance(project).getModules());
     for (Artifact artifact : artifactManager.getArtifacts()) {
       if (artifact.isBuildOnMake()) {
@@ -104,8 +102,7 @@ public class ArtifactCompileScope {
     return result;
   }
 
-  @Nullable
-  public static Artifact[] getArtifacts(CompileScope compileScope) {
+  public static Artifact @Nullable [] getArtifacts(CompileScope compileScope) {
     return compileScope.getUserData(ARTIFACTS_KEY);
   }
 
@@ -113,7 +110,7 @@ public class ArtifactCompileScope {
     return Boolean.TRUE.equals(scope.getUserData(FORCE_ARTIFACT_BUILD));
   }
 
-  private static boolean containsModuleOutput(Artifact artifact, final Set<Module> modules, final PackagingElementResolvingContext context) {
+  private static boolean containsModuleOutput(Artifact artifact, final Set<? extends Module> modules, final PackagingElementResolvingContext context) {
     return !ArtifactUtil.processPackagingElements(artifact, ProductionModuleOutputElementType.ELEMENT_TYPE,
                                                   moduleOutputPackagingElement -> {
                                                     final Module module = moduleOutputPackagingElement.findModule(context);
@@ -122,7 +119,7 @@ public class ArtifactCompileScope {
   }
 
   @NotNull
-  private static Set<Artifact> addIncludedArtifacts(@NotNull Collection<Artifact> artifacts,
+  private static Set<Artifact> addIncludedArtifacts(@NotNull Collection<? extends Artifact> artifacts,
                                                     @NotNull PackagingElementResolvingContext context,
                                                     final boolean withOutputPathOnly) {
     Set<Artifact> result = new HashSet<>();

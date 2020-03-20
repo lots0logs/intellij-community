@@ -1,5 +1,5 @@
 /*
- * Copyright 2003-2018 Dave Griffith, Bas Leijdekkers
+ * Copyright 2003-2019 Dave Griffith, Bas Leijdekkers
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,14 @@ import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
+import com.intellij.psi.codeStyle.VariableKind;
+import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.refactoring.util.RefactoringUtil;
 import com.intellij.util.ObjectUtils;
-import com.siyeh.ig.psiutils.CommentTracker;
-import com.siyeh.ig.psiutils.MethodCallUtils;
+import com.siyeh.ig.psiutils.*;
 import com.siyeh.ipp.base.Intention;
 import com.siyeh.ipp.base.PsiElementPredicate;
-import com.siyeh.ipp.psiutils.HighlightUtil;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -50,10 +50,11 @@ public class MakeCallChainIntoCallSequenceIntention extends Intention {
     final List<String> callTexts = new ArrayList<>();
     PsiMethodCallExpression call = ObjectUtils.tryCast(element, PsiMethodCallExpression.class);
     if (call == null) return;
-    call = RefactoringUtil.ensureCodeBlock(call);
-    if (call == null) return;
-    final PsiStatement appendStatement = ObjectUtils.tryCast(RefactoringUtil.getParentStatement(call, false), PsiStatement.class);
-    if (appendStatement == null) return;
+    CodeBlockSurrounder surrounder = CodeBlockSurrounder.forExpression(call);
+    if (surrounder == null) return;
+    CodeBlockSurrounder.SurroundResult result = surrounder.surround();
+    call = (PsiMethodCallExpression)result.getExpression();
+    final PsiStatement appendStatement = result.getAnchor();
     PsiExpression toReplace = call;
     PsiExpression root = MethodCallChainPredicate.getCallChainRoot(call);
     if (root == null) return;
@@ -69,7 +70,7 @@ public class MakeCallChainIntoCallSequenceIntention extends Intention {
     final PsiElement parent = PsiUtil.skipParenthesizedExprUp(toReplace.getParent());
     
     // By default we introduce new variable and assign it to builder 
-    String targetText = "x";
+    String targetText = new VariableNameGenerator(root, VariableKind.LOCAL_VARIABLE).byExpression(root).generate(true);
     boolean introduceVariable = true;
     boolean keepLastStatement = true;
     final String variableText = rootType.getCanonicalText() + ' ' + targetText + '=' + root.getText() + ';';
@@ -126,7 +127,8 @@ public class MakeCallChainIntoCallSequenceIntention extends Intention {
       tracker.deleteAndRestoreComments(appendStatement);
     }
     if (variable != null) {
-      HighlightUtil.showRenameTemplate(appendStatementParent, variable);
+      final PsiReference[] references = ReferencesSearch.search(variable, variable.getUseScope()).toArray(PsiReference.EMPTY_ARRAY);
+      HighlightUtils.showRenameTemplate(appendStatementParent, variable, references);
     }
   }
 

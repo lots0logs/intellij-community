@@ -23,7 +23,6 @@ import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.usageView.UsageInfo;
 import com.intellij.util.IncorrectOperationException;
 import com.intellij.util.containers.ContainerUtil;
-import java.util.HashSet;
 import com.intellij.util.containers.MultiMap;
 import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.PyNames;
@@ -56,7 +55,7 @@ public class PyMakeMethodTopLevelProcessor extends PyBaseMakeFunctionTopLevelPro
   }
 
   @Override
-  protected void updateUsages(@NotNull Collection<String> newParamNames, @NotNull UsageInfo[] usages) {
+  protected void updateUsages(@NotNull Collection<String> newParamNames, UsageInfo @NotNull [] usages) {
     // Field usages
     for (String attrName : myAttributeReferences.keySet()) {
       final Collection<PyReferenceExpression> reads = myAttributeReferences.get(attrName);
@@ -229,7 +228,7 @@ public class PyMakeMethodTopLevelProcessor extends PyBaseMakeFunctionTopLevelPro
       final PsiElement anchor = ContainerUtil.getFirstItem(reads);
       //noinspection ConstantConditions
       if (!PyRefactoringUtil.isValidNewName(name, anchor)) {
-        final String indexedName = PyRefactoringUtil.appendNumberUntilValid(name, anchor);
+        final String indexedName = PyRefactoringUtil.appendNumberUntilValid(name, anchor, PyRefactoringUtil::isValidNewName);
         myAttributeToParameterName.put(name, indexedName);
       }
       else {

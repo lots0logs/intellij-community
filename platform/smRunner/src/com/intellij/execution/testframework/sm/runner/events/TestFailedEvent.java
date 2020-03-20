@@ -17,6 +17,7 @@ package com.intellij.execution.testframework.sm.runner.events;
 
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.util.io.URLUtil;
 import jetbrains.buildServer.messages.serviceMessages.TestFailed;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,6 +38,7 @@ public class TestFailedEvent extends TreeNodeEvent {
   private final long myDurationMillis;
   private final boolean myExpectedFileTemp;
   private final boolean myActualFileTemp;
+  private final boolean myPrintExpectedAndActualValues;
 
   public TestFailedEvent(@NotNull TestFailed testFailed, boolean testError) {
     this(testFailed, testError, null);
@@ -57,10 +59,7 @@ public class TestFailedEvent extends TreeNodeEvent {
     myExpectedFilePath = expectedFilePath;
     String expected = testFailed.getExpected();
     if (expected == null && expectedFilePath != null) {
-      try {
-        expected = FileUtil.loadFile(new File(expectedFilePath));
-      }
-      catch (IOException ignore) {}
+      expected = loadExpectedText(expectedFilePath);
     }
     myComparisonFailureExpectedText = expected;
 
@@ -78,6 +77,11 @@ public class TestFailedEvent extends TreeNodeEvent {
     myDurationMillis = parseDuration(attributes.get("duration"));
     myActualFileTemp = Boolean.parseBoolean(attributes.get("actualIsTempFile"));
     myExpectedFileTemp = Boolean.parseBoolean(attributes.get("expectedIsTempFile"));
+    myPrintExpectedAndActualValues = parsePrintExpectedAndActual(testFailed);
+  }
+
+  private static boolean parsePrintExpectedAndActual(@NotNull TestFailed testFailed) {
+    return !Boolean.FALSE.toString().equals(testFailed.getAttributes().get("printExpectedAndActual"));
   }
 
   public boolean isExpectedFileTemp() {
@@ -131,24 +135,66 @@ public class TestFailedEvent extends TreeNodeEvent {
                          boolean expectedFileTemp,
                          boolean actualFileTemp,
                          long durationMillis) {
+    this(testName,
+         id,
+         localizedFailureMessage,
+         stackTrace,
+         testError,
+         comparisonFailureActualText,
+         comparisonFailureExpectedText,
+         true,
+         expectedFilePath,
+         actualFilePath,
+         expectedFileTemp,
+         actualFileTemp,
+         durationMillis);
+  }
+
+  private TestFailedEvent(@Nullable String testName,
+                          @Nullable String id,
+                          @NotNull String localizedFailureMessage,
+                          @Nullable String stackTrace,
+                          boolean testError,
+                          @Nullable String comparisonFailureActualText,
+                          @Nullable String comparisonFailureExpectedText,
+                          boolean printExpectedAndActualValues,
+                          @Nullable String expectedFilePath,
+                          @Nullable String actualFilePath,
+                          boolean expectedFileTemp,
+                          boolean actualFileTemp,
+                          long durationMillis) {
     super(testName, id);
     myLocalizedFailureMessage = localizedFailureMessage;
     myStacktrace = stackTrace;
     myTestError = testError;
     myExpectedFilePath = expectedFilePath;
     if (comparisonFailureExpectedText == null && expectedFilePath != null) {
-      try {
-        comparisonFailureExpectedText = FileUtil.loadFile(new File(expectedFilePath));
-      }
-      catch (IOException ignore) {}
+      comparisonFailureExpectedText = loadExpectedText(expectedFilePath);
     }
     myComparisonFailureActualText = comparisonFailureActualText;
+    myPrintExpectedAndActualValues = printExpectedAndActualValues;
 
     myActualFilePath = actualFilePath;
     myComparisonFailureExpectedText = comparisonFailureExpectedText;
     myDurationMillis = durationMillis;
     myExpectedFileTemp = expectedFileTemp;
     myActualFileTemp = actualFileTemp;
+  }
+
+  private static String loadExpectedText(@NotNull String expectedFilePath) {
+    try {
+      int jarSep = expectedFilePath.indexOf(URLUtil.JAR_SEPARATOR);
+      if (jarSep == -1) {
+        return FileUtil.loadFile(new File(expectedFilePath));
+      }
+      else {
+        String localPath = expectedFilePath.substring(0, jarSep);
+        String jarPath = expectedFilePath.substring(jarSep + URLUtil.JAR_SEPARATOR.length());
+        return FileUtil.loadTextAndClose(URLUtil.getJarEntryURL(new File(localPath), jarPath).openStream());
+      }
+    }
+    catch (IOException ignore) {}
+    return null;
   }
 
   @NotNull
@@ -195,6 +241,10 @@ public class TestFailedEvent extends TreeNodeEvent {
   @Nullable
   public String getExpectedFilePath() {
     return myExpectedFilePath;
+  }
+
+  public boolean shouldPrintExpectedAndActualValues() {
+    return myPrintExpectedAndActualValues;
   }
 
   @Nullable

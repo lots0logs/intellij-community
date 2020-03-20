@@ -24,13 +24,16 @@ import com.intellij.psi.impl.source.tree.ChildRole;
 import com.intellij.psi.impl.source.tree.ElementType;
 import com.intellij.psi.impl.source.tree.JavaElementType;
 import com.intellij.psi.infos.MethodCandidateInfo;
+import com.intellij.psi.scope.ElementClassHint;
+import com.intellij.psi.scope.PatternResolveState;
+import com.intellij.psi.scope.PsiScopeProcessor;
 import com.intellij.psi.tree.ChildRoleBase;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.psi.util.TypeConversionUtil;
 import org.jetbrains.annotations.NotNull;
 
 public class PsiConditionalExpressionImpl extends ExpressionPsiElement implements PsiConditionalExpression {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.source.tree.java.PsiConditionalExpressionImpl");
+  private static final Logger LOG = Logger.getInstance(PsiConditionalExpressionImpl.class);
 
   public PsiConditionalExpressionImpl() {
     super(JavaElementType.CONDITIONAL_EXPRESSION);
@@ -67,11 +70,19 @@ public class PsiConditionalExpressionImpl extends ExpressionPsiElement implement
     if (type1.equals(type2)) return type1;
 
     if (PsiUtil.isLanguageLevel8OrHigher(this) &&
-        PsiPolyExpressionUtil.isPolyExpression(this) &&
-        !MethodCandidateInfo.ourOverloadGuard.currentStack().contains(PsiUtil.skipParenthesizedExprUp(this.getParent()))) {
+        PsiPolyExpressionUtil.isPolyExpression(this)) {
       //15.25.3 Reference Conditional Expressions 
       // The type of a poly reference conditional expression is the same as its target type.
-      return InferenceSession.getTargetType(this);
+      PsiType targetType = InferenceSession.getTargetType(this);
+      if (MethodCandidateInfo.isOverloadCheck(PsiUtil.skipParenthesizedExprUp(this.getParent()))) {
+        return targetType != null && 
+               targetType.isAssignableFrom(type1) && 
+               targetType.isAssignableFrom(type2) ? targetType : null;
+      }
+      //for standalone conditional expression try to detect target type by type of the sides
+      if (targetType != null) {
+        return targetType;
+      }
     }
 
     final int typeRank1 = TypeConversionUtil.getTypeRank(type1);
@@ -179,6 +190,24 @@ public class PsiConditionalExpressionImpl extends ExpressionPsiElement implement
     else {
       visitor.visitElement(this);
     }
+  }
+
+  @Override
+  public boolean processDeclarations(@NotNull PsiScopeProcessor processor,
+                                     @NotNull ResolveState state,
+                                     PsiElement lastParent,
+                                     @NotNull PsiElement place) {
+    if (lastParent == null) return true;
+    ElementClassHint elementClassHint = processor.getHint(ElementClassHint.KEY);
+    if (elementClassHint != null && !elementClassHint.shouldProcess(ElementClassHint.DeclarationKind.VARIABLE)) return true;
+    PsiExpression condition = getCondition();
+    if (lastParent == getThenExpression()) {
+      return condition.processDeclarations(processor, PatternResolveState.WHEN_TRUE.putInto(state), null, place);
+    }
+    if (lastParent == getElseExpression()) {
+      return condition.processDeclarations(processor, PatternResolveState.WHEN_FALSE.putInto(state), null, place);
+    }
+    return true;
   }
 
   @Override

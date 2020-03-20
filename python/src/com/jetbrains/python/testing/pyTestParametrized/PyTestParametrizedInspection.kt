@@ -21,7 +21,7 @@ class PyTestParametrizedInspection : PyInspection() {
   override fun buildVisitor(holder: ProblemsHolder,
                             isOnTheFly: Boolean,
                             session: LocalInspectionToolSession): PsiElementVisitor = object : PyInspectionVisitor(holder, session) {
-    override fun visitElement(element: PsiElement?) {
+    override fun visitElement(element: PsiElement) {
       if (element is PyFunction) {
         val requiredParameters = element
           .getParametersOfParametrized(myTypeEvalContext)
@@ -35,7 +35,7 @@ class PyTestParametrizedInspection : PyInspection() {
             if (problemSource is PsiErrorElement || problemSource !is LeafPsiElement) {
               return // Error element can't be passed to registerProblem
             }
-            holder.registerProblem(problemSource, "Following arguments are not declared but provided by decorator: $diff",
+            holder.registerProblem(problemSource, PyBundle.message("INSP.arguments.not.declared.but.provided.by.decorator", diff),
                                    ProblemHighlightType.GENERIC_ERROR_OR_WARNING)
           }
         }
@@ -44,7 +44,4 @@ class PyTestParametrizedInspection : PyInspection() {
     }
   }
 
-  override fun getDisplayName(): String {
-    return PyBundle.message("INSP.NAME.pytest-parametrized")
-  }
 }

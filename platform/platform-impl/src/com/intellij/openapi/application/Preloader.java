@@ -1,8 +1,9 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.application;
 
 import com.intellij.diagnostic.Activity;
-import com.intellij.diagnostic.ParallelActivity;
+import com.intellij.diagnostic.ActivityCategory;
+import com.intellij.diagnostic.StartUpMeasurer;
 import com.intellij.ide.ApplicationInitializedListener;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.ExtensionNotApplicableException;
@@ -14,7 +15,7 @@ import com.intellij.openapi.progress.util.ProgressIndicatorBase;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.util.TimeoutUtil;
-import com.intellij.util.concurrency.SequentialTaskExecutor;
+import com.intellij.util.concurrency.AppExecutorUtil;
 import com.intellij.util.io.storage.HeavyProcessLatch;
 
 import java.util.concurrent.Executor;
@@ -30,13 +31,14 @@ final class Preloader implements ApplicationInitializedListener {
   private final ProgressIndicator myWrappingIndicator;
 
   Preloader() {
-    if (ApplicationManager.getApplication().isUnitTestMode() || !Registry.is("enable.activity.preloading")) {
+    Application app = ApplicationManager.getApplication();
+    if (app.isUnitTestMode() || app.isHeadlessEnvironment() || !Registry.is("enable.activity.preloading")) {
       throw ExtensionNotApplicableException.INSTANCE;
     }
 
     myIndicator = new ProgressIndicatorBase();
-    Disposer.register(ApplicationManager.getApplication(), () -> myIndicator.cancel());
-    myExecutor = SequentialTaskExecutor.createSequentialApplicationPoolExecutor("Preloader Pool");
+    Disposer.register(app, () -> myIndicator.cancel());
+    myExecutor = AppExecutorUtil.createBoundedApplicationPoolExecutor("Preloader Pool", 1);
     myWrappingIndicator = new AbstractProgressIndicatorBase() {
       @Override
       public void checkCanceled() {
@@ -59,28 +61,35 @@ final class Preloader implements ApplicationInitializedListener {
 
   @Override
   public void componentsInitialized() {
-    ProgressManager progressManager = ProgressManager.getInstance();
-    for (final PreloadingActivity activity : PreloadingActivity.EP_NAME.getExtensionList()) {
+    PreloadingActivity.EP_NAME.processWithPluginDescriptor((activity, descriptor) -> {
       myExecutor.execute(() -> {
-        if (myIndicator.isCanceled()) return;
+        if (myIndicator.isCanceled()) {
+          return;
+        }
 
         checkHeavyProcessRunning();
-        if (myIndicator.isCanceled()) return;
+        if (myIndicator.isCanceled()) {
+          return;
+        }
 
-        progressManager.runProcess(() -> {
-          Activity measureActivity = ParallelActivity.PRELOAD_ACTIVITY.start(activity.getClass().getName());
+        ProgressManager.getInstance().runProcess(() -> {
+          Activity measureActivity = StartUpMeasurer.startActivity(activity.getClass().getName(), ActivityCategory.PRELOAD_ACTIVITY,
+                                                                   descriptor.getPluginId().getIdString());
           try {
             activity.preload(myWrappingIndicator);
           }
           catch (ProcessCanceledException ignore) {
             return;
           }
-          measureActivity.end();
+          finally {
+            measureActivity.end();
+          }
+
           if (LOG.isDebugEnabled()) {
             LOG.debug(activity.getClass().getName() + " finished");
           }
         }, myIndicator);
       });
-    }
+    });
   }
 }

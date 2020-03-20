@@ -49,7 +49,7 @@ public class PyChangeSignatureHandler implements ChangeSignatureHandler {
 
     final PyCallExpression callExpression = PsiTreeUtil.getParentOfType(element, PyCallExpression.class);
     if (callExpression != null) {
-      final PyResolveContext resolveContext = PyResolveContext.defaultContext().withTypeEvalContext(context);
+      final PyResolveContext resolveContext = PyResolveContext.implicitContext().withTypeEvalContext(context);
       final PyCallable resolved = ContainerUtil.getFirstItem(callExpression.multiResolveCalleeFunction(resolveContext));
 
       return resolved instanceof PyFunction && PyiUtil.isOverload(resolved, context)
@@ -75,7 +75,7 @@ public class PyChangeSignatureHandler implements ChangeSignatureHandler {
   }
 
   @Override
-  public void invoke(@NotNull Project project, @NotNull PsiElement[] elements, @Nullable DataContext dataContext) {
+  public void invoke(@NotNull Project project, PsiElement @NotNull [] elements, @Nullable DataContext dataContext) {
     if (elements.length != 1) {
       return;
     }

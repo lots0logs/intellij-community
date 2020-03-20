@@ -16,7 +16,7 @@
 package org.jetbrains.plugins.gradle.service.project;
 
 import com.intellij.openapi.externalSystem.model.ExternalSystemException;
-import com.intellij.openapi.util.Pair;
+import org.gradle.tooling.model.build.BuildEnvironment;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.plugins.gradle.service.execution.GradleExecutionErrorHandler;
@@ -36,12 +36,13 @@ public abstract class AbstractProjectImportErrorHandler {
   public static final String EMPTY_LINE = "\n\n";
 
   @Nullable
-  public abstract ExternalSystemException getUserFriendlyError(@NotNull Throwable error,
+  public abstract ExternalSystemException getUserFriendlyError(@Nullable BuildEnvironment buildEnvironment,
+                                                               @NotNull Throwable error,
                                                                @NotNull String projectPath,
                                                                @Nullable String buildFilePath);
 
   @NotNull
-  public ExternalSystemException createUserFriendlyError(@NotNull String msg, @Nullable String location, @NotNull String... quickFixes) {
+  public ExternalSystemException createUserFriendlyError(@NotNull String msg, @Nullable String location, String @NotNull ... quickFixes) {
     return GradleExecutionErrorHandler.createUserFriendlyError(msg, location, quickFixes);
   }
 
@@ -49,23 +50,5 @@ public abstract class AbstractProjectImportErrorHandler {
   public String parseMissingMethod(@NotNull String rootCauseText) {
     Matcher matcher = GradleExecutionErrorHandler.MISSING_METHOD_PATTERN.matcher(rootCauseText);
     return matcher.find() ? matcher.group(1) : "";
-  }
-
-  /**
-   * @deprecated use {@link GradleExecutionErrorHandler#getRootCauseAndLocation(Throwable)}
-   */
-  @Deprecated
-  @NotNull
-  public Pair<Throwable, String> getRootCauseAndLocation(@NotNull Throwable error) {
-    return GradleExecutionErrorHandler.getRootCauseAndLocation(error);
-  }
-
-  /**
-   * @deprecated use {@link GradleExecutionErrorHandler#getLocationFrom(Throwable)}
-   */
-  @Deprecated
-  @Nullable
-  public String getLocationFrom(@NotNull Throwable error) {
-    return GradleExecutionErrorHandler.getLocationFrom(error);
   }
 }

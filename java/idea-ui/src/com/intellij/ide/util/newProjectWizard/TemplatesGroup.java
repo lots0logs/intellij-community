@@ -17,6 +17,8 @@ package com.intellij.ide.util.newProjectWizard;
 
 import com.intellij.ide.projectWizard.ProjectCategory;
 import com.intellij.ide.util.projectWizard.ModuleBuilder;
+import com.intellij.internal.statistic.utils.PluginInfo;
+import com.intellij.internal.statistic.utils.PluginInfoDetectorKt;
 import com.intellij.openapi.util.Comparing;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,6 +39,7 @@ public class TemplatesGroup implements Comparable<TemplatesGroup> {
   private final String myId;
   private final ModuleBuilder myModuleBuilder;
   private ProjectCategory myProjectCategory;
+  private PluginInfo myPluginInfo = null;
 
   public TemplatesGroup(String name, String description, Icon icon, int weight, String parentGroup, String id, ModuleBuilder moduleBuilder) {
     myName = name;
@@ -121,5 +124,16 @@ public class TemplatesGroup implements Comparable<TemplatesGroup> {
 
   public String getId() {
     return myId;
+  }
+
+  public PluginInfo getPluginInfo() {
+    if (myModuleBuilder != null) {
+      return PluginInfoDetectorKt.getPluginInfo(myModuleBuilder.getClass());
+    }
+    return myPluginInfo;
+  }
+
+  public void setPluginInfo(PluginInfo pluginInfo) {
+    myPluginInfo = pluginInfo;
   }
 }

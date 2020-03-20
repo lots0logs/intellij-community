@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.completion;
 
 import com.intellij.codeInsight.lookup.Classifier;
@@ -27,6 +13,7 @@ import com.intellij.util.ProcessingContext;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.JBIterable;
 import com.intellij.util.containers.MultiMap;
+import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,7 +23,7 @@ import java.util.*;
  * @author peter
 */
 public class StatisticsWeigher extends CompletionWeigher {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.completion.StatisticsWeigher.LookupStatisticsWeigher");
+  private static final Logger LOG = Logger.getInstance(LookupStatisticsWeigher.class);
   private static final Key<StatisticsInfo> BASE_STATISTICS_INFO = Key.create("Base statistics info");
 
   @Override
@@ -47,7 +34,7 @@ public class StatisticsWeigher extends CompletionWeigher {
   public static class LookupStatisticsWeigher extends Classifier<LookupElement> {
     private final CompletionLocation myLocation;
     private final Map<LookupElement, StatisticsComparable> myWeights = ContainerUtil.newIdentityHashMap();
-    private final Set<String> myStringsWithWeights = ContainerUtil.newTroveSet();
+    private final Set<String> myStringsWithWeights = new THashSet<>();
     private final Set<LookupElement> myNoStats = ContainerUtil.newIdentityTroveSet();
 
     public LookupStatisticsWeigher(CompletionLocation location, Classifier<LookupElement> next) {
@@ -71,7 +58,7 @@ public class StatisticsWeigher extends CompletionWeigher {
 
     @NotNull
     @Override
-    public Iterable<LookupElement> classify(@NotNull Iterable<LookupElement> source, @NotNull final ProcessingContext context) {
+    public Iterable<LookupElement> classify(@NotNull Iterable<? extends LookupElement> source, @NotNull final ProcessingContext context) {
       List<LookupElement> initialList = getInitialNoStatElements(source, context);
       Iterable<LookupElement> rest = withoutInitial(source, initialList);
       Collection<List<LookupElement>> byWeight = buildMapByWeight(rest).descendingMap().values();
@@ -79,12 +66,12 @@ public class StatisticsWeigher extends CompletionWeigher {
       return JBIterable.from(initialList).append(JBIterable.from(byWeight).flatten(group -> myNext.classify(group, context)));
     }
 
-    private static Iterable<LookupElement> withoutInitial(Iterable<LookupElement> allItems, List<LookupElement> initial) {
+    private static Iterable<LookupElement> withoutInitial(Iterable<? extends LookupElement> allItems, List<? extends LookupElement> initial) {
       Set<LookupElement> initialSet = ContainerUtil.newIdentityTroveSet(initial);
-      return JBIterable.from(allItems).filter(element -> !initialSet.contains(element));
+      return JBIterable.<LookupElement>from(allItems).filter(element -> !initialSet.contains(element));
     }
 
-    private List<LookupElement> getInitialNoStatElements(Iterable<LookupElement> source, ProcessingContext context) {
+    private List<LookupElement> getInitialNoStatElements(Iterable<? extends LookupElement> source, ProcessingContext context) {
       List<LookupElement> initialList = new ArrayList<>();
       for (LookupElement next : myNext.classify(source, context)) {
         if (myNoStats.contains(next)) {
@@ -97,7 +84,7 @@ public class StatisticsWeigher extends CompletionWeigher {
       return initialList;
     }
 
-    private TreeMap<Integer, List<LookupElement>> buildMapByWeight(Iterable<LookupElement> source) {
+    private TreeMap<Integer, List<LookupElement>> buildMapByWeight(Iterable<? extends LookupElement> source) {
       MultiMap<String, LookupElement> byName = MultiMap.create();
       List<LookupElement> noStats = new ArrayList<>();
       for (LookupElement element : source) {
@@ -119,7 +106,7 @@ public class StatisticsWeigher extends CompletionWeigher {
       return map;
     }
 
-    private int getMaxWeight(List<LookupElement> group) {
+    private int getMaxWeight(List<? extends LookupElement> group) {
       int max = 0;
       //noinspection ForLoopReplaceableByForEach
       for (int i = 0; i < group.size(); i++) {
@@ -146,14 +133,14 @@ public class StatisticsWeigher extends CompletionWeigher {
       if (baseInfo == StatisticsInfo.EMPTY) {
         return 0;
       }
-      int minRecency = baseInfo.getLastUseRecency();
+      int minRecency = StatisticsManager.getInstance().getLastUseRecency(baseInfo);
       return minRecency == Integer.MAX_VALUE ? 0 : StatisticsManager.RECENCY_OBLIVION_THRESHOLD - minRecency;
     }
 
     @NotNull
     @Override
-    public List<Pair<LookupElement, Object>> getSortingWeights(@NotNull Iterable<LookupElement> items, @NotNull final ProcessingContext context) {
-      return ContainerUtil.map(items, lookupElement -> new Pair<LookupElement, Object>(lookupElement, getWeight(lookupElement)));
+    public List<Pair<LookupElement, Object>> getSortingWeights(@NotNull Iterable<? extends LookupElement> items, @NotNull final ProcessingContext context) {
+      return ContainerUtil.map(items, lookupElement -> new Pair<>(lookupElement, getWeight(lookupElement)));
     }
 
     @Override
@@ -182,7 +169,7 @@ public class StatisticsWeigher extends CompletionWeigher {
 
   @NotNull
   private static StatisticsInfo calcBaseInfo(LookupElement item, @NotNull CompletionLocation location) {
-    if (!ApplicationManager.getApplication().isUnitTestMode()) {
+    if (!ApplicationManager.getApplication().isUnitTestMode() && !location.getCompletionParameters().isTestingMode()) {
       LOG.assertTrue(!ApplicationManager.getApplication().isDispatchThread());
     }
     StatisticsInfo info = StatisticsManager.serialize(CompletionService.STATISTICS_KEY, item, location);

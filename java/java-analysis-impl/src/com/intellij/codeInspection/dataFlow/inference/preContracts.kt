@@ -33,12 +33,13 @@ internal data class DelegationContract(internal val expression: ExpressionRange,
 
     val result = call.resolveMethodGenerics()
     val targetMethod = result.element as PsiMethod? ?: return emptyList()
+    if (targetMethod == method) return emptyList()
 
     val parameters = targetMethod.parameterList.parameters
     val arguments = call.argumentList.expressions
     val varArgCall = MethodCallInstruction.isVarArgCall(targetMethod, result.substitutor, arguments, parameters)
 
-    val methodContracts = StandardMethodContract.toNonIntersectingContracts(JavaMethodContractUtil.getMethodContracts(targetMethod))
+    val methodContracts = StandardMethodContract.toNonIntersectingStandardContracts(JavaMethodContractUtil.getMethodContracts(targetMethod))
                           ?: return emptyList()
     var fromDelegate = methodContracts.mapNotNull { dc ->
       convertDelegatedMethodContract(method, parameters, arguments, varArgCall, dc)
@@ -47,7 +48,7 @@ internal data class DelegationContract(internal val expression: ExpressionRange,
       fromDelegate = fromDelegate.map(this::returnNotNull) + listOf(
         StandardMethodContract(emptyConstraints(method), ContractReturnValue.returnNotNull()))
     }
-    return StandardMethodContract.toNonIntersectingContracts(fromDelegate) ?: emptyList()
+    return StandardMethodContract.toNonIntersectingStandardContracts(fromDelegate) ?: emptyList()
   }
 
   private fun convertDelegatedMethodContract(callerMethod: PsiMethod,

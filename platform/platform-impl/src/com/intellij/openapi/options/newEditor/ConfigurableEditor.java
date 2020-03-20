@@ -1,8 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.options.newEditor;
 
+import com.intellij.BundleBase;
 import com.intellij.CommonBundle;
-import com.intellij.internal.statistic.beans.ConvertUsagesUtil;
 import com.intellij.internal.statistic.eventLog.FeatureUsageUiEventsKt;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -19,7 +19,7 @@ import com.intellij.openapi.options.ex.ConfigurableVisitor;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.ui.ComponentUtil;
 import com.intellij.ui.LightColors;
 import com.intellij.ui.RelativeFont;
 import com.intellij.ui.components.labels.LinkLabel;
@@ -29,6 +29,9 @@ import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.MergingUpdateQueue;
 import com.intellij.util.ui.update.Update;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.concurrency.Promise;
+import org.jetbrains.concurrency.Promises;
 
 import javax.swing.*;
 import java.awt.*;
@@ -43,9 +46,6 @@ import static java.awt.Toolkit.getDefaultToolkit;
 import static javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER;
 import static javax.swing.SwingUtilities.isDescendingFrom;
 
-/**
- * @author Sergey.Malenkov
- */
 class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWTEventListener {
   private static final String RESET_NAME = "Reset";
   private static final String RESET_DESCRIPTION = "Rollback changes for this configuration element";
@@ -70,7 +70,7 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
       if (myConfigurable != null) {
         ConfigurableCardPanel.reset(myConfigurable);
         updateCurrent(myConfigurable, true);
-        FeatureUsageUiEventsKt.getUiEventLogger().logResetConfigurable(getConfigurableEventId(myConfigurable), myConfigurable.getClass());
+        FeatureUsageUiEventsKt.getUiEventLogger().logResetConfigurable(myConfigurable);
       }
     }
   };
@@ -93,7 +93,7 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
     myErrorLabel.setEnabled(enableError);
     myErrorLabel.setVisible(false);
     myErrorLabel.setVerticalTextPosition(SwingConstants.TOP);
-    myErrorLabel.setBorder(BorderFactory.createEmptyBorder(10, 15, 15, 15));
+    myErrorLabel.setBorder(JBUI.Borders.empty(10, 15, 15, 15));
     myErrorLabel.setBackground(LightColors.RED);
     add(BorderLayout.SOUTH, RelativeFont.HUGE.install(myErrorLabel));
     add(BorderLayout.CENTER, myCardPanel);
@@ -135,6 +135,12 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
     return setError(apply(myApplyAction.isEnabled() ? myConfigurable : null));
   }
 
+  @Override
+  boolean cancel(AWTEvent source) {
+    myConfigurable.cancel();
+    return super.cancel(source);
+  }
+
   void openLink(Configurable configurable) {
     ShowSettingsUtil.getInstance().editConfigurable(this, configurable);
   }
@@ -154,6 +160,7 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
 
   @Override
   public JComponent getPreferredFocusedComponent() {
+    if (myConfigurable == null) return null; // settings editor is not configured yet
     JComponent preferred = myConfigurable.getPreferredFocusedComponent();
     return preferred == null ? UIUtil.getPreferredFocusedComponent(getContent(myConfigurable)) : preferred;
   }
@@ -195,9 +202,9 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
   }
 
   private boolean isPopupOverEditor(Component component) {
-    Window editor = UIUtil.getWindow(this);
+    Window editor = ComponentUtil.getWindow(this);
     if (editor != null) {
-      Window popup = UIUtil.getWindow(component);
+      Window popup = ComponentUtil.getWindow(component);
       // light-weight popup is located on the layered pane of the same window
       if (popup == editor) {
         return true;
@@ -234,18 +241,20 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
     return true;
   }
 
-  final ActionCallback select(final Configurable configurable) {
+  @NotNull
+  final Promise<? super Object> select(final Configurable configurable) {
     assert !myDisposed : "Already disposed";
     ActionCallback callback = myCardPanel.select(configurable, false);
-    callback.doWhenDone(() -> {
-      myConfigurable = configurable;
-      updateCurrent(configurable, false);
-      postUpdateCurrent(configurable);
-      if (configurable != null) {
-        FeatureUsageUiEventsKt.getUiEventLogger().logSelectConfigurable(getConfigurableEventId(configurable), configurable.getClass());
-      }
-    });
-    return callback;
+    callback
+      .doWhenDone(() -> {
+        myConfigurable = configurable;
+        updateCurrent(configurable, false);
+        postUpdateCurrent(configurable);
+        if (configurable != null) {
+          FeatureUsageUiEventsKt.getUiEventLogger().logSelectConfigurable(configurable);
+        }
+      });
+    return Promises.toPromise(callback);
   }
 
   final boolean setError(ConfigurationException exception) {
@@ -273,8 +282,8 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
 
   private JComponent createDefaultContent(Configurable configurable) {
     JComponent content = new JPanel(new BorderLayout());
-    content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-    String key = configurable == null ? null : ConfigurableVisitor.ByID.getID(configurable) + ".settings.description";
+    content.setBorder(JBUI.Borders.empty(11, 16, 16, 16));
+    String key = configurable == null ? null : ConfigurableVisitor.getId(configurable) + ".settings.description";
     String description = key == null ? null : getString(configurable, key);
     if (description == null) {
       description = "Select configuration element in the tree to edit its settings";
@@ -292,7 +301,7 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
         panel.add(Box.createVerticalStrut(10));
         for (Configurable current : composite.getConfigurables()) {
           LinkLabel label = LinkLabel.create(current.getDisplayName(), () -> openLink(current));
-          label.setBorder(BorderFactory.createEmptyBorder(1, 17, 3, 1));
+          label.setBorder(JBUI.Borders.empty(1, 17, 3, 1));
           panel.add(label);
         }
       }
@@ -306,15 +315,14 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
     JBIterable<Configurable> it = JBIterable.of(configurable).append(
       JBIterable.of(configurable instanceof Configurable.Composite ? ((Configurable.Composite)configurable).getConfigurables() : null));
     ResourceBundle bundle = ConfigurableExtensionPointUtil.getBundle(key, it, null);
-    return bundle != null ? bundle.getString(key) : null;
+    return bundle != null ? BundleBase.message(bundle, key) : null;
   }
 
   static ConfigurationException apply(Configurable configurable) {
     if (configurable != null) {
       try {
         configurable.apply();
-        final String key = getConfigurableEventId(configurable);
-        FeatureUsageUiEventsKt.getUiEventLogger().logApplyConfigurable(key, configurable.getClass());
+        FeatureUsageUiEventsKt.getUiEventLogger().logApplyConfigurable(configurable);
       }
       catch (ConfigurationException exception) {
         return exception;
@@ -323,8 +331,13 @@ class ConfigurableEditor extends AbstractEditor implements AnActionListener, AWT
     return null;
   }
 
-  @NotNull
-  private static String getConfigurableEventId(@NotNull Configurable configurable) {
-    return "ide.settings." + ConvertUsagesUtil.escapeDescriptorName(StringUtil.notNullize(configurable.getDisplayName()));
+  @Nullable
+  Configurable getConfigurable() {
+    return myConfigurable;
+  }
+
+  void reload() {
+    myCardPanel.removeAll();
+    myConfigurable = null;
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn;
 
 import com.intellij.openapi.progress.EmptyProgressIndicator;
@@ -41,7 +41,6 @@ import java.util.Collections;
 import java.util.List;
 
 import static com.intellij.testFramework.UsefulTestCase.assertExists;
-import static com.intellij.util.containers.ContainerUtil.newArrayList;
 import static org.jetbrains.idea.svn.SvnUtil.parseUrl;
 import static org.junit.Assert.*;
 
@@ -94,7 +93,7 @@ public class SvnProtocolsTest extends SvnTestCase {
   }
 
   private void testBrowseRepositoryImpl(Url url) throws VcsException {
-    List<DirectoryEntry> list = newArrayList();
+    List<DirectoryEntry> list = new ArrayList<>();
     vcs.getFactoryFromSettings().createBrowseClient().list(Target.on(url), null, null, list::add);
 
     assertTrue(!list.isEmpty());
@@ -158,9 +157,9 @@ public class SvnProtocolsTest extends SvnTestCase {
     final UpdateSession session =
       vcs.getUpdateEnvironment().updateDirectories(new FilePath[]{VcsUtil.getFilePath(vf)}, files, new EmptyProgressIndicator(),
                                                    new Ref<>());
-    assertTrue(session.getExceptions() == null || session.getExceptions().isEmpty());
-    assertTrue(!session.isCanceled());
-    assertTrue(!files.getGroupById(FileGroup.CREATED_ID).getFiles().isEmpty());
+    assertTrue(session.getExceptions().isEmpty());
+    assertFalse(session.isCanceled());
+    assertFalse(files.getGroupById(FileGroup.CREATED_ID).getFiles().isEmpty());
     final String path = files.getGroupById(FileGroup.CREATED_ID).getFiles().iterator().next();
     final String name = path.substring(path.lastIndexOf(File.separator) + 1);
     assertEquals(created.getName(), name);
@@ -195,8 +194,7 @@ public class SvnProtocolsTest extends SvnTestCase {
         public void checkoutCompleted() {
         }
       }, WorkingCopyFormat.ONE_DOT_SEVEN);
-    final int[] cnt = new int[1];
-    cnt[0] = 0;
+    final int[] cnt = {0};
     FileUtil.processFilesRecursively(root, file -> {
       ++ cnt[0];
       return ! (cnt[0] > 1);

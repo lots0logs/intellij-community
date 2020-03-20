@@ -5,6 +5,7 @@ import com.intellij.codeInsight.daemon.quickFix.ActionHint;
 import com.intellij.codeInsight.daemon.quickFix.LightQuickFixParameterizedTestCase;
 import com.intellij.codeInsight.template.impl.TemplateManagerImpl;
 import com.intellij.codeInsight.template.impl.TemplateState;
+import com.intellij.pom.java.LanguageLevel;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -12,7 +13,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public class DelegateWithDefaultParamValueTest extends LightQuickFixParameterizedTestCase {
   @Override
-  protected void doAction(@NotNull ActionHint actionHint, String testFullPath, String testName)
+  protected void doAction(@NotNull ActionHint actionHint, @NotNull String testFullPath, @NotNull String testName)
     throws Exception {
     TemplateManagerImpl.setTemplateTesting(getTestRootDisposable());
     super.doAction(actionHint, testFullPath, testName);
@@ -28,5 +29,10 @@ public class DelegateWithDefaultParamValueTest extends LightQuickFixParameterize
   @Override
   protected String getBasePath() {
     return "/codeInsight/daemonCodeAnalyzer/quickFix/delegateWithDefaultValue";
+  }
+
+  @Override
+  protected LanguageLevel getLanguageLevel() {
+    return LanguageLevel.JDK_14_PREVIEW;
   }
 }

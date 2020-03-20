@@ -15,11 +15,11 @@
  */
 package com.intellij.application.options;
 
-import com.intellij.openapi.application.ApplicationBundle;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
 import com.intellij.psi.codeStyle.JavaCodeStyleSettings;
-import com.intellij.ui.ListCellRendererWrapper;
+import com.intellij.ui.SimpleListCellRenderer;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
@@ -31,7 +31,7 @@ import static com.intellij.psi.codeStyle.JavaCodeStyleSettings.*;
 public class FullyQualifiedNamesInJavadocOptionProvider {
 
   private JPanel myPanel;
-  private ComboBox myComboBox;
+  private ComboBox<QualifyJavadocOptions> myComboBox;
 
   public FullyQualifiedNamesInJavadocOptionProvider() {
     composePanel();
@@ -66,20 +66,13 @@ public class FullyQualifiedNamesInJavadocOptionProvider {
   private void composePanel() {
     myPanel = new JPanel(new GridBagLayout());
 
-    myComboBox = new ComboBox();
+    myComboBox = new ComboBox<>();
     for (QualifyJavadocOptions options : QualifyJavadocOptions.values()) {
       myComboBox.addItem(options);
     }
-    myComboBox.setRenderer(new ListCellRendererWrapper() {
-      @Override
-      public void customize(final JList list, final Object value, final int index, final boolean selected, final boolean hasFocus) {
-        if (value instanceof QualifyJavadocOptions) {
-          setText(((QualifyJavadocOptions)value).getPresentableText());
-        }
-      }
-    });
+    myComboBox.setRenderer(SimpleListCellRenderer.create("", QualifyJavadocOptions::getPresentableText));
 
-    JLabel title = new JLabel(ApplicationBundle.message("radio.use.fully.qualified.class.names.in.javadoc"));
+    JLabel title = new JLabel(JavaBundle.message("radio.use.fully.qualified.class.names.in.javadoc"));
     myPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
     GridBagConstraints left = new GridBagConstraints();
@@ -97,9 +90,9 @@ public class FullyQualifiedNamesInJavadocOptionProvider {
 
 enum QualifyJavadocOptions {
 
-  FQ_ALWAYS(FULLY_QUALIFY_NAMES_ALWAYS, ApplicationBundle.message("radio.use.fully.qualified.class.names.in.javadoc.always")),
-  SHORTEN_ALWAYS(SHORTEN_NAMES_ALWAYS_AND_ADD_IMPORT, ApplicationBundle.message("radio.use.fully.qualified.class.names.in.javadoc.never")),
-  FQ_WHEN_NOT_IMPORTED(FULLY_QUALIFY_NAMES_IF_NOT_IMPORTED, ApplicationBundle.message("radio.use.fully.qualified.class.names.in.javadoc.if.not.imported"));
+  FQ_ALWAYS(FULLY_QUALIFY_NAMES_ALWAYS, JavaBundle.message("radio.use.fully.qualified.class.names.in.javadoc.always")),
+  SHORTEN_ALWAYS(SHORTEN_NAMES_ALWAYS_AND_ADD_IMPORT, JavaBundle.message("radio.use.fully.qualified.class.names.in.javadoc.never")),
+  FQ_WHEN_NOT_IMPORTED(FULLY_QUALIFY_NAMES_IF_NOT_IMPORTED, JavaBundle.message("radio.use.fully.qualified.class.names.in.javadoc.if.not.imported"));
 
   private final String myText;
   private final int myOption;

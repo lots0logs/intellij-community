@@ -1,24 +1,11 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 /*
  * @author max
  */
 package com.intellij.lang.xml;
 
+import com.intellij.ide.impl.StructureViewWrapperImpl;
 import com.intellij.ide.structureView.StructureViewBuilder;
 import com.intellij.ide.structureView.StructureViewModel;
 import com.intellij.ide.structureView.TreeBasedStructureViewBuilder;
@@ -27,7 +14,9 @@ import com.intellij.ide.structureView.xml.XmlStructureViewBuilderProvider;
 import com.intellij.lang.Language;
 import com.intellij.lang.LanguageStructureViewBuilder;
 import com.intellij.lang.PsiStructureViewFactory;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.extensions.ExtensionPointUtil;
 import com.intellij.openapi.extensions.Extensions;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.xml.XmlFile;
@@ -35,6 +24,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class XmlStructureViewBuilderFactory implements PsiStructureViewFactory {
+
+  public XmlStructureViewBuilderFactory()
+  {
+    XmlStructureViewBuilderProvider.EP_NAME.addExtensionPointListener(
+      () -> ApplicationManager.getApplication().getMessageBus().syncPublisher(StructureViewWrapperImpl.STRUCTURE_CHANGED).run(),
+      ExtensionPointUtil.createKeyedExtensionDisposable(this, PsiStructureViewFactory.EP_NAME.getPoint(null)));
+  }
+
   @Override
   @Nullable
   public StructureViewBuilder getStructureViewBuilder(@NotNull final PsiFile psiFile) {
@@ -63,7 +60,8 @@ public class XmlStructureViewBuilderFactory implements PsiStructureViewFactory {
   }
 
   private static XmlStructureViewBuilderProvider[] getStructureViewBuilderProviders() {
-    return (XmlStructureViewBuilderProvider[])Extensions.getExtensions(XmlStructureViewBuilderProvider.EXTENSION_POINT_NAME);
+    return (XmlStructureViewBuilderProvider[])Extensions.getRootArea()
+      .getExtensionPoint(XmlStructureViewBuilderProvider.EP_NAME).getExtensions();
   }
 
   @Nullable

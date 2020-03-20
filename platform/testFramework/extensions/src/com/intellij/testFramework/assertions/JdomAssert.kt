@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testFramework.assertions
 
 import com.intellij.configurationStore.deserialize
@@ -8,7 +8,6 @@ import com.intellij.openapi.util.text.StringUtilRt
 import com.intellij.rt.execution.junit.FileComparisonFailure
 import com.intellij.util.io.readText
 import com.intellij.util.isEmpty
-import com.intellij.util.loadElement
 import org.assertj.core.api.AbstractAssert
 import org.assertj.core.internal.Objects
 import org.intellij.lang.annotations.Language
@@ -33,7 +32,7 @@ class JdomAssert(actual: Element?) : AbstractAssert<JdomAssert, Element?>(actual
   fun isEqualTo(file: Path): JdomAssert {
     isNotNull
 
-    val expected = loadElement(file)
+    val expected = JDOMUtil.load(file)
     if (!JDOMUtil.areElementsEqual(actual, expected)) {
       throw FileComparisonFailure(null, StringUtilRt.convertLineSeparators(file.readText()), JDOMUtil.writeElement(actual!!), file.toString())
     }
@@ -77,7 +76,7 @@ fun <T : Any> doSerializerTest(@Language("XML") expectedText: String, bean: T): 
 }
 
 private fun assertSerializer(bean: Any, expected: String, description: String = "Serialization failure"): Element? {
-  val element = bean.serialize()
+  val element = serialize(bean)
   Assertions.assertThat(element?.let { JDOMUtil.writeElement(element).trim() }).`as`(description).isEqualTo(expected)
   return element
 }

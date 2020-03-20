@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.codeInspection.control.finalVar;
 
 import com.intellij.codeInspection.LocalQuickFix;
@@ -26,8 +26,10 @@ import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrEn
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.typedef.members.GrMethod;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.Instruction;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.ReadWriteVariableInstruction;
+import org.jetbrains.plugins.groovy.lang.psi.controlFlow.VariableDescriptor;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.ControlFlowBuilder;
 import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.GrFieldControlFlowPolicy;
+import org.jetbrains.plugins.groovy.lang.psi.controlFlow.impl.ResolvedVariableDescriptor;
 import org.jetbrains.plugins.groovy.lang.psi.util.PsiUtil;
 import org.jetbrains.plugins.groovy.transformations.immutable.GrImmutableUtils;
 
@@ -131,13 +133,13 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
         final GrClassInitializer[] initializers = clazz.getInitializers();
         final List<GrField> fields = getFinalFields(clazz);
 
-        Set<GrVariable> initializedFields = ContainerUtil.newHashSet();
+        Set<GrVariable> initializedFields = new HashSet<>();
         appendFieldInitializedInDeclaration(false, fields, initializedFields);
         appendFieldsInitializedInClassInitializer(initializers, null, false, fields, initializedFields);
         appendInitializationFromChainedConstructors(constructor, fields, initializedFields);
 
         final Instruction[] flow = buildFlowForField(block);
-        final Map<String, GrVariable> variables = buildVarMap(fields, false);
+        final Set<GrVariable> variables = buildVarSet(fields, false);
 
         highlightInvalidWriteAccess(flow, variables, initializedFields);
 
@@ -152,12 +154,12 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
         final GrClassInitializer[] initializers = clazz.getInitializers();
         final List<GrField> fields = getFinalFields(clazz);
 
-        Set<GrVariable> initializedFields = ContainerUtil.newHashSet();
+        Set<GrVariable> initializedFields = new HashSet<>();
         appendFieldInitializedInDeclaration(isStatic, fields, initializedFields);
         appendFieldsInitializedInClassInitializer(initializers, initializer, isStatic, fields, initializedFields);
 
         final Instruction[] flow = buildFlowForField(initializer.getBlock());
-        final Map<String, GrVariable> variables = buildVarMap(fields, isStatic);
+        final Set<GrVariable> variables = buildVarSet(fields, isStatic);
         highlightInvalidWriteAccess(flow, variables, initializedFields);
       }
 
@@ -167,10 +169,10 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
         for (final Map.Entry<PsiElement, Collection<GrVariable>> entry : scopes.entrySet()) {
           final PsiElement scopeToProcess = entry.getKey();
 
-          final Set<GrVariable> forInParameters = ContainerUtil.newHashSet();
-          final Map<String, GrVariable> variables = ContainerUtil.newHashMap();
+          final Set<GrVariable> forInParameters = new HashSet<>();
+          final Set<GrVariable> variables = new HashSet<>();
           for (final GrVariable var : entry.getValue()) {
-            variables.put(var.getName(), var);
+            variables.add(var);
             if (var instanceof GrParameter && ((GrParameter)var).getDeclarationScope() instanceof GrForStatement) {
               forInParameters.add(var);
             }
@@ -181,18 +183,22 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
         }
       }
 
-      private void highlightInvalidWriteAccess(@NotNull Instruction[] flow,
-                                               @NotNull Map<String, GrVariable> variables,
-                                               @NotNull Set<? super GrVariable> initializedVariables) {
+      private void highlightInvalidWriteAccess(Instruction @NotNull [] flow,
+                                               @NotNull Set<GrVariable> variables,
+                                               @NotNull Set<GrVariable> initializedVariables) {
         final List<ReadWriteVariableInstruction> result =
           InvalidWriteAccessSearcher.findInvalidWriteAccess(flow, variables, initializedVariables);
 
         if (result == null) return;
 
         for (final ReadWriteVariableInstruction instruction : result) {
-          if (variables.containsKey(instruction.getVariableName())) {
-            registerError(instruction.getElement(),
-                          GroovyBundle.message("cannot.assign.a.value.to.final.field.0", instruction.getVariableName()),
+          VariableDescriptor descriptor = instruction.getDescriptor();
+
+          if (!(descriptor instanceof ResolvedVariableDescriptor)) continue;
+          PsiElement element = instruction.getElement();
+          if (variables.contains(((ResolvedVariableDescriptor)descriptor).getVariable()) && element != null) {
+            registerError(element,
+                          GroovyBundle.message("cannot.assign.a.value.to.final.field.0", descriptor),
                           LocalQuickFix.EMPTY_ARRAY, ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
           }
         }
@@ -232,7 +238,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
     }
   }
 
-  private static void appendFieldsInitializedInClassInitializer(@NotNull GrClassInitializer[] initializers,
+  private static void appendFieldsInitializedInClassInitializer(GrClassInitializer @NotNull [] initializers,
                                                                 @Nullable GrClassInitializer initializerToStop,
                                                                 boolean isStatic,
                                                                 @NotNull List<? extends GrField> fields,
@@ -277,11 +283,11 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
   }
 
   @NotNull
-  private static Map<String, GrVariable> buildVarMap(@NotNull List<? extends GrField> fields, boolean isStatic) {
-    Map<String, GrVariable> result = ContainerUtil.newHashMap();
+  private static Set<GrVariable> buildVarSet(@NotNull List<? extends GrField> fields, boolean isStatic) {
+    Set<GrVariable> result = new HashSet<>();
     for (GrField field : fields) {
       if (field.hasModifierProperty(PsiModifier.STATIC) == isStatic) {
-        result.put(field.getName(), field);
+        result.add(field);
       }
     }
     return result;
@@ -314,8 +320,8 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
     final GrMethod[] constructors = aClass.getCodeConstructors();
     if (constructors.length == 0) return false;
 
-    Set<GrMethod> initializedConstructors = ContainerUtil.newHashSet();
-    Set<GrMethod> notInitializedConstructors = ContainerUtil.newHashSet();
+    Set<GrMethod> initializedConstructors = new HashSet<>();
+    Set<GrMethod> notInitializedConstructors = new HashSet<>();
 
     NEXT_CONSTR:
     for (GrMethod constructor : constructors) {
@@ -362,7 +368,7 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
 
   @NotNull
   private static List<GrMethod> getChainedConstructors(@NotNull GrMethod constructor) {
-    final HashSet<Object> visited = ContainerUtil.newHashSet();
+    final HashSet<Object> visited = new HashSet<>();
 
     final ArrayList<GrMethod> result = ContainerUtil.newArrayList(constructor);
     while (true) {
@@ -379,9 +385,8 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
     }
   }
 
-  @NotNull
-  private static Instruction[] buildFlowForField(@NotNull GrOpenBlock block) {
-    return new ControlFlowBuilder(block.getProject(), GrFieldControlFlowPolicy.getInstance()).buildControlFlow(block);
+  private static Instruction @NotNull [] buildFlowForField(@NotNull GrOpenBlock block) {
+    return new ControlFlowBuilder(GrFieldControlFlowPolicy.getInstance()).buildControlFlow(block);
   }
 
 
@@ -406,11 +411,10 @@ public class GrFinalVariableAccessInspection extends BaseInspection {
     return scopes;
   }
 
-  @NotNull
-  private static Instruction[] getFlow(@NotNull PsiElement element) {
+  private static Instruction @NotNull [] getFlow(@NotNull PsiElement element) {
     return element instanceof GrControlFlowOwner
            ? ((GrControlFlowOwner)element).getControlFlow()
-           : new ControlFlowBuilder(element.getProject()).buildControlFlow((GroovyPsiElement)element);
+           : new ControlFlowBuilder().buildControlFlow((GroovyPsiElement)element);
   }
 
 

@@ -20,11 +20,13 @@ import com.intellij.dvcs.push.Pusher;
 import com.intellij.dvcs.push.VcsPushOptionValue;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.NotificationsManager;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import git4idea.GitUtil;
 import git4idea.config.GitVcsSettings;
 import git4idea.repo.GitRepository;
-import git4idea.repo.GitRepositoryManager;
+import git4idea.update.GitUpdateInfoAsLog;
+import git4idea.update.HashRange;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,13 +37,11 @@ class GitPusher extends Pusher<GitRepository, GitPushSource, GitPushTarget> {
   @NotNull private final Project myProject;
   @NotNull private final GitVcsSettings mySettings;
   @NotNull private final GitPushSupport myPushSupport;
-  @NotNull private final GitRepositoryManager myRepositoryManager;
 
   GitPusher(@NotNull Project project, @NotNull GitVcsSettings settings, @NotNull GitPushSupport pushSupport) {
     myProject = project;
     mySettings = settings;
     myPushSupport = pushSupport;
-    myRepositoryManager = GitUtil.getRepositoryManager(project);
   }
 
   @Override
@@ -58,11 +58,24 @@ class GitPusher extends Pusher<GitRepository, GitPushSource, GitPushTarget> {
       pushTagMode = null;
       skipHook = false;
     }
-
-    GitPushResult result = new GitPushOperation(myProject, myPushSupport, pushSpecs, pushTagMode, force, skipHook).execute();
-    GitPushResultNotification notification = GitPushResultNotification.create(myProject, result, myRepositoryManager.moreThanOneRoot());
-    notification.notify(myProject);
     mySettings.setPushTagMode(pushTagMode);
+
+    GitPushOperation pushOperation = new GitPushOperation(myProject, myPushSupport, pushSpecs, pushTagMode, force, skipHook);
+    pushAndNotify(myProject, pushOperation);
+  }
+
+  public static void pushAndNotify(@NotNull Project project, @NotNull GitPushOperation pushOperation) {
+    GitPushResult pushResult = pushOperation.execute();
+
+    Map<GitRepository, HashRange> updatedRanges = pushResult.getUpdatedRanges();
+    GitUpdateInfoAsLog.NotificationData notificationData = !updatedRanges.isEmpty() ?
+                                                           new GitUpdateInfoAsLog(project, updatedRanges).calculateDataAndCreateLogTab() :
+                                                           null;
+
+    ApplicationManager.getApplication().invokeLater(() -> {
+      boolean multiRepoProject = GitUtil.getRepositoryManager(project).moreThanOneRoot();
+      GitPushResultNotification.create(project, pushResult, pushOperation, multiRepoProject, notificationData).notify(project);
+    });
   }
 
   protected void expireExistingErrorsAndWarnings() {

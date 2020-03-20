@@ -11,12 +11,10 @@ public interface JavacFileReferencesRegistrar {
 
   boolean isEnabled();
 
-  boolean onlyImports();
-
   void registerFile(CompileContext context,
                     String filePath,
-                    TObjectIntHashMap<JavacRef> refs,
-                    Collection<JavacDef> defs,
-                    Collection<JavacTypeCast> casts,
-                    Collection<JavacRef> implicitToString);
+                    TObjectIntHashMap<? extends JavacRef> refs,
+                    Collection<? extends JavacDef> defs,
+                    Collection<? extends JavacTypeCast> casts,
+                    Collection<? extends JavacRef> implicitToString);
 }

@@ -1,15 +1,15 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn.treeConflict;
 
-import com.intellij.CommonBundle;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.WriteAction;
-import com.intellij.openapi.diff.impl.patch.BinaryFilePatch;
 import com.intellij.openapi.diff.impl.patch.FilePatch;
 import com.intellij.openapi.diff.impl.patch.PatchSyntaxException;
 import com.intellij.openapi.diff.impl.patch.TextFilePatch;
 import com.intellij.openapi.diff.impl.patch.formove.PatchApplier;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.progress.ProgressIndicator;
+import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.MessageDialogBuilder;
 import com.intellij.openapi.ui.MessageType;
@@ -28,6 +28,7 @@ import com.intellij.openapi.vcs.versionBrowser.ChangeBrowserSettings;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.ui.UIBundle;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.MultiMap;
 import com.intellij.vcsUtil.VcsUtil;
@@ -43,10 +44,7 @@ import org.jetbrains.idea.svn.history.SvnChangeList;
 import org.jetbrains.idea.svn.history.SvnRepositoryLocation;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 
 import static com.intellij.openapi.diff.impl.patch.IdeaTextPatchBuilder.buildPatch;
@@ -54,12 +52,11 @@ import static com.intellij.openapi.util.io.FileUtil.getRelativePath;
 import static com.intellij.openapi.util.io.FileUtil.isAncestor;
 import static com.intellij.openapi.vcs.changes.ChangesUtil.*;
 import static com.intellij.util.ExceptionUtil.rethrowAllAsUnchecked;
-import static com.intellij.util.ObjectUtils.notNull;
 import static com.intellij.util.containers.ContainerUtil.filter;
 import static com.intellij.util.containers.ContainerUtil.map;
-import static com.intellij.util.containers.ContainerUtilRt.newArrayList;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
+import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.partitioningBy;
 import static java.util.stream.Collectors.toMap;
@@ -91,14 +88,14 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
     myDescription = description;
     myChange = change;
     myCommittedRevision = revision;
-    myOldFilePath = notNull(myChange.getBeforeRevision()).getFile();
-    myNewFilePath = notNull(myChange.getAfterRevision()).getFile();
+    myOldFilePath = requireNonNull(myChange.getBeforeRevision()).getFile();
+    myNewFilePath = requireNonNull(myChange.getAfterRevision()).getFile();
     myBaseForPatch = findValidParentAccurately(myNewFilePath);
     myOldPresentation = TreeConflictRefreshablePanel.filePath(myOldFilePath);
     myNewPresentation = TreeConflictRefreshablePanel.filePath(myNewFilePath);
 
-    myTheirsChanges = newArrayList();
-    myTheirsBinaryChanges = newArrayList();
+    myTheirsChanges = new ArrayList<>();
+    myTheirsBinaryChanges = new ArrayList<>();
     myTextPatches = emptyList();
   }
 
@@ -183,23 +180,28 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
                       @NotNull MultiMap<VirtualFile, TextFilePatchInProgress> patchGroupsToApply,
                       @Nullable LocalChangeList localList,
                       @Nullable String fileName,
-                      @Nullable ThrowableComputable<Map<String, Map<String, CharSequence>>, PatchSyntaxException> additionalInfo) {
-      List<FilePatch> patches = null;
-      VcsException exception = null;
-      try {
-        patches = ApplyPatchSaveToFileExecutor.toOnePatchGroup(patchGroupsToApply, myBaseDir);
-      }
-      catch (IOException e) {
-        exception = new VcsException(e);
-      }
+                      @Nullable ThrowableComputable<? extends Map<String, Map<String, CharSequence>>, PatchSyntaxException> additionalInfo) {
+      new Task.Backgroundable(myVcs.getProject(), VcsBundle.getString("patch.apply.progress.title")) {
+        VcsException myException = null;
 
-      if (patches != null) {
-        new PatchApplier<BinaryFilePatch>(myVcs.getProject(), myBaseDir, patches, localList, null).execute(false, true);
-        myThereAreCreations =
-          patches.stream().anyMatch(patch -> patch.isNewFile() || !Comparing.equal(patch.getAfterName(), patch.getBeforeName()));
-      }
+        @Override
+        public void run(@NotNull ProgressIndicator indicator) {
+          try {
+            List<FilePatch> patches = ApplyPatchSaveToFileExecutor.toOnePatchGroup(patchGroupsToApply, myBaseDir);
+            new PatchApplier(requireNonNull(myProject), myBaseDir, patches, localList, null).execute(false, true);
+            myThereAreCreations =
+              patches.stream().anyMatch(patch -> patch.isNewFile() || !Comparing.equal(patch.getAfterName(), patch.getBeforeName()));
+          }
+          catch (IOException e) {
+            myException = new VcsException(e);
+          }
+        }
 
-      myPromise.setResult(exception);
+        @Override
+        public void onFinished() {
+          myPromise.setResult(myException);
+        }
+      }.queue();
     }
   }
 
@@ -211,7 +213,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
   }
 
   private void createPatches() throws VcsException {
-    List<FilePatch> patches = buildPatch(myVcs.getProject(), myTheirsChanges, notNull(myBaseForPatch).getPath(), false);
+    List<FilePatch> patches = buildPatch(myVcs.getProject(), myTheirsChanges, requireNonNull(myBaseForPatch).getPath(), false);
     myTextPatches = map(patches, TextFilePatch.class::cast);
   }
 
@@ -232,7 +234,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
   }
 
   private void applyBinaryChanges() throws VcsException {
-    List<FilePath> dirtyPaths = newArrayList();
+    List<FilePath> dirtyPaths = new ArrayList<>();
     for (Change change : myTheirsBinaryChanges) {
       try {
         WriteAction.runAndWait(() -> {
@@ -269,7 +271,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
 
   private static void applyBinaryChange(@NotNull Change change) throws IOException, VcsException {
     if (change.getAfterRevision() == null) {
-      FilePath path = notNull(change.getBeforeRevision()).getFile();
+      FilePath path = requireNonNull(change.getBeforeRevision()).getFile();
       VirtualFile file = LocalFileSystem.getInstance().refreshAndFindFileByPath(path.getPath());
       if (file == null) {
         throw new VcsException("Can not delete file: " + path.getPath(), true);
@@ -278,7 +280,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
     }
     else {
       FilePath file = change.getAfterRevision().getFile();
-      String parentPath = notNull(file.getParentPath()).getPath();
+      String parentPath = requireNonNull(file.getParentPath()).getPath();
       VirtualFile parentFile = VfsUtil.createDirectoryIfMissing(parentPath);
       if (parentFile == null) {
         throw new VcsException("Can not create directory: " + parentPath, true);
@@ -308,7 +310,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
       singleMessage = prefix + "binary file " + TreeConflictRefreshablePanel.filePath(path) + " (according to theirs changes)?";
     }
     return AbstractVcsHelper.getInstance(myVcs.getProject()).selectFilePathsToProcess(
-      newArrayList(paths), TreeConflictRefreshablePanel.TITLE, "Select binary files to patch", TreeConflictRefreshablePanel.TITLE,
+      new ArrayList<>(paths), TreeConflictRefreshablePanel.TITLE, "Select binary files to patch", TreeConflictRefreshablePanel.TITLE,
       singleMessage, new VcsShowConfirmationOption() {
         @Override
         public Value getValue() {
@@ -331,7 +333,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
   private List<Change> convertPaths(@NotNull List<Change> changes) throws VcsException {
     initAddOption();
 
-    List<Change> result = newArrayList();
+    List<Change> result = new ArrayList<>();
     for (Change change : changes) {
       if (isUnderOldDir(change, myOldFilePath)) {
         result
@@ -370,7 +372,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
 
   @NotNull
   private static FilePath rebasePath(@NotNull FilePath oldBase, @NotNull FilePath newBase, @NotNull FilePath path) {
-    String relativePath = notNull(getRelativePath(oldBase.getPath(), path.getPath(), '/'));
+    String relativePath = requireNonNull(getRelativePath(oldBase.getPath(), path.getPath(), '/'));
     return VcsUtil.getFilePath(newBase.getPath() + "/" + relativePath, path.isDirectory());
   }
 
@@ -423,7 +425,8 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
     settings.CHANGE_AFTER = String.valueOf(min);
 
     //noinspection unchecked
-    List<SvnChangeList> committedChanges = notNull(myVcs.getCachingCommittedChangesProvider()).getCommittedChanges(settings, location, 0);
+    List<SvnChangeList> committedChanges = requireNonNull(myVcs.getCachingCommittedChangesProvider())
+      .getCommittedChanges(settings, location, 0);
     return filter(committedChanges, changeList -> changeList.getNumber() != min);
   }
 
@@ -474,7 +477,7 @@ public class MergeFromTheirsResolver extends BackgroundTaskGroup {
                @NotNull
                @Override
                public String getDoNotShowMessage() {
-                 return CommonBundle.message("dialog.options.do.not.ask");
+                 return UIBundle.message("dialog.options.do.not.ask");
                }
              }).show();
   }

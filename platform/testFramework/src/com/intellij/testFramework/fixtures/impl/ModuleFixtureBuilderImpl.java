@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.testFramework.fixtures.impl;
 
@@ -26,6 +12,7 @@ import com.intellij.openapi.roots.ContentEntry;
 import com.intellij.openapi.roots.ModifiableRootModel;
 import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -39,15 +26,13 @@ import com.intellij.util.SmartList;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 
+import java.util.Arrays;
 import java.util.List;
 
-/**
- * @author mike
- */
 public abstract class ModuleFixtureBuilderImpl<T extends ModuleFixture> implements ModuleFixtureBuilder<T> {
   private static int ourIndex;
 
-  private final NotNullProducer<? extends ModuleType> myModuleTypeProducer;
+  private final NotNullProducer<? extends ModuleType<?>> myModuleTypeProducer;
   protected final List<String> myContentRoots = new SmartList<>();
   protected final List<String> mySourceRoots = new SmartList<>();
   protected final TestFixtureBuilder<? extends IdeaProjectTestFixture> myFixtureBuilder;
@@ -55,39 +40,42 @@ public abstract class ModuleFixtureBuilderImpl<T extends ModuleFixture> implemen
   protected String myOutputPath;
   protected String myTestOutputPath;
 
-  public ModuleFixtureBuilderImpl(@NotNull final ModuleType moduleType, TestFixtureBuilder<? extends IdeaProjectTestFixture> fixtureBuilder) {
+  public ModuleFixtureBuilderImpl(@NotNull ModuleType<?> moduleType, TestFixtureBuilder<? extends IdeaProjectTestFixture> fixtureBuilder) {
     myModuleTypeProducer = () -> moduleType;
     myFixtureBuilder = fixtureBuilder;
   }
 
-  public ModuleFixtureBuilderImpl(@NotNull final NotNullProducer<? extends ModuleType> moduleTypeProducer, TestFixtureBuilder<? extends IdeaProjectTestFixture> fixtureBuilder) {
+  public ModuleFixtureBuilderImpl(@NotNull final NotNullProducer<? extends ModuleType<?>> moduleTypeProducer, TestFixtureBuilder<? extends IdeaProjectTestFixture> fixtureBuilder) {
     myModuleTypeProducer = moduleTypeProducer;
     myFixtureBuilder = fixtureBuilder;
   }
 
+  @NotNull
   @Override
-  public ModuleFixtureBuilder<T> addContentRoot(final String contentRootPath) {
+  public ModuleFixtureBuilder<T> addContentRoot(@NotNull final String contentRootPath) {
     myContentRoots.add(contentRootPath);
     return this;
   }
 
+  @NotNull
   @Override
-  public ModuleFixtureBuilder<T> addSourceRoot(final String sourceRootPath) {
+  public ModuleFixtureBuilder<T> addSourceRoot(@NotNull final String sourceRootPath) {
     Assert.assertFalse("content root should be added first", myContentRoots.isEmpty());
     mySourceRoots.add(sourceRootPath);
     return this;
   }
 
   @Override
-  public void setOutputPath(final String outputPath) {
+  public void setOutputPath(@NotNull final String outputPath) {
     myOutputPath = outputPath;
   }
 
   @Override
-  public void setTestOutputPath(String outputPath) {
+  public void setTestOutputPath(@NotNull String outputPath) {
     myTestOutputPath = outputPath;
   }
 
+  @NotNull
   protected Module createModule() {
     final Project project = myFixtureBuilder.getFixture().getProject();
     Assert.assertNotNull(project);
@@ -99,6 +87,7 @@ public abstract class ModuleFixtureBuilderImpl<T extends ModuleFixture> implemen
     return ourIndex++;
   }
 
+  @NotNull
   @Override
   public synchronized T getFixture() {
     if (myModuleFixture == null) {
@@ -108,13 +97,15 @@ public abstract class ModuleFixtureBuilderImpl<T extends ModuleFixture> implemen
   }
 
   @Override
-  public void addSourceContentRoot(final String path) {
+  public void addSourceContentRoot(@NotNull final String path) {
     addContentRoot(path);
     addSourceRoot(path);
   }
 
+  @NotNull
   protected abstract T instantiateFixture();
 
+  @NotNull
   Module buildModule() {
     Module[] module = new Module[1];
     WriteAction.run(() -> ProjectRootManagerEx.getInstanceEx(myFixtureBuilder.getFixture().getProject()).mergeRootsChangesDuring(() -> {
@@ -135,7 +126,8 @@ public abstract class ModuleFixtureBuilderImpl<T extends ModuleFixture> implemen
         final ContentEntry contentEntry = rootModel.addContentEntry(virtualFile);
 
         for (String sourceRoot: mySourceRoots) {
-          String s = contentRoot + "/" + sourceRoot;
+          String s = StringUtil.trimTrailing(contentRoot + "/" + sourceRoot, '/');
+
           VirtualFile vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(s);
           if (vf == null) {
             final VirtualFile file = LocalFileSystem.getInstance().refreshAndFindFileByPath(sourceRoot);
@@ -143,11 +135,19 @@ public abstract class ModuleFixtureBuilderImpl<T extends ModuleFixture> implemen
           }
   //        assert vf != null : "cannot find source root: " + sourceRoot;
           if (vf != null) {
-            contentEntry.addSourceFolder(vf, false);
+            VirtualFile finalVf = vf;
+
+            if (Arrays.stream(contentEntry.getSourceFolders()).noneMatch(folder -> finalVf.equals(folder.getFile()))) {
+              contentEntry.addSourceFolder(finalVf, false);
+            }
           }
           else {
             // files are not created yet
-            contentEntry.addSourceFolder(VfsUtilCore.pathToUrl(s), false);
+
+            String url = VfsUtilCore.pathToUrl(s);
+            if (Arrays.stream(contentEntry.getSourceFolders()).noneMatch(folder -> url.equals(folder.getUrl()))) {
+              contentEntry.addSourceFolder(url, false);
+            }
           }
         }
       }

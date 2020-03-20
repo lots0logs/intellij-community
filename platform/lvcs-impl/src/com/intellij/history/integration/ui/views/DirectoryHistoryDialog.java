@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.history.integration.ui.views;
 
@@ -86,7 +86,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
   }
 
   private SearchTextField createSearchBox(JPanel root) {
-    final SearchTextFieldWithStoredHistory field = new SearchTextFieldWithStoredHistory(getPropertiesKey() + ".searchHistory");
+    final SearchTextFieldWithStoredHistory field = new SearchTextFieldWithStoredHistory(getDimensionKey() + ".searchHistory");
     field.addDocumentListener(new DocumentAdapter() {
       @Override
       protected void textChanged(@NotNull DocumentEvent e) {
@@ -104,7 +104,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
 
   private void initChangesTree(JComponent root) {
     myChangesTree = new ChangesTreeImpl.Changes(myProject, false, false);
-    myChangesTree.setDoubleClickHandler(() -> new ShowDifferenceAction().performIfEnabled());
+    myChangesTree.setDoubleClickAndEnterKeyHandler(() -> new ShowDifferenceAction().performIfEnabled());
 
     new ShowDifferenceAction().registerCustomShortcutSet(root, null);
 
@@ -152,7 +152,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
     }
 
     @Override
-    protected void doPerform(DirectoryHistoryDialogModel model, List<DirectoryChange> selected) {
+    protected void doPerform(DirectoryHistoryDialogModel model, List<? extends DirectoryChange> selected) {
       final Set<DirectoryChange> selectedSet = new THashSet<>(selected);
 
       int index = 0;
@@ -170,7 +170,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
     }
 
     @Override
-    protected boolean isEnabledFor(DirectoryHistoryDialogModel model, List<DirectoryChange> changes) {
+    protected boolean isEnabledFor(DirectoryHistoryDialogModel model, List<? extends DirectoryChange> changes) {
       return iterFileChanges().iterator().hasNext();
     }
   }
@@ -181,7 +181,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
     }
 
     @Override
-    protected void doPerform(DirectoryHistoryDialogModel model, List<DirectoryChange> selected) {
+    protected void doPerform(DirectoryHistoryDialogModel model, List<? extends DirectoryChange> selected) {
       List<Difference> diffs = new ArrayList<>();
       for (DirectoryChange each : selected) {
         diffs.add(each.getModel().getDifference());
@@ -190,7 +190,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
     }
 
     @Override
-    protected boolean isEnabledFor(DirectoryHistoryDialogModel model, List<DirectoryChange> changes) {
+    protected boolean isEnabledFor(DirectoryHistoryDialogModel model, List<? extends DirectoryChange> changes) {
       return model.isRevertEnabled();
     }
   }
@@ -205,7 +205,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
       doPerform(model, getSelectedChanges());
     }
 
-    protected abstract void doPerform(DirectoryHistoryDialogModel model, List<DirectoryChange> selected);
+    protected abstract void doPerform(DirectoryHistoryDialogModel model, List<? extends DirectoryChange> selected);
 
 
     @Override
@@ -215,7 +215,7 @@ public class DirectoryHistoryDialog extends HistoryDialog<DirectoryHistoryDialog
       return isEnabledFor(model, changes);
     }
 
-    protected boolean isEnabledFor(DirectoryHistoryDialogModel model, List<DirectoryChange> changes) {
+    protected boolean isEnabledFor(DirectoryHistoryDialogModel model, List<? extends DirectoryChange> changes) {
       return true;
     }
   }

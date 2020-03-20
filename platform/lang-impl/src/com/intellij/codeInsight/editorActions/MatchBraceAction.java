@@ -4,6 +4,7 @@ package com.intellij.codeInsight.editorActions;
 import com.intellij.codeInsight.highlighting.BraceHighlightingHandler;
 import com.intellij.codeInsight.highlighting.BraceMatcher;
 import com.intellij.codeInsight.highlighting.BraceMatchingUtil;
+import com.intellij.codeInsight.highlighting.BraceMatchingUtil.BraceHighlightingAndNavigationContext;
 import com.intellij.codeInsight.highlighting.CodeBlockSupportHandler;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
@@ -20,11 +21,12 @@ import com.intellij.openapi.util.TextRange;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.util.PsiUtilBase;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Moves caret to the the matching brace:
- * - If caret is on the closing brace - moves to the matching opening
- * - If caret is on the opening brace - moves to the matching closing brace
+ * - If caret is on the closing brace - moves in the beginning of the matching opening brace
+ * - If caret is on the opening brace - moves to the end of the matching closing brace
  * - Otherwise moves from the caret position to the beginning of the file and finds first opening brace not closed before the caret position
  */
 public class MatchBraceAction extends EditorAction {
@@ -38,7 +40,7 @@ public class MatchBraceAction extends EditorAction {
     }
 
     @Override
-    public void execute(@NotNull Editor editor, DataContext dataContext) {
+    public void doExecute(@NotNull Editor editor, @Nullable Caret caret, DataContext dataContext) {
       final PsiFile file = CommonDataKeys.PSI_FILE.getData(dataContext);
       if (file == null) return;
 
@@ -80,43 +82,23 @@ public class MatchBraceAction extends EditorAction {
      * @implNote this code partially duplicates {@link BraceHighlightingHandler#updateBraces()} and probably can be extracted.
      */
     private static int getOffsetFromBraceMatcher(@NotNull Editor editor, @NotNull PsiFile file) {
-      final Caret caret = editor.getCaretModel().getCurrentCaret();
+      BraceHighlightingAndNavigationContext matchingContext = BraceMatchingUtil.computeHighlightingAndNavigationContext(editor, file);
+      return matchingContext != null ? matchingContext.navigationOffset : tryFindPreviousUnclosedOpeningBraceOffset(editor, file);
+    }
+
+    /**
+     * Moving back from the caret position closing and opening braces (in dumb way, no need to be same type or whatever). Stops if
+     * encounters first opening brace which was not closed before.
+     *
+     * @return start offset of the opening brace or -1 if non were found.
+     */
+    private static int tryFindPreviousUnclosedOpeningBraceOffset(@NotNull Editor editor, @NotNull PsiFile file) {
       final EditorHighlighter highlighter = BraceHighlightingHandler.getLazyParsableHighlighterIfAny(file.getProject(), editor, file);
       final CharSequence text = editor.getDocument().getCharsSequence();
+      final HighlighterIterator iterator = highlighter.createIterator(editor.getCaretModel().getOffset());
+      final FileType fileType = iterator.atEnd() ? null : PsiUtilBase.getPsiFileAtOffset(file, iterator.getStart()).getFileType();
 
-      int offset = caret.getOffset();
-      FileType fileType = getFileType(file, offset);
-      HighlighterIterator iterator = highlighter.createIterator(offset);
-
-      if (iterator.atEnd()) {
-        // end of file, caret should be in the beginning of the brace
-        offset--;
-      }
-      else if (offset > 0 &&
-               !BraceMatchingUtil.isLBraceToken(iterator, text, fileType) &&
-               !BraceMatchingUtil.isRBraceToken(iterator, text, fileType)) {
-        // we probably standing after a brace, let's look behind one char
-        offset--;
-
-        HighlighterIterator i = highlighter.createIterator(offset);
-        if (!BraceMatchingUtil.isRBraceToken(i, text, getFileType(file, i.getStart())) &&
-            !BraceMatchingUtil.isLBraceToken(i, text, getFileType(file, i.getStart()))) {
-          // we still not at brace
-          offset++;
-        }
-      }
-
-      if (offset < 0) return -1;
-
-      iterator = highlighter.createIterator(offset);
-      fileType = getFileType(file, iterator.getStart());
-
-      boolean isLeftBrace = BraceMatchingUtil.isLBraceToken(iterator, text, fileType);
-      if (isLeftBrace || BraceMatchingUtil.isRBraceToken(iterator, text, fileType)) {
-        // we are at brace
-        if (BraceMatchingUtil.matchBrace(text, fileType, iterator, isLeftBrace)) {
-          return iterator.getStart();
-        }
+      if (fileType == null) {
         return -1;
       }
 
@@ -138,11 +120,6 @@ public class MatchBraceAction extends EditorAction {
         iterator.retreat();
       }
     }
-  }
-
-  @NotNull
-  private static FileType getFileType(PsiFile file, int offset) {
-    return PsiUtilBase.getPsiFileAtOffset(file, offset).getFileType();
   }
 
   private static void moveCaret(Editor editor, Caret caret, int offset) {

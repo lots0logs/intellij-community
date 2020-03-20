@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.testframework.sm.runner;
 
 import com.intellij.execution.Location;
@@ -26,7 +26,6 @@ import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -387,8 +386,10 @@ public class SMTestProxy extends AbstractTestProxy {
   public String getDurationString(TestConsoleProperties consoleProperties) {
     switch (getMagnitudeInfo()) {
       case PASSED_INDEX:
-      case RUNNING_INDEX:
         return !isSubjectToHide(consoleProperties) ? getDurationString() : null;
+      case RUNNING_INDEX:
+        // pad duration with zeros, like "1m 02 s 003 ms" to avoid annoying flickering
+        return !isSubjectToHide(consoleProperties) ? getDurationPaddedString() : null;
       case COMPLETE_INDEX:
       case FAILED_INDEX:
       case ERROR_INDEX:
@@ -408,6 +409,10 @@ public class SMTestProxy extends AbstractTestProxy {
   private String getDurationString() {
     final Long duration = getDuration();
     return duration != null ? StringUtil.formatDuration(duration.longValue(), "\u2009") : null;
+  }
+  private String getDurationPaddedString() {
+    final Long duration = getDuration();
+    return duration != null ? StringUtil.formatDurationPadded(duration.longValue(), "\u2009") : null;
   }
 
   @Override
@@ -505,7 +510,7 @@ public class SMTestProxy extends AbstractTestProxy {
                                       @Nullable final String stackTrace,
                                       @NotNull final String actualText,
                                       @NotNull final String expectedText) {
-    setTestComparisonFailed(localizedMessage, stackTrace, actualText, expectedText, null, null);
+    setTestComparisonFailed(localizedMessage, stackTrace, actualText, expectedText, null, null, true);
   }
 
   public void setTestComparisonFailed(@NotNull final String localizedMessage,
@@ -514,7 +519,8 @@ public class SMTestProxy extends AbstractTestProxy {
                                       @NotNull final String expectedText,
                                       @NotNull final TestFailedEvent event) {
     TestComparisionFailedState comparisionFailedState =
-      setTestComparisonFailed(localizedMessage, stackTrace, actualText, expectedText, event.getExpectedFilePath(), event.getActualFilePath());
+      setTestComparisonFailed(localizedMessage, stackTrace, actualText, expectedText, event.getExpectedFilePath(), event.getActualFilePath(),
+                              event.shouldPrintExpectedAndActualValues());
     comparisionFailedState.setToDeleteExpectedFile(event.isExpectedFileTemp());
     comparisionFailedState.setToDeleteActualFile(event.isActualFileTemp());
   }
@@ -524,10 +530,14 @@ public class SMTestProxy extends AbstractTestProxy {
                                                             @NotNull final String actualText,
                                                             @NotNull final String expectedText,
                                                             @Nullable final String expectedFilePath,
-                                                            @Nullable final String actualFilePath) {
+                                                            @Nullable final String actualFilePath,
+                                                            boolean printExpectedAndActualValues) {
     setStacktraceIfNotSet(stackTrace);
     myErrorMessage = localizedMessage;
-    final TestComparisionFailedState comparisionFailedState = new TestComparisionFailedState(localizedMessage, stackTrace, actualText, expectedText, expectedFilePath, actualFilePath);
+    final TestComparisionFailedState comparisionFailedState = new TestComparisionFailedState(
+      localizedMessage, stackTrace, actualText, expectedText, printExpectedAndActualValues,
+      expectedFilePath, actualFilePath
+    );
     DiffHyperlink hyperlink = comparisionFailedState.getHyperlink();
     if (hyperlink != null) {
       hyperlink.setTestProxyName(getName());
@@ -575,7 +585,7 @@ public class SMTestProxy extends AbstractTestProxy {
   public List<? extends SMTestProxy> collectChildren() {
     final List<? extends SMTestProxy> allChildren = getChildren();
 
-    final List<SMTestProxy> result = ContainerUtilRt.newArrayList();
+    final List<SMTestProxy> result = new ArrayList<>();
 
     result.addAll(allChildren);
 

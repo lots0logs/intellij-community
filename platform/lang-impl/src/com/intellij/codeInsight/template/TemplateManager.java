@@ -49,13 +49,13 @@ public abstract class TemplateManager {
   public abstract void startTemplate(@NotNull Editor editor,
                                      @NotNull Template template,
                                      TemplateEditingListener listener,
-                                     final PairProcessor<String, String> callback);
+                                     final PairProcessor<? super String, ? super String> callback);
 
   public abstract boolean startTemplate(@NotNull Editor editor, char shortcutChar);
 
   public abstract Template createTemplate(@NotNull String key, String group);
 
-  public abstract Template createTemplate(@NotNull String key, String group, @NonNls String text);
+  public abstract Template createTemplate(@NotNull String key, @NotNull String group, @NonNls String text);
 
   @Nullable
   public abstract Template getActiveTemplate(@NotNull Editor editor);

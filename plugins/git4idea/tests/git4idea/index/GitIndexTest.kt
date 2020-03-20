@@ -1,26 +1,12 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.index
 
 import com.intellij.openapi.util.SystemInfo
-import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vcs.Executor.*
 import com.intellij.openapi.vcs.FilePath
-import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.vcsUtil.VcsUtil
+import git4idea.commands.Git
+import git4idea.commands.GitObjectType
 import git4idea.repo.GitRepository
 import git4idea.test.GitPlatformTest
 import git4idea.test.git
@@ -72,11 +58,11 @@ class GitIndexTest : GitPlatformTest() {
 
     assertEquals(false, readFilePermissions())
 
-    FileUtil.setExecutableAttribute(FILE.path.path, true)
+    assertTrue(FILE.path.ioFile.setExecutable(true))
     git("add .")
     assertEquals(true, readFilePermissions())
 
-    FileUtil.setExecutableAttribute(FILE.path.path, false)
+    assertTrue(FILE.path.ioFile.setExecutable(false))
     assertEquals(true, readFilePermissions())
 
     git("add .")
@@ -106,14 +92,25 @@ class GitIndexTest : GitPlatformTest() {
     assertEquals(true, readFilePermissions())
   }
 
+  fun `test object types`() {
+    assertObjectType(null, "0".repeat(40))
+    assertObjectType(GitObjectType.COMMIT, "HEAD")
+    assertObjectType(GitObjectType.BLOB, "HEAD:$FILE")
+    assertObjectType(GitObjectType.TREE, "HEAD:")
+  }
+
+  private fun assertObjectType(expected: GitObjectType?, obj: String) {
+    assertEquals(expected, Git.getInstance().getObjectTypeEnum(repository, obj))
+  }
+
   private fun readFileContent(path: String): String {
     val stagedFile = GitIndexUtil.listStaged(repository, path.path)
     val bytes = GitIndexUtil.read(repository, stagedFile!!.blobHash)
-    return String(bytes, CharsetToolkit.UTF8_CHARSET)
+    return String(bytes, Charsets.UTF_8)
   }
 
   private fun writeFileContent(path: String, content: String, executable: Boolean = false) {
-    val bytes = content.toByteArray(CharsetToolkit.UTF8_CHARSET)
+    val bytes = content.toByteArray(Charsets.UTF_8)
     GitIndexUtil.write(repository, path.path, bytes, executable)
   }
 

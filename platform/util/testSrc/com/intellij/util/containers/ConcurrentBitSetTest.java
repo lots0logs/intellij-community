@@ -15,14 +15,17 @@
  */
 package com.intellij.util.containers;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.testFramework.PlatformTestUtil;
 import com.intellij.testFramework.Timings;
+import com.intellij.util.TimeoutUtil;
 import junit.framework.TestCase;
 
 import java.util.Random;
 import java.util.stream.IntStream;
 
 public class ConcurrentBitSetTest extends TestCase {
+  private static final Logger LOG = Logger.getInstance(ConcurrentBitSetTest.class);
   public void test() {
     ConcurrentBitSet bitSet = new ConcurrentBitSet();
     assertEquals(0, bitSet.nextClearBit(0));
@@ -141,7 +144,7 @@ public class ConcurrentBitSetTest extends TestCase {
     int N = 10000;
 
     for (int i=0; i<10; i++) {
-      long el = PlatformTestUtil.measure(() ->
+      long el = TimeoutUtil.measureExecutionTime(() ->
         IntStream.range(0,N).parallel().forEach(__-> {
           int r = 0;
           for (int j = 0; j < len; j++) {
@@ -151,7 +154,7 @@ public class ConcurrentBitSetTest extends TestCase {
         })
       );
 
-      System.out.println("elapsed = " + el);
+      LOG.debug("elapsed = " + el);
     }
   }
 
@@ -167,7 +170,7 @@ public class ConcurrentBitSetTest extends TestCase {
     int N = 1000;
 
     for (int i=0; i<10; i++) {
-      long el = PlatformTestUtil.measure(() -> {
+      long el = TimeoutUtil.measureExecutionTime(() -> {
         int r = 0;
         for (int n = 0; n < N; n++) {
           for (int j = 0; j < len; j++) {
@@ -177,7 +180,7 @@ public class ConcurrentBitSetTest extends TestCase {
         assertEquals(N/2 * len, r);
       });
 
-      System.out.println("elapsed = " + el);
+      LOG.debug("elapsed = " + el);
     }
   }
 

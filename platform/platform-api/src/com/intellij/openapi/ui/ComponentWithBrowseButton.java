@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.ui;
 
+import com.intellij.diagnostic.LoadingState;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -8,24 +9,21 @@ import com.intellij.openapi.actionSystem.CustomShortcutSet;
 import com.intellij.openapi.actionSystem.ShortcutSet;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.Experiments;
-import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.keymap.KeymapUtil;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.util.SystemInfo;
-import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.util.text.StringUtil;
-import com.intellij.openapi.vfs.LocalFileSystem;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.GuiUtils;
 import com.intellij.ui.UIBundle;
 import com.intellij.ui.components.fields.ExtendableTextComponent;
+import com.intellij.util.nls.NlsContexts;
+import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.accessibility.ScreenReader;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -38,19 +36,22 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 
 public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel implements Disposable {
-  private static final Logger LOG = Logger.getInstance(ComponentWithBrowseButton.class);
-
   private final Comp myComponent;
   private final FixedSizeButton myBrowseButton;
   private boolean myButtonEnabled = true;
 
+  @ApiStatus.Internal
+  public static boolean isUseInlineBrowserButton() {
+    return !LoadingState.COMPONENTS_REGISTERED.isOccurred() || Experiments.getInstance().isFeatureEnabled("inline.browse.button");
+  }
+
   public ComponentWithBrowseButton(@NotNull Comp component, @Nullable ActionListener browseActionListener) {
-    super(new BorderLayout(SystemInfo.isMac || UIUtil.isUnderDarcula() ? 0 : 2, 0));
+    super(new BorderLayout(SystemInfo.isMac || StartupUiUtil.isUnderDarcula() ? 0 : 2, 0));
 
     myComponent = component;
     // required! otherwise JPanel will occasionally gain focus instead of the component
     setFocusable(false);
-    boolean inlineBrowseButton = myComponent instanceof ExtendableTextComponent && Experiments.isFeatureEnabled("inline.browse.button");
+    boolean inlineBrowseButton = myComponent instanceof ExtendableTextComponent && isUseInlineBrowserButton();
     if (inlineBrowseButton) {
       ((ExtendableTextComponent)myComponent).addExtension(ExtendableTextComponent.Extension.create(
         getDefaultIcon(), getHoveredIcon(), getIconTooltip(), this::notifyActionListeners));
@@ -114,7 +115,7 @@ public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel i
     comp.setPreferredSize(size);
     Dimension preferredSize = myBrowseButton.getPreferredSize();
 
-    boolean keepHeight = UIUtil.isUnderAquaLookAndFeel() || UIUtil.isUnderWin10LookAndFeel();
+    boolean keepHeight = UIUtil.isUnderWin10LookAndFeel();
     preferredSize.setSize(size.width + preferredSize.width + 2,
                           keepHeight ? preferredSize.height : preferredSize.height + 2);
 
@@ -133,7 +134,7 @@ public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel i
     setEnabled(isEnabled());
   }
 
-  public void setButtonIcon(Icon icon) {
+  public void setButtonIcon(@NotNull Icon icon) {
     myBrowseButton.setIcon(icon);
     myBrowseButton.setDisabledIcon(IconLoader.getDisabledIcon(icon));
   }
@@ -149,11 +150,11 @@ public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel i
     myBrowseButton.removeActionListener(listener);
   }
 
-  public void addBrowseFolderListener(@Nullable @Nls(capitalization = Nls.Capitalization.Title) String title,
-                                      @Nullable @Nls(capitalization = Nls.Capitalization.Sentence) String description,
+  public void addBrowseFolderListener(@Nullable @Nls @NlsContexts.FileChooserTitle String title,
+                                      @Nullable @Nls @NlsContexts.FileChooserDescription String description,
                                       @Nullable Project project,
                                       FileChooserDescriptor fileChooserDescriptor,
-                                      TextComponentAccessor<Comp> accessor) {
+                                      TextComponentAccessor<? super Comp> accessor) {
     addActionListener(new BrowseFolderActionListener<>(title, description, this, project, fileChooserDescriptor, accessor));
   }
 
@@ -161,11 +162,11 @@ public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel i
    * @deprecated use {@link #addBrowseFolderListener(String, String, Project, FileChooserDescriptor, TextComponentAccessor)} instead
    */
   @Deprecated
-  public void addBrowseFolderListener(@Nullable @Nls(capitalization = Nls.Capitalization.Title) String title,
-                                      @Nullable @Nls(capitalization = Nls.Capitalization.Sentence) String description,
+  public void addBrowseFolderListener(@Nullable @Nls @NlsContexts.FileChooserTitle String title,
+                                      @Nullable @Nls @NlsContexts.FileChooserDescription String description,
                                       @Nullable Project project,
                                       FileChooserDescriptor fileChooserDescriptor,
-                                      TextComponentAccessor<Comp> accessor, boolean autoRemoveOnHide) {
+                                      TextComponentAccessor<? super Comp> accessor, boolean autoRemoveOnHide) {
     addBrowseFolderListener(title, description, project, fileChooserDescriptor, accessor);
   }
 
@@ -219,97 +220,19 @@ public class ComponentWithBrowseButton<Comp extends JComponent> extends JPanel i
     }
   }
 
-  public static class BrowseFolderActionListener<T extends JComponent> implements ActionListener {
-    private final String myTitle;
-    private final String myDescription;
-    protected ComponentWithBrowseButton<T> myTextComponent;
-    private final TextComponentAccessor<? super T> myAccessor;
-    private Project myProject;
-    protected final FileChooserDescriptor myFileChooserDescriptor;
-
-    public BrowseFolderActionListener(@Nullable @Nls(capitalization = Nls.Capitalization.Title) String title,
-                                      @Nullable @Nls(capitalization = Nls.Capitalization.Sentence) String description,
-                                      ComponentWithBrowseButton<T> textField,
+  public static class BrowseFolderActionListener<T extends JComponent> extends BrowseFolderRunnable <T> implements ActionListener {
+    public BrowseFolderActionListener(@Nullable @Nls @NlsContexts.FileChooserTitle String title,
+                                      @Nullable @Nls @NlsContexts.FileChooserDescription String description,
+                                      @Nullable ComponentWithBrowseButton<T> textField,
                                       @Nullable Project project,
                                       FileChooserDescriptor fileChooserDescriptor,
                                       TextComponentAccessor<? super T> accessor) {
-      if (fileChooserDescriptor != null && fileChooserDescriptor.isChooseMultiple()) {
-        LOG.error("multiple selection not supported");
-        fileChooserDescriptor = new FileChooserDescriptor(fileChooserDescriptor) {
-          @Override
-          public boolean isChooseMultiple() {
-            return false;
-          }
-        };
-      }
-
-      myTitle = title;
-      myDescription = description;
-      myTextComponent = textField;
-      myProject = project;
-      myFileChooserDescriptor = fileChooserDescriptor;
-      myAccessor = accessor;
-    }
-
-    @Nullable
-    protected Project getProject() {
-      return myProject;
-    }
-
-    protected void setProject(@Nullable Project project) {
-      myProject = project;
+      super(title, description, project, fileChooserDescriptor, textField != null ? textField.getChildComponent() : null, accessor);
     }
 
     @Override
     public void actionPerformed(ActionEvent e) {
-      FileChooserDescriptor fileChooserDescriptor = myFileChooserDescriptor;
-      if (myTitle != null || myDescription != null) {
-        fileChooserDescriptor = (FileChooserDescriptor)myFileChooserDescriptor.clone();
-        if (myTitle != null) {
-          fileChooserDescriptor.setTitle(myTitle);
-        }
-        if (myDescription != null) {
-          fileChooserDescriptor.setDescription(myDescription);
-        }
-      }
-
-      FileChooser.chooseFile(fileChooserDescriptor, getProject(), myTextComponent, getInitialFile(), this::onFileChosen);
-    }
-
-    @Nullable
-    protected VirtualFile getInitialFile() {
-      String directoryName = getComponentText();
-      if (StringUtil.isEmptyOrSpaces(directoryName)) {
-        return null;
-      }
-
-      directoryName = FileUtil.toSystemIndependentName(directoryName);
-      VirtualFile path = LocalFileSystem.getInstance().findFileByPath(expandPath(directoryName));
-      while (path == null && directoryName.length() > 0) {
-        int pos = directoryName.lastIndexOf('/');
-        if (pos <= 0) break;
-        directoryName = directoryName.substring(0, pos);
-        path = LocalFileSystem.getInstance().findFileByPath(directoryName);
-      }
-      return path;
-    }
-
-    @NotNull
-    protected String expandPath(@NotNull String path) {
-      return path;
-    }
-
-    protected String getComponentText() {
-      return myAccessor.getText(myTextComponent.getChildComponent()).trim();
-    }
-
-    @NotNull
-    protected String chosenFileToResultingText(@NotNull VirtualFile chosenFile) {
-      return chosenFile.getPresentableUrl();
-    }
-
-    protected void onFileChosen(@NotNull VirtualFile chosenFile) {
-      myAccessor.setText(myTextComponent.getChildComponent(), chosenFileToResultingText(chosenFile));
+      run();
     }
   }
 

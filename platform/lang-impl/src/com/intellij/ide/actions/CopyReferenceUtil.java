@@ -31,11 +31,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public class CopyReferenceUtil {
-  static void highlight(Editor editor, Project project, List<PsiElement> elements) {
+  static void highlight(Editor editor, Project project, List<? extends PsiElement> elements) {
     HighlightManager highlightManager = HighlightManager.getInstance(project);
     EditorColorsManager manager = EditorColorsManager.getInstance();
     TextAttributes attributes = manager.getGlobalScheme().getAttributes(EditorColors.SEARCH_RESULT_ATTRIBUTES);
@@ -59,7 +60,7 @@ public class CopyReferenceUtil {
 
   @NotNull
   static List<PsiElement> getElementsToCopy(@Nullable final Editor editor, final DataContext dataContext) {
-    List<PsiElement> elements = ContainerUtil.newArrayList();
+    List<PsiElement> elements = new ArrayList<>();
     if (editor != null) {
       PsiReference reference = TargetElementUtil.findReference(editor);
       if (reference != null) {
@@ -110,19 +111,14 @@ public class CopyReferenceUtil {
   @Nullable
   static String getQualifiedNameFromProviders(@Nullable PsiElement element) {
     if (element == null) return null;
-    DumbService.getInstance(element.getProject()).setAlternativeResolveEnabled(true);
-    try {
-      return QualifiedNameProviderUtil.getQualifiedName(element);
-    }
-    finally {
-      DumbService.getInstance(element.getProject()).setAlternativeResolveEnabled(false);
-    }
+    return DumbService.getInstance(element.getProject()).computeWithAlternativeResolveEnabled(() ->
+      QualifiedNameProviderUtil.getQualifiedName(element));
   }
 
   static String doCopy(List<? extends PsiElement> elements, @Nullable Editor editor) {
     if (elements.isEmpty()) return null;
 
-    List<String> fqns = ContainerUtil.newArrayList();
+    List<String> fqns = new ArrayList<>();
     for (PsiElement element : elements) {
       String fqn = elementToFqn(element, editor);
       if (fqn == null) return null;
@@ -163,8 +159,8 @@ public class CopyReferenceUtil {
   }
 
   @NotNull
-  private static String getVirtualFileFqn(@NotNull VirtualFile virtualFile, @NotNull Project project) {
-    for (VirtualFileQualifiedNameProvider provider : VirtualFileQualifiedNameProvider.EP_NAME.getExtensionList()) {
+  public static String getVirtualFileFqn(@NotNull VirtualFile virtualFile, @NotNull Project project) {
+    for (CopyReferenceAction.VirtualFileQualifiedNameProvider provider : CopyReferenceAction.VirtualFileQualifiedNameProvider.EP_NAME.getExtensionList()) {
       String qualifiedName = provider.getQualifiedName(project, virtualFile);
       if (qualifiedName != null) {
         return qualifiedName;
@@ -181,7 +177,11 @@ public class CopyReferenceUtil {
       }
     }
 
-    String relativePath = VfsUtilCore.getRelativePath(virtualFile, project.getBaseDir());
+    VirtualFile dir = project.getBaseDir();
+    if (dir == null) {
+      return virtualFile.getPath();
+    }
+    String relativePath = VfsUtilCore.getRelativePath(virtualFile, dir);
     if (relativePath != null) {
       return relativePath;
     }

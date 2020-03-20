@@ -3,36 +3,39 @@
  */
 package com.intellij.spellchecker.engine;
 
-import com.google.common.collect.*;
+import com.google.common.collect.MinMaxPriorityQueue;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.util.Pair;
+import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.spellchecker.SpellCheckerManager;
+import com.intellij.spellchecker.SpellcheckerCorrectionsFilter;
 import com.intellij.spellchecker.compress.CompressedDictionary;
 import com.intellij.spellchecker.dictionary.Dictionary;
 import com.intellij.spellchecker.dictionary.EditableDictionary;
 import com.intellij.spellchecker.dictionary.Loader;
 import com.intellij.util.Consumer;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.containers.SLRUCache;
+import com.intellij.util.text.EditDistance;
 import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static com.intellij.openapi.util.io.FileUtil.isAncestor;
-import static com.intellij.util.containers.ContainerUtil.concat;
-import static com.intellij.util.text.EditDistance.optimalAlignment;
-import static java.util.stream.Collectors.toList;
+import java.util.stream.Collectors;
 
 public class BaseSpellChecker implements SpellCheckerEngine {
-  static final Logger LOG = Logger.getInstance("#com.intellij.spellchecker.engine.BaseSpellChecker");
+  private static final Logger LOG = Logger.getInstance(BaseSpellChecker.class);
 
+  private static final SpellcheckerCorrectionsFilter CORRECTIONS_FILTER = SpellcheckerCorrectionsFilter.getInstance();
   private final Transformation transform = new Transformation();
   private final Set<EditableDictionary> dictionaries = new HashSet<>();
   private final List<Dictionary> bundledDictionaries = ContainerUtil.createLockFreeCopyOnWriteList();
@@ -40,9 +43,15 @@ public class BaseSpellChecker implements SpellCheckerEngine {
   private final AtomicBoolean myLoadingDictionaries = new AtomicBoolean(false);
   private final List<Pair<Loader, Consumer<? super Dictionary>>> myDictionariesToLoad = ContainerUtil.createLockFreeCopyOnWriteList();
   private final Project myProject;
+  private final SLRUCache<String, Boolean> myRecentQueries = SLRUCache.create(1000, 1000, this::calcIsCorrect);
 
-  public BaseSpellChecker(@NotNull Project project) {
+  BaseSpellChecker(@NotNull Project project, @NotNull SpellCheckerManager spellCheckerManager) {
     myProject = project;
+    spellCheckerManager.addUserDictionaryChangedListener(__ -> clearCache(), project);
+  }
+
+  private void clearCache() {
+    myRecentQueries.clear();
   }
 
   @Override
@@ -66,40 +75,42 @@ public class BaseSpellChecker implements SpellCheckerEngine {
   }
 
   private void doLoadDictionaryAsync(Loader loader, Consumer<? super Dictionary> consumer) {
-    StartupManager.getInstance(myProject).runWhenProjectIsInitialized(() -> {
-      LOG.debug("Loading " + loader.getName());
-      Application app = ApplicationManager.getApplication();
-      app.executeOnPooledThread(() -> {
-        if (app.isDisposed()) return;
-
-        CompressedDictionary dictionary = CompressedDictionary.create(loader, transform);
-        LOG.debug(loader.getName() + " loaded!");
-        consumer.consume(dictionary);
-
-        while (!myDictionariesToLoad.isEmpty()) {
+    if (!myProject.isDefault()) {
+      StartupManager.getInstance(myProject).runWhenProjectIsInitialized(() -> {
+        LOG.debug("Loading " + loader.getName());
+        Application app = ApplicationManager.getApplication();
+        app.executeOnPooledThread(() -> {
           if (app.isDisposed()) return;
 
-          Pair<Loader, Consumer<? super Dictionary>> nextDictionary = myDictionariesToLoad.remove(0);
-          Loader nextDictionaryLoader = nextDictionary.getFirst();
-          dictionary = CompressedDictionary.create(nextDictionaryLoader, transform);
-          LOG.debug(nextDictionaryLoader.getName() + " loaded!");
-          nextDictionary.getSecond().consume(dictionary);
-        }
+          CompressedDictionary dictionary = CompressedDictionary.create(loader, transform);
+          LOG.debug(loader.getName() + " loaded!");
+          consumer.consume(dictionary);
 
-        LOG.debug("Loading finished, restarting daemon...");
-        myLoadingDictionaries.set(false);
-        UIUtil.invokeLaterIfNeeded(() -> {
-          if (app.isDisposed()) return;
+          while (!myDictionariesToLoad.isEmpty()) {
+            if (app.isDisposed()) return;
 
-          for (final Project project : ProjectManager.getInstance().getOpenProjects()) {
-            if (project.isInitialized() && project.isOpen() && !project.isDefault()) {
-              DaemonCodeAnalyzer instance = DaemonCodeAnalyzer.getInstance(project);
-              if (instance != null) instance.restart();
-            }
+            Pair<Loader, Consumer<? super Dictionary>> nextDictionary = myDictionariesToLoad.remove(0);
+            Loader nextDictionaryLoader = nextDictionary.getFirst();
+            dictionary = CompressedDictionary.create(nextDictionaryLoader, transform);
+            LOG.debug(nextDictionaryLoader.getName() + " loaded!");
+            nextDictionary.getSecond().consume(dictionary);
           }
+
+          LOG.debug("Loading finished, restarting daemon...");
+          myLoadingDictionaries.set(false);
+          UIUtil.invokeLaterIfNeeded(() -> {
+            if (app.isDisposed()) return;
+
+            for (final Project project : ProjectManager.getInstance().getOpenProjects()) {
+              if (project.isInitialized() && project.isOpen() && !project.isDefault()) {
+                DaemonCodeAnalyzer instance = DaemonCodeAnalyzer.getInstance(project);
+                if (instance != null) instance.restart();
+              }
+            }
+          });
         });
       });
-    });
+    }
   }
 
   private void queueDictionaryLoad(final Loader loader, final Consumer<? super Dictionary> consumer) {
@@ -110,11 +121,13 @@ public class BaseSpellChecker implements SpellCheckerEngine {
   @Override
   public void addModifiableDictionary(@NotNull EditableDictionary dictionary) {
     dictionaries.add(dictionary);
+    clearCache();
   }
 
   @Override
   public void addDictionary(@NotNull Dictionary dictionary) {
     bundledDictionaries.add(dictionary);
+    clearCache();
   }
 
   @Override
@@ -123,8 +136,6 @@ public class BaseSpellChecker implements SpellCheckerEngine {
   }
 
   /**
-   * @param transformed
-   * @param dictionaries
    * @return -1 (all)failed / 0 (any) ok / >0 all alien
    */
   private static int isCorrect(@NotNull String transformed, @Nullable Collection<? extends Dictionary> dictionaries) {
@@ -149,9 +160,18 @@ public class BaseSpellChecker implements SpellCheckerEngine {
     if (myLoadingDictionaries.get() || transformed == null) {
       return true;
     }
+
+    synchronized (myRecentQueries) {
+      return myRecentQueries.get(transformed);
+    }
+  }
+
+  private boolean calcIsCorrect(String transformed) {
     int bundled = isCorrect(transformed, bundledDictionaries);
+    if (bundled == 0) return true;
+
     int user = isCorrect(transformed, dictionaries);
-    return bundled == 0 || user == 0 || bundled > 0 && user > 0;
+    return user == 0 || bundled > 0 && user > 0;
   }
 
   @Override
@@ -159,9 +179,14 @@ public class BaseSpellChecker implements SpellCheckerEngine {
   public List<String> getSuggestions(@NotNull String word, int maxSuggestions, int quality) {
     String transformed = transform.transform(word);
     if (transformed == null || maxSuggestions < 1) return Collections.emptyList();
-    final MinMaxPriorityQueue<Suggestion> suggestions = MinMaxPriorityQueue.orderedBy(Suggestion::compareTo).maximumSize(maxSuggestions).create();
-    for (Dictionary dict : concat(bundledDictionaries, dictionaries)) {
-      dict.getSuggestions(transformed, s -> suggestions.add(new Suggestion(s, optimalAlignment(transformed, s, true))));
+    Queue<Suggestion> suggestions = MinMaxPriorityQueue.orderedBy(Suggestion::compareTo).maximumSize(maxSuggestions).create();
+    for (Dictionary dict : ContainerUtil.concat(bundledDictionaries, dictionaries)) {
+      dict.consumeSuggestions(transformed, s -> {
+        ProgressManager.checkCanceled();
+        if (!CORRECTIONS_FILTER.isFiltered(s)) {
+          suggestions.add(new Suggestion(s, EditDistance.optimalAlignment(transformed, s, true)));
+        }
+      });
     }
     if (suggestions.isEmpty()) {
       return Collections.emptyList();
@@ -171,7 +196,7 @@ public class BaseSpellChecker implements SpellCheckerEngine {
       .filter(i -> bestMetrics - i.getMetrics() < quality)
       .sorted()
       .map(Suggestion::getWord)
-      .collect(toList());
+      .collect(Collectors.toList());
   }
 
   @Override
@@ -184,6 +209,7 @@ public class BaseSpellChecker implements SpellCheckerEngine {
   public void reset() {
     bundledDictionaries.clear();
     dictionaries.clear();
+    clearCache();
   }
 
   @Override
@@ -196,19 +222,21 @@ public class BaseSpellChecker implements SpellCheckerEngine {
     final Dictionary dictionaryByName = getBundledDictionaryByName(name);
     if (dictionaryByName != null) {
       bundledDictionaries.remove(dictionaryByName);
+      clearCache();
     }
   }
 
   @Override
   public void removeDictionariesRecursively(@NotNull String directory) {
-    bundledDictionaries.stream()
-      .map(Dictionary::getName)
-      .filter(dict -> isAncestor(directory, dict, false) && isDictionaryLoad(dict))
-      .forEach(this::removeDictionary);
+    List<Dictionary> toRemove = ContainerUtil
+      .filter(bundledDictionaries, dict -> FileUtil.isAncestor(directory, dict.getName(), false) && isDictionaryLoad(dict.getName()));
+
+    bundledDictionaries.removeAll(toRemove);
+    clearCache();
   }
 
   @Nullable
-  public Dictionary getBundledDictionaryByName(@NotNull String name) {
+  private Dictionary getBundledDictionaryByName(@NotNull String name) {
     for (Dictionary dictionary : bundledDictionaries) {
       if (name.equals(dictionary.getName())) {
         return dictionary;

@@ -121,7 +121,7 @@ public class SvnHistoryProvider implements VcsHistoryProvider, VcsCacheableHisto
 
       JPanel fieldPanel = new ToolbarDecorator() {
         @Override
-        protected JComponent getComponent() {
+        protected @NotNull JComponent getComponent() {
           return field;
         }
 
@@ -157,13 +157,13 @@ public class SvnHistoryProvider implements VcsHistoryProvider, VcsCacheableHisto
   }
 
   @Override
-  public Boolean getAddinionallyCachedData(SvnHistorySession session) {
+  public Boolean getAdditionallyCachedData(SvnHistorySession session) {
     return session.isHaveMergeSources();
   }
 
   @Override
   public SvnHistorySession createFromCachedData(Boolean aBoolean,
-                                               @NotNull List<VcsFileRevision> revisions,
+                                               @NotNull List<? extends VcsFileRevision> revisions,
                                                @NotNull FilePath filePath,
                                                VcsRevisionNumber currentRevision) {
     return new SvnHistorySession(myVcs, revisions, filePath, aBoolean, currentRevision, false, ! filePath.isNonLocal());

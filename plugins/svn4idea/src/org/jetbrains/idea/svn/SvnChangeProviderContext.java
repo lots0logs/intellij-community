@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.svn;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -26,6 +26,8 @@ import org.jetbrains.idea.svn.status.Status;
 import org.jetbrains.idea.svn.status.StatusType;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,17 +37,17 @@ import static org.jetbrains.idea.svn.SvnUtil.getRelativePath;
 import static org.jetbrains.idea.svn.history.SvnLazyPropertyContentRevision.getPropertyList;
 
 class SvnChangeProviderContext implements StatusReceiver {
-  private static final Logger LOG = Logger.getInstance("org.jetbrains.idea.svn.SvnChangeProviderContext");
+  private static final Logger LOG = Logger.getInstance(SvnChangeProviderContext.class);
 
   @NotNull private final ChangelistBuilder myChangelistBuilder;
-  @NotNull private final List<SvnChangedFile> myCopiedFiles = ContainerUtil.newArrayList();
-  @NotNull private final List<SvnChangedFile> myDeletedFiles = ContainerUtil.newArrayList();
+  @NotNull private final List<SvnChangedFile> myCopiedFiles = new ArrayList<>();
+  @NotNull private final List<SvnChangedFile> myDeletedFiles = new ArrayList<>();
   // for files moved in a subtree, which were the targets of merge (for instance).
-  @NotNull private final Map<String, Status> myTreeConflicted = ContainerUtil.newHashMap();
-  @NotNull private final Map<FilePath, Url> myCopyFromURLs = ContainerUtil.newHashMap();
+  @NotNull private final Map<String, Status> myTreeConflicted = new HashMap<>();
+  @NotNull private final Map<FilePath, Url> myCopyFromURLs = new HashMap<>();
   @NotNull private final SvnVcs myVcs;
   private final SvnBranchConfigurationManager myBranchConfigurationManager;
-  @NotNull private final List<File> filesToRefresh = ContainerUtil.newArrayList();
+  @NotNull private final List<File> filesToRefresh = new ArrayList<>();
 
   @Nullable private final ProgressIndicator myProgress;
 
@@ -64,13 +66,13 @@ class SvnChangeProviderContext implements StatusReceiver {
   }
 
   @Override
-  public void processIgnored(VirtualFile vFile) {
-    myChangelistBuilder.processIgnoredFile(vFile);
+  public void processIgnored(@NotNull FilePath path) {
+    myChangelistBuilder.processIgnoredFile(path);
   }
 
   @Override
-  public void processUnversioned(VirtualFile vFile) {
-    myChangelistBuilder.processUnversionedFile(vFile);
+  public void processUnversioned(@NotNull FilePath path) {
+    myChangelistBuilder.processUnversionedFile(path);
   }
 
   @Override
@@ -191,7 +193,7 @@ class SvnChangeProviderContext implements StatusReceiver {
     if (status.is(StatusType.STATUS_UNVERSIONED, StatusType.STATUS_NONE)) {
       final VirtualFile file = filePath.getVirtualFile();
       if (file != null) {
-        myChangelistBuilder.processUnversionedFile(file);
+        myChangelistBuilder.processUnversionedFile(filePath);
       }
     }
     else if (status.is(StatusType.STATUS_ADDED)) {
@@ -218,7 +220,7 @@ class SvnChangeProviderContext implements StatusReceiver {
         LOG.error("No virtual file for ignored file: " + filePath.getPresentableUrl() + ", isNonLocal: " + filePath.isNonLocal());
       }
       else if (!myVcs.isWcRoot(filePath)) {
-        myChangelistBuilder.processIgnoredFile(filePath.getVirtualFile());
+        myChangelistBuilder.processIgnoredFile(filePath);
       }
     }
     else if (fStatus == FileStatus.NOT_CHANGED || fStatus == FileStatus.SWITCHED) {

@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.errorTreeView;
 
 import com.intellij.icons.AllIcons;
@@ -9,6 +7,8 @@ import com.intellij.ide.actions.CloseTabToolbarAction;
 import com.intellij.ide.actions.ExportToTextFileToolbarAction;
 import com.intellij.ide.errorTreeView.impl.ErrorTreeViewConfiguration;
 import com.intellij.ide.errorTreeView.impl.ErrorViewTextExporter;
+import com.intellij.ide.util.treeView.NodeDescriptor;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.application.TransactionGuard;
@@ -28,36 +28,38 @@ import com.intellij.ui.PopupHandler;
 import com.intellij.ui.SideBorder;
 import com.intellij.ui.content.Content;
 import com.intellij.ui.content.MessageView;
+import com.intellij.ui.tree.AsyncTreeModel;
+import com.intellij.ui.tree.StructureTreeModel;
 import com.intellij.ui.treeStructure.Tree;
 import com.intellij.util.Alarm;
 import com.intellij.util.EditSourceOnDoubleClickHandler;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ObjectUtils;
 import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.MutableErrorTreeView;
 import com.intellij.util.ui.StatusText;
-import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.tree.TreeUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.concurrency.Promise;
+import org.jetbrains.concurrency.Promises;
 
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class NewErrorTreeViewPanel extends JPanel implements DataProvider, OccurenceNavigator, MutableErrorTreeView, CopyProvider {
-  protected static final Logger LOG = Logger.getInstance("#com.intellij.ide.errorTreeView.NewErrorTreeViewPanel");
+public class NewErrorTreeViewPanel extends JPanel implements DataProvider, OccurenceNavigator, MutableErrorTreeView, CopyProvider, Disposable {
+  protected static final Logger LOG = Logger.getInstance(NewErrorTreeViewPanel.class);
   private volatile String myProgressText = "";
   private volatile float myFraction;
-  private final boolean myCreateExitAction;
   private final ErrorViewStructure myErrorViewStructure;
-  private final ErrorViewTreeBuilder myBuilder;
+  private final StructureTreeModel<ErrorViewStructure> myStructureModel;
   private final Alarm myUpdateAlarm = new Alarm(Alarm.ThreadToUse.SWING_THREAD);
   private volatile boolean myIsDisposed;
   private final ErrorTreeViewConfiguration myConfiguration;
@@ -98,7 +100,6 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   public NewErrorTreeViewPanel(Project project, String helpId, boolean createExitAction, boolean createToolbar, @Nullable Runnable rerunAction) {
     myProject = project;
     myHelpId = helpId;
-    myCreateExitAction = createExitAction;
     myConfiguration = ErrorTreeViewConfiguration.getInstance(project);
     setLayout(new BorderLayout());
 
@@ -117,19 +118,16 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     myMessagePanel = new JPanel(new BorderLayout());
 
     myErrorViewStructure = createErrorViewStructure(project, canHideWarnings());
-    DefaultMutableTreeNode root = new DefaultMutableTreeNode();
-    root.setUserObject(myErrorViewStructure.createDescriptor(myErrorViewStructure.getRootElement(), null));
-    final DefaultTreeModel treeModel = new DefaultTreeModel(root);
-    myTree = createTree(treeModel);
+    myStructureModel = new StructureTreeModel<>(myErrorViewStructure, this);
+    myTree = new Tree(new AsyncTreeModel(myStructureModel, this));
+    myTree.setRowHeight(0);
     myTree.getEmptyText().setText(IdeBundle.message("errortree.noMessages"));
-    myBuilder = new ErrorViewTreeBuilder(myTree, treeModel, myErrorViewStructure);
 
     myExporterToTextFile = new ErrorViewTextExporter(myErrorViewStructure);
     myOccurrenceNavigatorSupport = new MyOccurrenceNavigatorSupport(myTree);
 
     myAutoScrollToSourceHandler.install(myTree);
     TreeUtil.installActions(myTree);
-    UIUtil.setLineStyleAngled(myTree);
     myTree.setRootVisible(false);
     myTree.setShowsRootHandles(true);
     myTree.setLargeModel(true);
@@ -163,17 +161,6 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     EditSourceOnDoubleClickHandler.install(myTree);
   }
 
-  @NotNull
-  protected Tree createTree(@NotNull final DefaultTreeModel treeModel) {
-    return new Tree(treeModel) {
-      @Override
-      public void setRowHeight(int i) {
-        super.setRowHeight(0);
-        // this is needed in order to make UI calculate the height for each particular row
-      }
-    };
-  }
-
   protected ErrorViewStructure createErrorViewStructure(Project project, boolean canHideWarnings) {
     return new ErrorViewStructure(project, canHideWarnings);
   }
@@ -184,7 +171,6 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     myErrorViewStructure.clear();
     myUpdateAlarm.cancelAllRequests();
     Disposer.dispose(myUpdateAlarm);
-    Disposer.dispose(myBuilder);
   }
 
   @Override
@@ -207,10 +193,10 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   public boolean isCopyVisible(@NotNull DataContext dataContext) {
     return true;
   }
-  
+
   @NotNull public StatusText getEmptyText() {
     return myTree.getEmptyText();
-  } 
+  }
 
   @Override
   public Object getData(@NotNull String dataId) {
@@ -242,7 +228,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     if (firstError != null) {
       selectElement(firstError, () -> {
         if (shouldShowFirstErrorInEditor()) {
-          TransactionGuard.submitTransaction(myBuilder, () -> navigateToSource(false));
+          TransactionGuard.submitTransaction(this, () -> navigateToSource(false));
         }
       });
     }
@@ -254,13 +240,13 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
         selectElement(firstWarning, null);
       }
       else {
-        TreeUtil.selectFirstNode(myTree);
+        TreeUtil.promiseSelectFirst(myTree);
       }
     }
   }
 
-  private void selectElement(final ErrorTreeElement element, final Runnable onDone) {
-    myBuilder.select(element, onDone);
+  private void selectElement(final ErrorTreeElement element, @Nullable final Runnable onDone) {
+    myStructureModel.select(element, myTree, onDone == null? path -> {} : path -> onDone.run());
   }
 
   protected boolean shouldShowFirstErrorInEditor() {
@@ -269,18 +255,18 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
 
   public void updateTree() {
     if (!myIsDisposed) {
-      myBuilder.updateTree();
+      myStructureModel.invalidate();
     }
   }
 
   @Override
-  public void addMessage(int type, @NotNull String[] text, @Nullable VirtualFile file, int line, int column, @Nullable Object data) {
+  public void addMessage(int type, String @NotNull [] text, @Nullable VirtualFile file, int line, int column, @Nullable Object data) {
     addMessage(type, text, null, file, line, column, data);
   }
 
   @Override
   public void addMessage(int type,
-                         @NotNull String[] text,
+                         String @NotNull [] text,
                          @Nullable VirtualFile underFileGroup,
                          @Nullable VirtualFile file,
                          int line,
@@ -289,13 +275,41 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     if (myIsDisposed) {
       return;
     }
-    myErrorViewStructure.addMessage(ErrorTreeElementKind.convertMessageFromCompilerErrorType(type), text, underFileGroup, file, line, column, data);
-    myBuilder.updateTree();
+    updateAddedElement(myErrorViewStructure.addMessage(
+      ErrorTreeElementKind.convertMessageFromCompilerErrorType(type), text, underFileGroup, file, line, column, data
+    ));
+  }
+
+  protected void updateAddedElement(@NotNull ErrorTreeElement element) {
+    Promise<?> promise;
+    final Object parent = myErrorViewStructure.getParentElement(element);
+    if (parent == null) {
+      promise = myStructureModel.invalidate();
+    }
+    else {
+      if (parent instanceof GroupingElement) {
+        final Object parent2 = myErrorViewStructure.getParentElement(parent);
+        // first, need to invalidate GroupingElement itself as it may have been just added
+        promise = parent2 != null ? myStructureModel.invalidate(parent2, true) : Promises.resolvedPromise();
+      }
+      else {
+        promise = Promises.resolvedPromise();
+      }
+      promise = promise.onProcessed(p -> myStructureModel.invalidate(parent, true));
+    }
+    if (element.getKind() == ErrorTreeElementKind.ERROR) {
+      // expand automatically only errors
+      promise.onSuccess(p -> makeVisible(element));
+    }
+  }
+
+  protected void makeVisible(@NotNull ErrorTreeElement element) {
+    myStructureModel.makeVisible(element, myTree, pp->{});
   }
 
   @Override
   public void addMessage(int type,
-                         @NotNull String[] text,
+                         String @NotNull [] text,
                          @Nullable String groupName,
                          @NotNull Navigatable navigatable,
                          @Nullable String exportTextPrefix,
@@ -311,8 +325,27 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     final String exportPrefix = exportTextPrefix == null ? "" : exportTextPrefix;
     final String renderPrefix = rendererTextPrefix == null ? "" : rendererTextPrefix;
     final ErrorTreeElementKind kind = ErrorTreeElementKind.convertMessageFromCompilerErrorType(type);
-    myErrorViewStructure.addNavigatableMessage(groupName, navigatable, kind, text, data, exportPrefix, renderPrefix, file);
-    myBuilder.updateTree();
+    updateAddedElement(myErrorViewStructure.addNavigatableMessage(
+      groupName, navigatable, kind, text, data, exportPrefix, renderPrefix, file
+    ));
+  }
+
+  public boolean removeMessage(int type, @NotNull String groupName, @NotNull Navigatable navigatable) {
+    final ErrorTreeElementKind kind = ErrorTreeElementKind.convertMessageFromCompilerErrorType(type);
+    List<NavigatableMessageElement> removed = myErrorViewStructure.removeNavigatableMessage(groupName, kind, navigatable);
+    if (removed.isEmpty()) return false;
+    removed.forEach(this::updateAddedElement);
+    return true;
+  }
+
+  public void removeAllInGroup(@NotNull String name) {
+    List<NavigatableMessageElement> removed = myErrorViewStructure.removeAllNavigatableMessagesInGroup(name);
+    removed.forEach(this::updateAddedElement);
+  }
+
+  public NavigatableMessageElement @Nullable [] getNavigatableMessages(@NotNull String groupName) {
+    ErrorTreeElement[] childElements = myErrorViewStructure.getChildElements(new GroupingElement(groupName, null, null));
+    return ObjectUtils.tryCast(childElements, NavigatableMessageElement[].class);
   }
 
   public ErrorViewStructure getErrorViewStructure() {
@@ -353,12 +386,25 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     return descriptors.size() == 1 ? descriptors.get(0) : null;
   }
 
+  @Nullable
+  public VirtualFile getSelectedFile() {
+    final ErrorTreeNodeDescriptor descriptor = getSelectedNodeDescriptor();
+    ErrorTreeElement element = descriptor != null? descriptor.getElement() : null;
+    if (element != null && !(element instanceof GroupingElement)) {
+      NodeDescriptor<?> parent = descriptor.getParentDescriptor();
+      if (parent instanceof ErrorTreeNodeDescriptor) {
+        element = ((ErrorTreeNodeDescriptor)parent).getElement();
+      }
+    }
+    return element instanceof GroupingElement? ((GroupingElement)element).getFile() : null;
+  }
+
   private List<ErrorTreeNodeDescriptor> getSelectedNodeDescriptors() {
-    TreePath[] paths = myTree.getSelectionPaths();
+    TreePath[] paths = myIsDisposed ? null : myTree.getSelectionPaths();
     if (paths == null) {
       return Collections.emptyList();
     }
-    List<ErrorTreeNodeDescriptor> result = ContainerUtil.newArrayList();
+    List<ErrorTreeNodeDescriptor> result = new ArrayList<>();
     for (TreePath path : paths) {
       DefaultMutableTreeNode lastPathNode = (DefaultMutableTreeNode)path.getLastPathComponent();
       Object userObject = lastPathNode.getUserObject();
@@ -430,24 +476,22 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     Content content = messageView.getContentManager().getContent(this);
     if (content != null) {
       messageView.getContentManager().removeContent(content, true);
+      Disposer.dispose(this);
     }
   }
-  
+
   public void setProgress(final String s, float fraction) {
-    initProgressPanel();
     myProgressText = s;
     myFraction = fraction;
     updateProgress();
   }
 
-  public void setProgressText(final String s) {
-    initProgressPanel();
+  public void setProgressText(String s) {
     myProgressText = s;
     updateProgress();
   }
-  
-  public void setFraction(final float fraction) {
-    initProgressPanel();
+
+  public void setFraction(float fraction) {
     myFraction = fraction;
     updateProgress();
   }
@@ -464,10 +508,13 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     if (myIsDisposed) {
       return;
     }
+
     myUpdateAlarm.cancelAllRequests();
     myUpdateAlarm.addRequest(() -> {
-      final float fraction = myFraction;
-      final String text = myProgressText;
+      initProgressPanel();
+
+      float fraction = myFraction;
+      String text = myProgressText;
       if (fraction > 0.0f) {
         myProgressLabel.setText((int)(fraction * 100 + 0.5) + "%  " + text);
       }
@@ -475,10 +522,8 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
         myProgressLabel.setText(text);
       }
     }, 50, ModalityState.NON_MODAL);
-
   }
 
-  
   private void initProgressPanel() {
     if (myProgressPanel == null) {
       myProgressPanel = new JPanel(new GridLayout(1, 2));
@@ -494,7 +539,6 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   public void collapseAll() {
     TreeUtil.collapseAll(myTree, 2);
   }
-
 
   public void expandAll() {
     TreePath[] selectionPaths = myTree.getSelectionPaths();
@@ -531,6 +575,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
     group.add(new StopAction());
     if (canHideWarnings()) {
       group.addSeparator();
+      group.add(new ShowInfosAction());
       group.add(new ShowWarningsAction());
     }
 
@@ -609,7 +654,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
 
   private class StopAction extends DumbAwareAction {
     StopAction() {
-      super(IdeBundle.message("action.stop"), null, AllIcons.Actions.Suspend);
+      super(IdeBundle.messagePointer("action.stop"), AllIcons.Actions.Suspend);
     }
 
     @Override
@@ -634,7 +679,7 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
 
   private class ShowWarningsAction extends ToggleAction implements DumbAware {
     ShowWarningsAction() {
-      super(IdeBundle.message("action.show.warnings"), null, AllIcons.General.ShowWarning);
+      super(IdeBundle.messagePointer("action.show.warnings"), AllIcons.General.ShowWarning);
     }
 
     @Override
@@ -644,15 +689,40 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
 
     @Override
     public void setSelected(@NotNull AnActionEvent event, boolean showWarnings) {
-      if (showWarnings == isHideWarnings()) {
-        myConfiguration.setHideWarnings(!showWarnings);
-        myBuilder.updateTree();
+      final boolean hideWarnings = !showWarnings;
+      if (myConfiguration.isHideWarnings() != hideWarnings) {
+        myConfiguration.setHideWarnings(hideWarnings);
+        myStructureModel.invalidate();
+      }
+    }
+  }
+
+  private class ShowInfosAction extends ToggleAction implements DumbAware {
+    ShowInfosAction() {
+      super(IdeBundle.messagePointer("action.show.infos"), AllIcons.General.ShowInfos);
+    }
+
+    @Override
+    public boolean isSelected(@NotNull AnActionEvent event) {
+      return !isHideInfos();
+    }
+
+    @Override
+    public void setSelected(@NotNull AnActionEvent event, boolean showInfos) {
+      final boolean hideInfos = !showInfos;
+      if (myConfiguration.isHideInfoMessages() != hideInfos) {
+        myConfiguration.setHideInfoMessages(hideInfos);
+        myStructureModel.invalidate();
       }
     }
   }
 
   public boolean isHideWarnings() {
     return myConfiguration.isHideWarnings();
+  }
+
+  public boolean isHideInfos() {
+    return myConfiguration.isHideInfoMessages();
   }
 
   private class MyTreeExpander implements TreeExpander {
@@ -720,17 +790,17 @@ public class NewErrorTreeViewPanel extends JPanel implements DataProvider, Occur
   }
 
   @Override
-  public void addFixedHotfixGroup(String text, List<SimpleErrorData> children) {
+  public void addFixedHotfixGroup(String text, List<? extends SimpleErrorData> children) {
     myErrorViewStructure.addFixedHotfixGroup(text, children);
   }
 
   @Override
-  public void addHotfixGroup(HotfixData hotfixData, List<SimpleErrorData> children) {
+  public void addHotfixGroup(HotfixData hotfixData, List<? extends SimpleErrorData> children) {
     myErrorViewStructure.addHotfixGroup(hotfixData, children, this);
   }
 
   @Override
   public void reload() {
-    myBuilder.updateTree();
+    myStructureModel.invalidate();
   }
 }

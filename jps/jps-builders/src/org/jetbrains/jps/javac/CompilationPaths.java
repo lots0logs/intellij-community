@@ -16,18 +16,22 @@ public class CompilationPaths {
   private final Collection<File> myPlatformClasspath;
   private final Collection<File> myClasspath;
   private final Collection<File> myUpgradeModulePath;
-  private final Collection<File> myModulePath;
+  private final ModulePath myModulePath;
   private final Collection<File> mySourcePath;
 
-  public CompilationPaths(Collection<File> platformClasspath, Collection<File> classpath, Collection<File> upgradeModulePath, Collection<File> modulePath, Collection<File> sourcePath) {
+  public CompilationPaths(Collection<? extends File> platformClasspath,
+                          Collection<? extends File> classpath,
+                          Collection<? extends File> upgradeModulePath,
+                          ModulePath modulePath,
+                          Collection<? extends File> sourcePath) {
     myPlatformClasspath = constCollection(platformClasspath);
     myClasspath = constCollection(classpath);
     myUpgradeModulePath = constCollection(upgradeModulePath);
-    myModulePath = constCollection(modulePath);
+    myModulePath = modulePath;
     mySourcePath = constCollection(sourcePath);
   }
 
-  private static <T> Collection<T> constCollection(Collection<T> col) {
+  private static <T> Collection<T> constCollection(Collection<? extends T> col) {
     return col == null || col.isEmpty()? Collections.emptyList() : Collections.unmodifiableCollection(col);
   }
 
@@ -47,7 +51,7 @@ public class CompilationPaths {
   }
 
   @NotNull
-  public Collection<File> getModulePath() {
+  public ModulePath getModulePath() {
     return myModulePath;
   }
 
@@ -56,66 +60,12 @@ public class CompilationPaths {
     return mySourcePath;
   }
 
-  public interface Builder {
-    CompilationPaths create();
-
-    Builder setPlatformClasspath(Collection<File> path);
-    Builder setClasspath(Collection<File> path);
-    Builder setUpgradeModulePath(Collection<File> path);
-    Builder setModulePath(Collection<File> path);
-    Builder setSourcePath(Collection<File> path);
-  }
-
-  public static CompilationPaths create(@Nullable Collection<File> platformCp,
-                                        @Nullable Collection<File> cp,
-                                        @Nullable Collection<File> upgradeModCp,
-                                        @Nullable Collection<File> modulePath,
-                                        @Nullable Collection<File> sourcePath) {
+  public static CompilationPaths create(@Nullable Collection<? extends File> platformCp,
+                                        @Nullable Collection<? extends File> cp,
+                                        @Nullable Collection<? extends File> upgradeModCp,
+                                        @NotNull ModulePath modulePath,
+                                        @Nullable Collection<? extends File> sourcePath) {
     return new CompilationPaths(platformCp, cp, upgradeModCp, modulePath, sourcePath);
   }
 
-  public static Builder builder() {
-    return new Builder() {
-      private Collection<File> mySourcePath;
-      private Collection<File> myModulePath;
-      private Collection<File> myUpgradeModulePath;
-      private Collection<File> myClasspath;
-      private Collection<File> myPlatformCp;
-
-      @Override
-      public CompilationPaths create() {
-        return CompilationPaths.create(myPlatformCp, myClasspath, myUpgradeModulePath, myModulePath, mySourcePath);
-      }
-
-      @Override
-      public Builder setPlatformClasspath(Collection<File> path) {
-        myPlatformCp = path;
-        return this;
-      }
-
-      @Override
-      public Builder setClasspath(Collection<File> path) {
-        myClasspath = path;
-        return this;
-      }
-
-      @Override
-      public Builder setUpgradeModulePath(Collection<File> path) {
-        myUpgradeModulePath = path;
-        return this;
-      }
-
-      @Override
-      public Builder setModulePath(Collection<File> path) {
-        myModulePath = path;
-        return this;
-      }
-
-      @Override
-      public Builder setSourcePath(Collection<File> path) {
-        mySourcePath = path;
-        return this;
-      }
-    };
-  }
 }

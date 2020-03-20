@@ -1,27 +1,14 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.extensionResources;
 
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
-import com.intellij.ide.plugins.PluginManager;
+import com.intellij.ide.plugins.IdeaPluginDescriptorImpl;
 import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.ide.scratch.RootType;
 import com.intellij.ide.scratch.ScratchFileService;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.extensions.PluginDescriptor;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Condition;
@@ -29,9 +16,10 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.*;
-import com.intellij.util.ObjectUtils;
 import com.intellij.util.PlatformUtils;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.io.DigestUtil;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -39,10 +27,10 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * <p> Extensions root type provide a common interface for plugins to access resources that are modifiable by the user. </p>
@@ -53,10 +41,9 @@ import java.util.Set;
  * </p>
  * <p> Bundled resources are updated automatically upon plugin version change. For bundled plugins, application version is used. </p>
  */
-public class ExtensionsRootType extends RootType {
+public final class ExtensionsRootType extends RootType {
   static final Logger LOG = Logger.getInstance(ExtensionsRootType.class);
 
-  private static final String HASH_ALGORITHM = "MD5";
   private static final String EXTENSIONS_PATH = "extensions";
   private static final String BACKUP_FILE_EXTENSION = "old";
 
@@ -168,11 +155,11 @@ public class ExtensionsRootType extends RootType {
     PluginId ownerPluginId = getOwner(resourcesDir);
     if (ownerPluginId == null) return null;
 
-    if (PluginManagerCore.CORE_PLUGIN_ID.equals(ownerPluginId.getIdString())) {
+    if (PluginManagerCore.CORE_ID == ownerPluginId) {
       return PlatformUtils.getPlatformPrefix();
     }
 
-    IdeaPluginDescriptor plugin = PluginManager.getPlugin(ownerPluginId);
+    IdeaPluginDescriptor plugin = PluginManagerCore.getPlugin(ownerPluginId);
     if (plugin != null) {
       return plugin.getName();
     }
@@ -204,23 +191,46 @@ public class ExtensionsRootType extends RootType {
   @NotNull
   private static List<URL> getBundledResourceUrls(@NotNull PluginId pluginId, @NotNull String path) throws IOException {
     String resourcesPath = EXTENSIONS_PATH + "/" + path;
-    IdeaPluginDescriptor plugin = PluginManager.getPlugin(pluginId);
-    ClassLoader pluginClassLoader = plugin != null ? plugin.getPluginClassLoader() : null;
-    Set<URL> urls = plugin == null ? null : ContainerUtil.newLinkedHashSet(ContainerUtil.toList(pluginClassLoader.getResources(resourcesPath)));
-    if (urls == null) return ContainerUtil.emptyList();
-
-    PluginId corePluginId = PluginId.findId(PluginManagerCore.CORE_PLUGIN_ID);
-    IdeaPluginDescriptor corePlugin = ObjectUtils.notNull(PluginManager.getPlugin(corePluginId));
-    ClassLoader coreClassLoader = corePlugin.getPluginClassLoader();
-    if (coreClassLoader != pluginClassLoader && !plugin.getUseIdeaClassLoader() && !pluginId.equals(corePluginId)) {
-      urls.removeAll(ContainerUtil.toList(coreClassLoader.getResources(resourcesPath)));
+    IdeaPluginDescriptorImpl plugin = null;
+    // search in enabled plugins only
+    for (IdeaPluginDescriptorImpl descriptor : PluginManagerCore.getLoadedPlugins(null)) {
+      if (descriptor.getPluginId() == pluginId) {
+        plugin = descriptor;
+        break;
+      }
     }
 
-    return ContainerUtil.newArrayList(urls);
+    if (plugin == null) {
+      return ContainerUtil.emptyList();
+    }
+
+    ClassLoader pluginClassLoader = plugin.getPluginClassLoader();
+    final Enumeration<URL> resources = pluginClassLoader.getResources(resourcesPath);
+    if (resources == null) {
+      return ContainerUtil.emptyList();
+    }
+
+    if (plugin.getUseIdeaClassLoader()) {
+      return ContainerUtil.toList(resources);
+    }
+
+    Set<URL> urls = new LinkedHashSet<>(ContainerUtil.toList(resources));
+    // exclude parent classloader resources from list
+    List<ClassLoader> dependentPluginClassLoaders = StreamEx.of(plugin.getDependentPluginIds())
+      .map(id -> PluginManagerCore.getPlugin(id))
+      .nonNull()
+      .map(PluginDescriptor::getPluginClassLoader)
+      .without(pluginClassLoader)
+      .collect(Collectors.toList());
+
+    for (ClassLoader classLoader : dependentPluginClassLoaders) {
+      urls.removeAll(ContainerUtil.toList(classLoader.getResources(resourcesPath)));
+    }
+    return new ArrayList<>(urls);
   }
 
   private static void extractResources(@NotNull VirtualFile from, @NotNull File to) throws IOException {
-    VfsUtilCore.visitChildrenRecursively(from, new VirtualFileVisitor(VirtualFileVisitor.NO_FOLLOW_SYMLINKS) {
+    VfsUtilCore.visitChildrenRecursively(from, new VirtualFileVisitor<Void>(VirtualFileVisitor.NO_FOLLOW_SYMLINKS) {
       @NotNull
       @Override
       public Result visitFileEx(@NotNull VirtualFile file) {
@@ -233,7 +243,7 @@ public class ExtensionsRootType extends RootType {
       }
 
       Result visitImpl(@NotNull VirtualFile file) throws IOException {
-        File child = new File(to, FileUtil.toSystemDependentName(ObjectUtils.notNull(VfsUtilCore.getRelativePath(file, from))));
+        File child = new File(to, FileUtil.toSystemDependentName(Objects.requireNonNull(VfsUtilCore.getRelativePath(file, from))));
         if (child.exists() && child.isDirectory() != file.isDirectory()) {
           renameToBackupCopy(child);
         }
@@ -250,7 +260,7 @@ public class ExtensionsRootType extends RootType {
         String oldText = child.exists() ? FileUtil.loadFile(child) : "";
         String newHash = hash(newText);
         String oldHash = hash(oldText);
-        boolean upToDate = oldHash != null && newHash != null && StringUtil.equals(oldHash, newHash);
+        boolean upToDate = StringUtil.equals(oldHash, newHash);
         if (upToDate) return CONTINUE;
         if (child.exists()) {
           renameToBackupCopy(child);
@@ -261,21 +271,15 @@ public class ExtensionsRootType extends RootType {
     }, IOException.class);
   }
 
-  @Nullable
+  @NotNull
   private static String hash(@NotNull String s) {
-    try {
-      MessageDigest md5 = MessageDigest.getInstance(HASH_ALGORITHM);
-      StringBuilder sb = new StringBuilder();
-      byte[] digest = md5.digest(s.getBytes(CharsetToolkit.UTF8_CHARSET));
-      for (byte b : digest) {
-        sb.append(Integer.toHexString(b));
-      }
-      return sb.toString();
+    MessageDigest md5 = DigestUtil.md5();
+    StringBuilder sb = new StringBuilder();
+    byte[] digest = md5.digest(s.getBytes(StandardCharsets.UTF_8));
+    for (byte b : digest) {
+      sb.append(Integer.toHexString(b));
     }
-    catch (NoSuchAlgorithmException e) {
-      LOG.error("Hash algorithm " + HASH_ALGORITHM + " is not supported", e);
-      return null;
-    }
+    return sb.toString();
   }
 
   private static void renameToBackupCopy(@NotNull File file) throws IOException {
@@ -292,7 +296,7 @@ public class ExtensionsRootType extends RootType {
   private void extractBundledExtensionsIfNeeded(@NotNull PluginId pluginId) throws IOException {
     if (!ApplicationManager.getApplication().isDispatchThread()) return;
 
-    IdeaPluginDescriptor plugin = PluginManager.getPlugin(pluginId);
+    IdeaPluginDescriptor plugin = PluginManagerCore.getPlugin(pluginId);
     if (plugin == null || !ResourceVersions.getInstance().shouldUpdateResourcesOf(plugin)) return;
 
     extractBundledResources(pluginId, "");

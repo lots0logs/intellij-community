@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.externalSystem.action;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -39,22 +25,22 @@ public class OpenTasksActivationManagerAction extends ExternalSystemNodeAction<A
 
   public OpenTasksActivationManagerAction() {
     super(AbstractExternalEntityData.class);
-    getTemplatePresentation().setText(ExternalSystemBundle.message("external.system.task.activation.title"));
+    getTemplatePresentation().setText(ExternalSystemBundle.messagePointer("external.system.task.activation.title"));
     getTemplatePresentation().setDescription(
-      ExternalSystemBundle.message("external.system.task.activation.description", "external system"));
+      ExternalSystemBundle.messagePointer("external.system.task.activation.description", "external system"));
   }
 
   @Override
   protected boolean isEnabled(@NotNull AnActionEvent e) {
     if (!super.isEnabled(e)) return false;
-    final List<ExternalSystemNode> selectedNodes = ExternalSystemDataKeys.SELECTED_NODES.getData(e.getDataContext());
+    final List<ExternalSystemNode> selectedNodes = e.getData(ExternalSystemDataKeys.SELECTED_NODES);
     if (selectedNodes == null || selectedNodes.size() != 1) return false;
     final Object externalData = selectedNodes.get(0).getData();
 
     ProjectSystemId projectSystemId = getSystemId(e);
-    e.getPresentation().setText(ExternalSystemBundle.message("external.system.task.activation.title"));
+    e.getPresentation().setText(ExternalSystemBundle.messagePointer("external.system.task.activation.title"));
     e.getPresentation().setDescription(
-      ExternalSystemBundle.message("external.system.task.activation.description", projectSystemId.getReadableName()));
+      ExternalSystemBundle.messagePointer("external.system.task.activation.description", projectSystemId.getReadableName()));
     final boolean isProjectNode = externalData instanceof ProjectData || externalData instanceof ModuleData;
     return isProjectNode && StringUtil.isNotEmpty(((ExternalConfigPathAware) externalData).getLinkedExternalProjectPath());
   }
@@ -65,7 +51,7 @@ public class OpenTasksActivationManagerAction extends ExternalSystemNodeAction<A
                       @NotNull AbstractExternalEntityData externalEntityData,
                       @NotNull AnActionEvent e) {
 
-    final List<ExternalSystemNode> selectedNodes = ExternalSystemDataKeys.SELECTED_NODES.getData(e.getDataContext());
+    final List<ExternalSystemNode> selectedNodes = e.getData(ExternalSystemDataKeys.SELECTED_NODES);
     final ExternalSystemNode<?> externalSystemNode = ContainerUtil.getFirstItem(selectedNodes);
     assert externalSystemNode != null;
 

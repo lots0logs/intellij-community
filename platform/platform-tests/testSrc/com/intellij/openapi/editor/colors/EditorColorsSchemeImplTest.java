@@ -55,13 +55,8 @@ public class EditorColorsSchemeImplTest extends EditorColorSchemeTestCase {
     }
   }
 
-  /**
-   * TODO<rv> FIX PROPERLY
-   * This is a hack: since font name is taken from default scheme (why?) where it is explicitly defined as "Dejavu Sans", font names
-   * do not match because default font name on linux in headless environment falls back to FALLBACK_FONT_FAMILY
-   */
   private static String substLinuxFontName(@NotNull String fontName) {
-    return SystemInfo.isLinux && GraphicsEnvironment.isHeadless() && FontPreferences.LINUX_DEFAULT_FONT_FAMILY.equals(fontName)?
+    return SystemInfo.isLinux && GraphicsEnvironment.isHeadless() && FontPreferences.LINUX_DEFAULT_FONT_FAMILY.equals(fontName) ?
            FontPreferences.FALLBACK_FONT_FAMILY :
            fontName;
   }
@@ -224,6 +219,22 @@ public class EditorColorsSchemeImplTest extends EditorColorSchemeTestCase {
                                    fontName2, 21);
     assertEquals(fontName2, myScheme.getConsoleFontName());
     assertEquals(21, myScheme.getConsoleFontSize());
+  }
+
+  public void testWriteColorWithAlpha() throws Exception {
+    EditorColorsScheme defaultScheme = EditorColorsManager.getInstance().getScheme(EditorColorsScheme.DEFAULT_SCHEME_NAME);
+    EditorColorsScheme scheme = (EditorColorsScheme)defaultScheme.clone();
+    scheme.setName("test");
+    scheme.setColor(ColorKey.createColorKey("BASE_COLOR"), new Color(0x80, 0x81, 0x82));
+    scheme.setColor(ColorKey.createColorKey("ALPHA_COLOR"), new Color(0x80, 0x81, 0x82, 0x83));
+    EditorColorSchemeTestCase.assertXmlOutputEquals(
+      "<scheme name=\"test\" version=\"142\" parent_scheme=\"Default\">\n" +
+      "  <colors>\n" +
+      "    <option name=\"ALPHA_COLOR\" value=\"80818283\" />\n" +
+      "    <option name=\"BASE_COLOR\" value=\"808182\" />\n" +
+      "  </colors>\n" +
+      "</scheme>",
+      serialize(scheme));
   }
 
   public void testWriteInheritedFromDefault() throws Exception {

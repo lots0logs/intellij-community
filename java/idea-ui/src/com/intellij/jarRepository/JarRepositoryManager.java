@@ -2,6 +2,8 @@
 package com.intellij.jarRepository;
 
 import com.intellij.CommonBundle;
+import com.intellij.core.JavaPsiBundle;
+import com.intellij.ide.JavaUiBundle;
 import com.intellij.jarRepository.services.MavenRepositoryServicesManager;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
@@ -30,7 +32,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.util.Processor;
 import com.intellij.util.concurrency.SequentialTaskExecutor;
-import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashMap;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -61,7 +62,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class JarRepositoryManager {
-  private static final Logger LOG = Logger.getInstance("#org.jetbrains.idea.maven.utils.library.RepositoryAttachHandler");
+  private static final Logger LOG = Logger.getInstance(JarRepositoryManager.class);
 
   private static final String MAVEN_REPOSITORY_MACRO = "$MAVEN_REPOSITORY$";
   private static final String DEFAULT_REPOSITORY_PATH = ".m2/repository";
@@ -91,76 +92,55 @@ public class JarRepositoryManager {
       return null;
     }
 
-    final String coord = dialog.getCoordinateText();
     final boolean attachSources = dialog.getAttachSources();
     final boolean attachJavaDoc = dialog.getAttachJavaDoc();
     final boolean attachAnnotations = dialog.getAttachExternalAnnotations();
-    boolean includeTransitiveDependencies = dialog.getIncludeTransitiveDependencies();
     final String copyTo = dialog.getDirectoryPath();
+    JpsMavenRepositoryLibraryDescriptor libraryDescriptor = dialog.getSelectedLibraryDescriptor();
 
-    final EnumSet<ArtifactKind> artifactKinds = kindsOf(attachSources, attachJavaDoc);
+    final EnumSet<ArtifactKind> artifactKinds = ArtifactKind.kindsOf(attachSources, attachJavaDoc, libraryDescriptor.getPackaging());
     if (attachAnnotations) {
       artifactKinds.add(ArtifactKind.ANNOTATIONS);
     }
 
     final NewLibraryConfiguration config = resolveAndDownload(
-      project, coord, artifactKinds, includeTransitiveDependencies, copyTo, RemoteRepositoriesConfiguration.getInstance(project).getRepositories()
+      project, libraryDescriptor, artifactKinds, copyTo, RemoteRepositoriesConfiguration.getInstance(project).getRepositories()
     );
     if (config == null) {
-      Messages.showErrorDialog(parentComponent, "No files were downloaded for " + coord, CommonBundle.getErrorTitle());
+      Messages.showErrorDialog(parentComponent, JavaUiBundle.message("error.message.no.files.were.downloaded.for.0", libraryDescriptor.getMavenId()), CommonBundle.getErrorTitle());
     }
     return config;
   }
 
-  private static NewLibraryConfiguration resolveAndDownload(Project project,
-                                                            String coord,
-                                                            EnumSet<ArtifactKind> kinds,
-                                                            boolean includeTransitiveDependencies,
-                                                            String copyTo,
-                                                            Collection<RemoteRepositoryDescription> repositories) {
-    String packaging = JpsMavenRepositoryLibraryDescriptor.DEFAULT_PACKAGING;
-    for (ArtifactKind kind : kinds) {
-      if (kind.getClassifier().isEmpty()) {
-        packaging = kind.getExtension(); // correct packaging according to the requested artifact kind
-        break;
-      }
+  @Nullable
+  public static NewLibraryConfiguration resolveAndDownload(@NotNull Project project,
+                                                           @NotNull JpsMavenRepositoryLibraryDescriptor descriptor,
+                                                           Set<ArtifactKind> kinds,
+                                                           String copyTo,
+                                                           Collection<RemoteRepositoryDescription> repositories) {
+    final Collection<OrderRoot> roots = new ArrayList<>();
+    if (descriptor.getMavenId() != null) {
+      roots.addAll(loadDependenciesModal(project, descriptor, kinds, repositories, copyTo));
     }
-    RepositoryLibraryProperties props = new RepositoryLibraryProperties(coord, packaging, includeTransitiveDependencies);
-    final JpsMavenRepositoryLibraryDescriptor libDescriptor = props.getRepositoryLibraryDescriptor();
-    final Collection<OrderRoot> roots = ContainerUtil.newArrayList();
-    if (libDescriptor.getMavenId() != null) {
-      roots.addAll(loadDependenciesModal(project, libDescriptor, kinds, repositories, copyTo));
-    }
-
     if (!roots.isEmpty()) {
       notifyArtifactsDownloaded(project, roots);
-      return createNewLibraryConfiguration(props, roots);
+      return createNewLibraryConfiguration(new RepositoryLibraryProperties(descriptor), roots);
     }
     return null;
   }
 
   @Nullable
   public static NewLibraryConfiguration resolveAndDownload(@NotNull Project project,
-                                                            String coord,
-                                                            boolean attachSources,
-                                                            boolean attachJavaDoc,
-                                                            boolean includeTransitiveDependencies,
-                                                            String copyTo,
-                                                            Collection<RemoteRepositoryDescription> repositories) {
-    return resolveAndDownload(project, coord, attachSources, attachJavaDoc, JpsMavenRepositoryLibraryDescriptor.DEFAULT_PACKAGING,
-                              includeTransitiveDependencies, copyTo, repositories);
-  }
-
-  @Nullable
-  public static NewLibraryConfiguration resolveAndDownload(@NotNull Project project,
-                                                            String coord,
-                                                            boolean attachSources,
-                                                            boolean attachJavaDoc,
-                                                            String packaging,
-                                                            boolean includeTransitiveDependencies,
-                                                            String copyTo,
-                                                            Collection<RemoteRepositoryDescription> repositories) {
-    return resolveAndDownload(project, coord, kindsOf(attachSources, attachJavaDoc, packaging), includeTransitiveDependencies, copyTo, repositories);
+                                                           String coord,
+                                                           boolean attachSources,
+                                                           boolean attachJavaDoc,
+                                                           boolean includeTransitiveDependencies,
+                                                           String copyTo,
+                                                           Collection<RemoteRepositoryDescription> repositories) {
+    JpsMavenRepositoryLibraryDescriptor libraryDescriptor = new JpsMavenRepositoryLibraryDescriptor(coord, includeTransitiveDependencies, Collections.emptyList());
+    return resolveAndDownload(
+      project, libraryDescriptor, ArtifactKind.kindsOf(attachSources, attachJavaDoc, libraryDescriptor.getPackaging()), copyTo, repositories
+    );
   }
 
   @NotNull
@@ -216,7 +196,7 @@ public class JarRepositoryManager {
                                                             @Nullable Collection<RemoteRepositoryDescription> repositories) {
     final JpsMavenRepositoryLibraryDescriptor libDescriptor = libraryProps.getRepositoryLibraryDescriptor();
     if (libDescriptor.getMavenId() != null) {
-      EnumSet<ArtifactKind> kinds = kindsOf(loadSources, loadJavadoc, libraryProps.getPackaging());
+      EnumSet<ArtifactKind> kinds = ArtifactKind.kindsOf(loadSources, loadJavadoc, libraryProps.getPackaging());
       return loadDependenciesModal(project, libDescriptor, kinds, repositories, copyTo);
     }
     return Collections.emptyList();
@@ -240,7 +220,7 @@ public class JarRepositoryManager {
                                                                boolean loadJavadoc,
                                                                @Nullable List<RemoteRepositoryDescription> repos,
                                                                @Nullable String copyTo) {
-    EnumSet<ArtifactKind> kinds = kindsOf(loadSources, loadJavadoc, libraryProps.getPackaging());
+    EnumSet<ArtifactKind> kinds = ArtifactKind.kindsOf(loadSources, loadJavadoc, libraryProps.getPackaging());
     return loadDependenciesAsync(
       project,
       libraryProps.getRepositoryLibraryDescriptor(),
@@ -274,22 +254,6 @@ public class JarRepositoryManager {
       repositories = RemoteRepositoriesConfiguration.getInstance(project).getRepositories();
     }
     return repositories;
-  }
-
-  protected static EnumSet<ArtifactKind> kindsOf(boolean loadSources, boolean loadJavadoc, String... artifactPackaging) {
-    final EnumSet<ArtifactKind> kinds = ArtifactKind.kindsOf(loadSources, loadJavadoc);
-    if (artifactPackaging.length == 0) {
-      kinds.add(ArtifactKind.ARTIFACT);
-    }
-    else {
-      for (String packaging : artifactPackaging) {
-        final ArtifactKind artifact = ArtifactKind.find(ArtifactKind.ARTIFACT.getClassifier(), packaging);
-        if (artifact != null) {
-          kinds.add(artifact);
-        }
-      }
-    }
-    return kinds;
   }
 
   @NotNull
@@ -349,7 +313,7 @@ public class JarRepositoryManager {
     else {
       template = new RepositoryArtifactDescription(new RepositoryLibraryProperties(coord, packaging, true), null);
     }
-    ProgressManager.getInstance().run(new Task.Backgroundable(project, "Maven", false) {
+    ProgressManager.getInstance().run(new Task.Backgroundable(project, JavaPsiBundle.message("task.background.title.maven"), false) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
         final List<Pair<RepositoryArtifactDescription, RemoteRepositoryDescription>> resultList = new ArrayList<>();
@@ -388,7 +352,7 @@ public class JarRepositoryManager {
   public static void searchRepositories(Project project,
                                         Collection<String> serviceUrls,
                                         Processor<? super Collection<RemoteRepositoryDescription>> resultProcessor) {
-    ProgressManager.getInstance().run(new Task.Backgroundable(project, "Maven", false) {
+    ProgressManager.getInstance().run(new Task.Backgroundable(project, JavaPsiBundle.message("task.background.title.maven"), false) {
       @Override
       public void run(@NotNull ProgressIndicator indicator) {
         final Ref<List<RemoteRepositoryDescription>> result = Ref.create(Collections.emptyList());
@@ -451,7 +415,7 @@ public class JarRepositoryManager {
   private static <T> Promise<T> submitBackgroundJob(@NotNull Function<? super ProgressIndicator, ? extends T> job) {
     ModalityState startModality = ModalityState.defaultModalityState();
     AsyncPromise<T> promise = new AsyncPromise<>();
-    JobExecutor.INSTANCE.submit(() -> {
+    JobExecutor.INSTANCE.execute(() -> {
       try {
         ourTasksInProgress.incrementAndGet();
         final ProgressIndicator indicator = new EmptyProgressIndicator(startModality);
@@ -559,7 +523,7 @@ public class JarRepositoryManager {
           }
         }
         // search for jar file first otherwise lib root won't be found!
-        manager.refreshAndFindFileByUrl(VfsUtilCore.pathToUrl(FileUtil.toSystemIndependentName(toFile.getPath())));
+        manager.refreshAndFindFileByUrl(VfsUtilCore.pathToUrl(toFile.getPath()));
         final String url = VfsUtil.getUrlForLibraryRoot(toFile);
         final VirtualFile file = manager.refreshAndFindFileByUrl(url);
         if (file != null) {

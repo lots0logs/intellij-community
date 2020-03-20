@@ -1,30 +1,17 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.intellij.plugins.intelliLang.inject;
 
 import com.intellij.codeInsight.completion.CompletionUtilCoreImpl;
 import com.intellij.lang.Language;
 import com.intellij.lang.injection.InjectedLanguageManager;
-import com.intellij.openapi.components.ServiceManager;
+import com.intellij.openapi.components.Service;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Segment;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiLanguageInjectionHost;
 import com.intellij.psi.SmartPointerManager;
 import com.intellij.psi.SmartPsiElementPointer;
+import com.intellij.psi.impl.source.tree.injected.changesHandler.CommonInjectedFileChangesHandlerKt;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.containers.ContainerUtil;
@@ -37,14 +24,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-/**
- * @author Gregory.Shrago
- */
-public class TemporaryPlacesRegistry {
+@Service
+public final class TemporaryPlacesRegistry {
   private final Project myProject;
   private final List<TempPlace> myTempPlaces = ContainerUtil.createLockFreeCopyOnWriteList();
 
-  private final PsiModificationTracker myModificationTracker;
   private volatile long myPsiModificationCounter;
 
   private final LanguageInjectionSupport myInjectorSupport = new AbstractLanguageInjectionSupport() {
@@ -59,9 +43,8 @@ public class TemporaryPlacesRegistry {
       return true;
     }
 
-    @NotNull
     @Override
-    public Class[] getPatternClasses() {
+    public Class<?> @NotNull [] getPatternClasses() {
       return ArrayUtil.EMPTY_CLASS_ARRAY;
     }
 
@@ -77,28 +60,43 @@ public class TemporaryPlacesRegistry {
     }
   };
 
-  public static TemporaryPlacesRegistry getInstance(final Project project) {
-    return ServiceManager.getService(project, TemporaryPlacesRegistry.class);
+  public static TemporaryPlacesRegistry getInstance(@NotNull Project project) {
+    return project.getService(TemporaryPlacesRegistry.class);
   }
 
-  public TemporaryPlacesRegistry(Project project, PsiModificationTracker modificationTracker) {
+  public TemporaryPlacesRegistry(@NotNull Project project) {
     myProject = project;
-    myModificationTracker = modificationTracker;
   }
 
   private List<TempPlace> getInjectionPlacesSafe() {
-    long modificationCount = myModificationTracker.getModificationCount();
-    if (myPsiModificationCounter == modificationCount) return myTempPlaces;
+    long modificationCount = PsiModificationTracker.SERVICE.getInstance(myProject).getModificationCount();
+    if (myPsiModificationCounter == modificationCount) {
+      return myTempPlaces;
+    }
+
     myPsiModificationCounter = modificationCount;
     final List<TempPlace> placesToRemove = ContainerUtil.findAll(myTempPlaces, place -> {
       PsiLanguageInjectionHost element = place.elementPointer.getElement();
+
       if (element == null) {
+        Segment range = place.elementPointer.getRange();
+        if (range == null) return true;
+        PsiFile file = place.elementPointer.getContainingFile();
+        if (file == null) return true;
+        PsiLanguageInjectionHost newHost = CommonInjectedFileChangesHandlerKt.getInjectionHostAtRange(file, range);
+        if (newHost == null) return true;
+
+        newHost.putUserData(LanguageInjectionSupport.TEMPORARY_INJECTED_LANGUAGE, place.language);
+        place.elementPointer = SmartPointerManager.createPointer(newHost);
+      }
+      else if (!element.isValidHost()) {
+        element.putUserData(LanguageInjectionSupport.TEMPORARY_INJECTED_LANGUAGE, null);
         return true;
       }
       else {
         element.putUserData(LanguageInjectionSupport.TEMPORARY_INJECTED_LANGUAGE, place.language);
-        return false;
       }
+      return false;
     });
     if (!placesToRemove.isEmpty()) {
       myTempPlaces.removeAll(placesToRemove);
@@ -152,8 +150,7 @@ public class TemporaryPlacesRegistry {
 
   public void addHostWithUndo(final PsiLanguageInjectionHost host, final InjectedLanguage language) {
     InjectedLanguage prevLanguage = host.getUserData(LanguageInjectionSupport.TEMPORARY_INJECTED_LANGUAGE);
-    SmartPointerManager manager = SmartPointerManager.getInstance(myProject);
-    SmartPsiElementPointer<PsiLanguageInjectionHost> pointer = manager.createSmartPsiElementPointer(host);
+    SmartPsiElementPointer<PsiLanguageInjectionHost> pointer = SmartPointerManager.getInstance(myProject).createSmartPsiElementPointer(host);
     TempPlace prevPlace = new TempPlace(prevLanguage, pointer);
     TempPlace place = new TempPlace(language, pointer);
     Configuration.replaceInjectionsWithUndo(
@@ -177,8 +174,8 @@ public class TemporaryPlacesRegistry {
   }
 
   private static class TempPlace {
-    public final InjectedLanguage language;
-    public final SmartPsiElementPointer<PsiLanguageInjectionHost> elementPointer;
+    final InjectedLanguage language;
+    SmartPsiElementPointer<PsiLanguageInjectionHost> elementPointer;
 
     TempPlace(InjectedLanguage language, SmartPsiElementPointer<PsiLanguageInjectionHost> elementPointer) {
       this.language = language;

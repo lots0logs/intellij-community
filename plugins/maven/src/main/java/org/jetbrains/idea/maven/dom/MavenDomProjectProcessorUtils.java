@@ -25,9 +25,7 @@ import com.intellij.psi.xml.XmlFile;
 import com.intellij.psi.xml.XmlTag;
 import com.intellij.util.Function;
 import com.intellij.util.Processor;
-import com.intellij.util.SmartList;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.hash.HashSet;
 import com.intellij.util.xml.DomUtil;
 import com.intellij.util.xml.GenericDomValue;
 import com.intellij.util.xml.impl.GenericDomValueReference;
@@ -40,6 +38,7 @@ import org.jetbrains.idea.maven.utils.MavenUtil;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 public class MavenDomProjectProcessorUtils {
@@ -55,7 +54,7 @@ public class MavenDomProjectProcessorUtils {
     return models;
   }
 
-  private static void collectChildrenProjects(@NotNull final MavenDomProjectModel model, @NotNull Set<MavenDomProjectModel> models) {
+  private static void collectChildrenProjects(@NotNull final MavenDomProjectModel model, @NotNull Set<? super MavenDomProjectModel> models) {
     MavenProject mavenProject = MavenDomUtil.findProject(model);
     if (mavenProject != null) {
       final Project project = model.getManager().getProject();
@@ -327,45 +326,45 @@ public class MavenDomProjectProcessorUtils {
   }
 
 
+  private static boolean processDependencyRecurrently(@NotNull final Processor<? super MavenDomDependency> processor,
+                                                      @NotNull MavenDomDependency domDependency,
+                                                      @NotNull Set<String> recursionProtector) {
+    if ("import".equals(domDependency.getScope().getRawText())) {
+      GenericDomValue<String> version = domDependency.getVersion();
+      if (version.getXmlElement() != null) {
+        GenericDomValueReference<String> reference = new GenericDomValueReference<>(version);
+        PsiElement resolve = reference.resolve();
+        if (resolve instanceof XmlFile) {
+          if (!recursionProtector.add(((XmlFile)resolve).getVirtualFile().getPath())) {
+            return false;
+          }
+          MavenDomProjectModel dependModel = MavenDomUtil.getMavenDomModel((PsiFile)resolve, MavenDomProjectModel.class);
+          if (dependModel == null) {
+            return false;
+          }
+          for (MavenDomDependency dependency : dependModel.getDependencyManagement().getDependencies().getDependencies()) {
+            if (processDependencyRecurrently(processor, dependency, recursionProtector)) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    else {
+      if (processor.process(domDependency)) return true;
+    }
+    return false;
+  }
+
+
   public static boolean processDependenciesInDependencyManagement(@NotNull MavenDomProjectModel projectDom,
                                                                   @NotNull final Processor<? super MavenDomDependency> processor,
                                                                   @NotNull final Project project) {
 
     Processor<MavenDomDependencies> managedDependenciesListProcessor = dependencies -> {
-      SmartList<MavenDomDependency> importDependencies = null;
-
       for (MavenDomDependency domDependency : dependencies.getDependencies()) {
-        if ("import".equals(domDependency.getScope().getRawText())) {
-          if (importDependencies == null) {
-            importDependencies = new SmartList<>();
-          }
-
-          importDependencies.add(domDependency);
-        }
-        else {
-          if (processor.process(domDependency)) return true;
-        }
+        if (processDependencyRecurrently(processor, domDependency, new HashSet<>())) return true;
       }
-
-      if (importDependencies != null) {
-        for (MavenDomDependency domDependency : importDependencies) {
-          GenericDomValue<String> version = domDependency.getVersion();
-          if (version.getXmlElement() != null) {
-            GenericDomValueReference<String> reference = new GenericDomValueReference<>(version);
-            PsiElement resolve = reference.resolve();
-
-            if (resolve instanceof XmlFile) {
-              MavenDomProjectModel dependModel = MavenDomUtil.getMavenDomModel((PsiFile)resolve, MavenDomProjectModel.class);
-              if (dependModel != null) {
-                for (MavenDomDependency dep : dependModel.getDependencyManagement().getDependencies().getDependencies()) {
-                  if (processor.process(dep)) return true;
-                }
-              }
-            }
-          }
-        }
-      }
-
       return false;
     };
 
@@ -441,9 +440,9 @@ public class MavenDomProjectProcessorUtils {
 
 
   private static <T> boolean processSettingsXml(@Nullable MavenProject mavenProject,
-                                                @NotNull Processor<T> processor,
+                                                @NotNull Processor<? super T> processor,
                                                 @NotNull Project project,
-                                                Function<? super MavenDomProfile, T> domProfileFunction) {
+                                                Function<? super MavenDomProfile, ? extends T> domProfileFunction) {
     MavenGeneralSettings settings = MavenProjectsManager.getInstance(project).getGeneralSettings();
 
     for (VirtualFile each : settings.getEffectiveSettingsFiles()) {
@@ -457,10 +456,10 @@ public class MavenDomProjectProcessorUtils {
 
   private static <T> boolean processProject(MavenDomProjectModel projectDom,
                                             MavenProject mavenProjectOrNull,
-                                            Processor<T> processor,
+                                            Processor<? super T> processor,
                                             Project project,
-                                            Function<? super MavenDomProfile, T> domProfileFunction,
-                                            Function<? super MavenDomProjectModel, T> projectDomFunction) {
+                                            Function<? super MavenDomProfile, ? extends T> domProfileFunction,
+                                            Function<? super MavenDomProjectModel, ? extends T> projectDomFunction) {
 
     if (processProfilesXml(MavenDomUtil.getVirtualFile(projectDom), mavenProjectOrNull, processor, project, domProfileFunction)) {
       return true;
@@ -474,9 +473,9 @@ public class MavenDomProjectProcessorUtils {
 
   private static <T> boolean processProfilesXml(VirtualFile projectFile,
                                                 MavenProject mavenProjectOrNull,
-                                                Processor<T> processor,
+                                                Processor<? super T> processor,
                                                 Project project,
-                                                Function<? super MavenDomProfile, T> f) {
+                                                Function<? super MavenDomProfile, ? extends T> f) {
     VirtualFile profilesFile = MavenUtil.findProfilesXmlFile(projectFile);
     if (profilesFile == null) return false;
 
@@ -488,8 +487,8 @@ public class MavenDomProjectProcessorUtils {
 
   private static <T> boolean processProfiles(MavenDomProfiles profilesDom,
                                              MavenProject mavenProjectOrNull,
-                                             Processor<T> processor,
-                                             Function<? super MavenDomProfile, T> f) {
+                                             Processor<? super T> processor,
+                                             Function<? super MavenDomProfile, ? extends T> f) {
     Collection<String> activeProfiles =
       mavenProjectOrNull == null ? null : mavenProjectOrNull.getActivatedProfilesIds().getEnabledProfiles();
     for (MavenDomProfile each : profilesDom.getProfiles()) {
@@ -503,8 +502,8 @@ public class MavenDomProjectProcessorUtils {
   }
 
   private static <T> boolean processProfile(MavenDomProfile profileDom,
-                                            Processor<T> processor,
-                                            Function<? super MavenDomProfile, T> f) {
+                                            Processor<? super T> processor,
+                                            Function<? super MavenDomProfile, ? extends T> f) {
     T t = f.fun(profileDom);
     return t != null && processor.process(t);
   }

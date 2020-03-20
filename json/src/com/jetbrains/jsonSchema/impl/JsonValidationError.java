@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.impl;
 
 import com.intellij.codeInspection.LocalQuickFix;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.json.JsonBundle;
+import com.jetbrains.jsonSchema.extension.JsonErrorPriority;
 import com.jetbrains.jsonSchema.extension.JsonLikeSyntaxAdapter;
 import com.jetbrains.jsonSchema.impl.fixes.AddMissingPropertyFix;
 import com.jetbrains.jsonSchema.impl.fixes.RemoveProhibitedPropertyFix;
@@ -10,6 +11,7 @@ import com.jetbrains.jsonSchema.impl.fixes.SuggestEnumValuesFix;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.stream.Collectors;
@@ -65,13 +67,13 @@ public class JsonValidationError {
     public String getMessage(boolean trimIfNeeded) {
       if (myMissingPropertyIssues.size() == 1) {
         MissingPropertyIssueData prop = myMissingPropertyIssues.iterator().next();
-        return "property " + getPropertyNameWithComment(prop);
+        return JsonBundle.message("schema.validation.property", getPropertyNameWithComment(prop));
       }
 
       Collection<MissingPropertyIssueData> namesToDisplay = myMissingPropertyIssues;
       boolean trimmed = false;
       if (trimIfNeeded && namesToDisplay.size() > 3) {
-        namesToDisplay = ContainerUtil.newArrayList();
+        namesToDisplay = new ArrayList<>();
         Iterator<MissingPropertyIssueData> iterator = myMissingPropertyIssues.iterator();
         for (int i = 0; i < 3; i++) {
           namesToDisplay.add(iterator.next());
@@ -88,7 +90,7 @@ public class JsonValidationError {
         return firstHasEq ? -1 : 1;
       }).collect(Collectors.joining(", "));
       if (trimmed) allNames += ", ...";
-      return "properties " + allNames;
+      return JsonBundle.message("schema.validation.properties", allNames);
     }
   }
 
@@ -143,8 +145,7 @@ public class JsonValidationError {
     return myFixableIssueKind;
   }
 
-  @NotNull
-  public LocalQuickFix[] createFixes(@Nullable JsonLikeSyntaxAdapter quickFixAdapter) {
+  public LocalQuickFix @NotNull [] createFixes(@Nullable JsonLikeSyntaxAdapter quickFixAdapter) {
     if (quickFixAdapter == null) return LocalQuickFix.EMPTY_ARRAY;
     switch (myFixableIssueKind) {
       case MissingProperty:

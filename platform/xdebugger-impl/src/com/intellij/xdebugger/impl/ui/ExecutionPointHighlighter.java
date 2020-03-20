@@ -1,22 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.xdebugger.impl.ui;
 
-import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.application.TransactionGuard;
+import com.intellij.openapi.application.*;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ScrollType;
@@ -46,9 +31,6 @@ import org.jetbrains.annotations.Nullable;
 import javax.swing.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * @author nik
- */
 public class ExecutionPointHighlighter {
   private final Project myProject;
   private RangeHighlighter myRangeHighlighter;
@@ -71,24 +53,29 @@ public class ExecutionPointHighlighter {
   public void show(final @NotNull XSourcePosition position, final boolean notTopFrame,
                    @Nullable final GutterIconRenderer gutterIconRenderer) {
     updateRequested.set(false);
-    TransactionGuard.submitTransaction(myProject, () -> {
-      updateRequested.set(false);
+    AppUIExecutor
+      .onWriteThread(ModalityState.NON_MODAL)
+      .expireWith(myProject)
+      .submit(() -> {
+        updateRequested.set(false);
 
-      mySourcePosition = position;
+        mySourcePosition = position;
 
-      clearDescriptor();
-      myOpenFileDescriptor = XSourcePositionImpl.createOpenFileDescriptor(myProject, position);
-      if (!XDebuggerSettingManagerImpl.getInstanceImpl().getGeneralSettings().isScrollToCenter()) {
-        myOpenFileDescriptor.setScrollType(notTopFrame ? ScrollType.CENTER : ScrollType.MAKE_VISIBLE);
-      }
-      //see IDEA-125645 and IDEA-63459
-      //myOpenFileDescriptor.setUseCurrentWindow(true);
+        clearDescriptor();
+        myOpenFileDescriptor = XSourcePositionImpl.createOpenFileDescriptor(myProject, position);
+        if (!XDebuggerSettingManagerImpl.getInstanceImpl().getGeneralSettings().isScrollToCenter()) {
+          myOpenFileDescriptor.setScrollType(notTopFrame ? ScrollType.CENTER : ScrollType.MAKE_VISIBLE);
+        }
+        //see IDEA-125645 and IDEA-63459
+        //myOpenFileDescriptor.setUseCurrentWindow(true);
 
-      myGutterIconRenderer = gutterIconRenderer;
-      myNotTopFrame = notTopFrame;
-
-      doShow(true);
-    });
+        myGutterIconRenderer = gutterIconRenderer;
+        myNotTopFrame = notTopFrame;
+      }).thenAsync(ignored -> AppUIExecutor
+      .onUiThread()
+      .expireWith(myProject)
+      .submit(() -> doShow(true))
+    );
   }
 
   public void hide() {
@@ -223,16 +210,16 @@ public class ExecutionPointHighlighter {
   }
 
   private static void disableMouseHoverPopups(@NotNull final Editor editor, final boolean disable) {
-    if (ApplicationManager.getApplication().isUnitTestMode()) return;
+    Project project = editor.getProject();
+    if (ApplicationManager.getApplication().isUnitTestMode() || project == null) return;
 
     // need to always invoke later to maintain order of enabling/disabling
-    //noinspection SSBasedInspection
     SwingUtilities.invokeLater(() -> {
       if (disable) {
-        EditorMouseHoverPopupControl.disablePopups(editor);
+        EditorMouseHoverPopupControl.disablePopups(project);
       }
       else {
-        EditorMouseHoverPopupControl.enablePopups(editor);
+        EditorMouseHoverPopupControl.enablePopups(project);
       }
     });
   }

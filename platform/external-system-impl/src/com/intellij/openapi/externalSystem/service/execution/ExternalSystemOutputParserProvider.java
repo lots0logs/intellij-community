@@ -4,20 +4,19 @@ package com.intellij.openapi.externalSystem.service.execution;
 import com.intellij.build.output.BuildOutputParser;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.externalSystem.model.ProjectSystemId;
-import com.intellij.openapi.externalSystem.model.task.ExternalSystemTask;
-import org.jetbrains.annotations.ApiStatus;
+import com.intellij.openapi.externalSystem.model.task.ExternalSystemTaskId;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 /**
  * @author Vladislav.Soroka
  */
-@ApiStatus.Experimental
 public interface ExternalSystemOutputParserProvider {
   ExtensionPointName<ExternalSystemOutputParserProvider> EP_NAME =
     ExtensionPointName.create("com.intellij.externalSystemOutputParserProvider");
 
   ProjectSystemId getExternalSystemId();
 
-  List<BuildOutputParser> getBuildOutputParsers(ExternalSystemTask task);
+  List<BuildOutputParser> getBuildOutputParsers(@NotNull ExternalSystemTaskId taskId);
 }

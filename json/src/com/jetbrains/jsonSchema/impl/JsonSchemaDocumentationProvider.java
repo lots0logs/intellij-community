@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.jsonSchema.impl;
 
+import com.intellij.json.JsonBundle;
 import com.intellij.json.pointer.JsonPointerPosition;
 import com.intellij.json.psi.JsonObject;
 import com.intellij.json.psi.JsonProperty;
@@ -11,14 +12,15 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.FakePsiElement;
+import com.intellij.psi.impl.source.resolve.reference.impl.providers.PsiFileReference;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.containers.ContainerUtil;
 import com.jetbrains.jsonSchema.extension.JsonLikePsiWalker;
 import com.jetbrains.jsonSchema.extension.JsonSchemaFileProvider;
 import com.jetbrains.jsonSchema.ide.JsonSchemaService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -28,12 +30,6 @@ public class JsonSchemaDocumentationProvider implements DocumentationProvider {
   @Override
   public String getQuickNavigateInfo(PsiElement element, PsiElement originalElement) {
     return findSchemaAndGenerateDoc(element, originalElement, true, null);
-  }
-
-  @Nullable
-  @Override
-  public List<String> getUrlFor(PsiElement element, PsiElement originalElement) {
-    return null;
   }
 
   @Nullable
@@ -54,6 +50,7 @@ public class JsonSchemaDocumentationProvider implements DocumentationProvider {
                                                 @Nullable String forcedPropName) {
     if (element instanceof FakePsiElement) return null;
     element = isWhitespaceOrComment(originalElement) ? element : ObjectUtils.coalesce(originalElement, element);
+    if (originalElement != null && hasFileOrPointerReferences(originalElement.getReferences())) return null;
     final PsiFile containingFile = element.getContainingFile();
     if (containingFile == null) return null;
     final JsonSchemaService service = JsonSchemaService.Impl.get(element.getProject());
@@ -63,6 +60,15 @@ public class JsonSchemaDocumentationProvider implements DocumentationProvider {
     if (rootSchema == null) return null;
 
     return generateDoc(element, rootSchema, preferShort, forcedPropName);
+  }
+
+  private static boolean hasFileOrPointerReferences(PsiReference[] references) {
+    for (PsiReference reference : references) {
+      if (reference instanceof PsiFileReference
+          || reference instanceof JsonPointerReferenceProvider.JsonSchemaIdReference
+          || reference instanceof JsonPointerReferenceProvider.JsonPointerReference) return true;
+    }
+    return false;
   }
 
   private static boolean isWhitespaceOrComment(@Nullable PsiElement originalElement) {
@@ -97,7 +103,7 @@ public class JsonSchemaDocumentationProvider implements DocumentationProvider {
 
     String htmlDescription = null;
     boolean deprecated = false;
-    List<JsonSchemaType> possibleTypes = ContainerUtil.newArrayList();
+    List<JsonSchemaType> possibleTypes = new ArrayList<>();
     for (JsonSchemaObject schema : schemas) {
       if (htmlDescription == null) {
         htmlDescription = getBestDocumentation(preferShort, schema);
@@ -143,7 +149,7 @@ public class JsonSchemaDocumentationProvider implements DocumentationProvider {
       type = ": " + schemaType;
     }
 
-    String deprecationComment = deprecated ? " (deprecated)" : "";
+    String deprecationComment = deprecated ? JsonBundle.message("schema.documentation.deprecated.postfix") : "";
     if (preferShort) {
       htmlDescription = "<b>" + name + "</b>" + type + apiInfo + deprecationComment + (htmlDescription == null ? "" : ("<br/>" + htmlDescription));
     }
@@ -199,12 +205,6 @@ public class JsonSchemaDocumentationProvider implements DocumentationProvider {
     if ((element instanceof JsonProperty || isWhitespaceOrComment(element) && element.getParent() instanceof JsonObject) && object instanceof String) {
       return new FakeDocElement(element instanceof JsonProperty ? ((JsonProperty)element).getNameElement() : element, StringUtil.unquoteString((String)object));
     }
-    return null;
-  }
-
-  @Nullable
-  @Override
-  public PsiElement getDocumentationElementForLink(PsiManager psiManager, String link, PsiElement context) {
     return null;
   }
 

@@ -1,10 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.debugger;
 
 import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -118,7 +119,7 @@ public class PyLocalPositionConverter implements PyPositionConverter {
     VirtualFile vFile = getLocalFileSystem().findFileByPath(path);
 
     if (vFile == null) {
-      vFile = findEggEntry(path);
+      vFile = findEggEntry(getLocalFileSystem(), path);
     }
     return vFile;
   }
@@ -127,7 +128,7 @@ public class PyLocalPositionConverter implements PyPositionConverter {
     return LocalFileSystem.getInstance();
   }
 
-  private VirtualFile findEggEntry(String file) {
+  public static @Nullable VirtualFile findEggEntry(@NotNull VirtualFileSystem virtualFileSystem, @NotNull String file) {
     int ind = -1;
     for (String ext : EGG_EXTENSIONS) {
       ind = file.indexOf(ext);
@@ -135,7 +136,7 @@ public class PyLocalPositionConverter implements PyPositionConverter {
     }
     if (ind != -1) {
       String jarPath = file.substring(0, ind + 4);
-      VirtualFile jarFile = getLocalFileSystem().findFileByPath(jarPath);
+      VirtualFile jarFile = virtualFileSystem.findFileByPath(jarPath);
       if (jarFile != null) {
         String innerPath = file.substring(ind + 4);
         final VirtualFile jarRoot = JarFileSystem.getInstance().getJarRootForLocalFile(jarFile);
@@ -168,12 +169,13 @@ public class PyLocalPositionConverter implements PyPositionConverter {
       if (ind != -1) break;
     }
     if (ind != -1) {
-      return file.substring(0, ind + 4).toLowerCase() + file.substring(ind + 4);
+      return StringUtil.toLowerCase(file.substring(0, ind + 4)) + file.substring(ind + 4);
     }
     else {
-      return file.toLowerCase();
+      return StringUtil.toLowerCase(file);
     }
   }
+
   @Nullable
   public static XSourcePosition createXSourcePosition(@Nullable VirtualFile vFile, int line) {
     if (vFile != null) {

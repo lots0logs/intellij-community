@@ -22,8 +22,10 @@ import com.intellij.ide.util.projectWizard.importSources.JavaModuleSourceRoot;
 import com.intellij.ide.util.projectWizard.importSources.ProjectFromSourcesBuilder;
 import com.intellij.ide.util.projectWizard.importSources.ProjectStructureDetector;
 import com.intellij.ide.util.projectWizard.importSources.impl.JavaProjectStructureDetector;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
+import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -48,7 +50,7 @@ public class CloudGitProjectStructureDetector extends ProjectStructureDetector {
   @NotNull
   @Override
   public DirectoryProcessingResult detectRoots(@NotNull File dir,
-                                               @NotNull File[] children,
+                                               File @NotNull [] children,
                                                @NotNull File base,
                                                @NotNull List<DetectedProjectRoot> result) {
     detectApplicationRoot(dir, result);
@@ -71,20 +73,26 @@ public class CloudGitProjectStructureDetector extends ProjectStructureDetector {
       return;
     }
 
-    Project project = ProjectManager.getInstance().getDefaultProject();
-    GitRepository repository = GitRepositoryImpl.getInstance(repositoryRoot, project, false);
+    Disposable disposable = Disposer.newDisposable();
+    try {
+      Project project = ProjectManager.getInstance().getDefaultProject();
+      GitRepository repository = GitRepositoryImpl.createInstance(repositoryRoot, project, disposable, false);
 
-    for (CloudGitDeploymentDetector deploymentDetector : CloudGitDeploymentDetector.EP_NAME.getExtensions()) {
-      String applicationName = deploymentDetector.getFirstApplicationName(repository);
-      if (applicationName != null) {
-        result.add(new CloudGitProjectRoot(deploymentDetector, dir, repositoryRoot, applicationName));
+      for (CloudGitDeploymentDetector deploymentDetector : CloudGitDeploymentDetector.EP_NAME.getExtensions()) {
+        String applicationName = deploymentDetector.getFirstApplicationName(repository);
+        if (applicationName != null) {
+          result.add(new CloudGitProjectRoot(deploymentDetector, dir, repositoryRoot, applicationName));
+        }
       }
+    }
+    finally {
+      Disposer.dispose(disposable);
     }
   }
 
   private DirectoryProcessingResult detectJavaRoots(String javaSourceRootTypeName,
                                                     @NotNull File dir,
-                                                    @NotNull File[] children,
+                                                    File @NotNull [] children,
                                                     @NotNull File base,
                                                     @NotNull List<? super DetectedProjectRoot> result) {
     List<DetectedProjectRoot> detectedJavaRoots = new ArrayList<>();

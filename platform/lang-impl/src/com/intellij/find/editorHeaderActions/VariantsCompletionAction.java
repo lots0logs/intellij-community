@@ -1,30 +1,18 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.find.editorHeaderActions;
 
 import com.intellij.featureStatistics.FeatureUsageTracker;
+import com.intellij.ide.lightEdit.LightEditCompatible;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.colors.EditorFontType;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.psi.impl.cache.impl.id.IdTableBuilding;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBList;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.text.Matcher;
 import com.intellij.util.ui.GraphicsUtil;
 import org.jetbrains.annotations.NotNull;
@@ -39,7 +27,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-public class VariantsCompletionAction extends AnAction {
+public class VariantsCompletionAction extends DumbAwareAction implements LightEditCompatible {
   private final JTextComponent myTextField;
 
   public VariantsCompletionAction(JTextComponent textField) {
@@ -85,7 +73,7 @@ public class VariantsCompletionAction extends AnAction {
 
     IdTableBuilding.scanWords(new IdTableBuilding.ScanWordProcessor() {
         @Override
-        public void run(final CharSequence chars, @Nullable char[] charsArray, final int start, final int end) {
+        public void run(final CharSequence chars, char @Nullable [] charsArray, final int start, final int end) {
           final String word = chars.subSequence(start, end).toString();
           if (matcher.matches(word)) {
             words.add(word);
@@ -97,6 +85,6 @@ public class VariantsCompletionAction extends AnAction {
     ArrayList<String> sortedWords = new ArrayList<>(words);
     Collections.sort(sortedWords);
 
-    return ArrayUtil.toStringArray(sortedWords);
+    return ArrayUtilRt.toStringArray(sortedWords);
   }
 }

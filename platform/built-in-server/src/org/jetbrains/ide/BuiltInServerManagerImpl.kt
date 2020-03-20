@@ -17,8 +17,12 @@ import com.intellij.util.SystemProperties
 import com.intellij.util.Url
 import com.intellij.util.Urls
 import com.intellij.util.concurrency.AppExecutorUtil
+import com.intellij.util.io.serverBootstrap
 import com.intellij.util.net.NetUtils
-import org.jetbrains.builtInWebServer.*
+import org.jetbrains.builtInWebServer.BuiltInServerOptions
+import org.jetbrains.builtInWebServer.TOKEN_HEADER_NAME
+import org.jetbrains.builtInWebServer.TOKEN_PARAM_NAME
+import org.jetbrains.builtInWebServer.acquireToken
 import org.jetbrains.io.BuiltInServer
 import org.jetbrains.io.BuiltInServer.Companion.recommendedWorkerCount
 import org.jetbrains.io.NettyUtil
@@ -29,9 +33,12 @@ import java.net.NetworkInterface
 import java.net.URLConnection
 import java.util.*
 import java.util.concurrent.Future
+import java.util.function.Consumer
 
 private const val PORTS_COUNT = 20
 private const val PROPERTY_RPC_PORT = "rpc.port"
+
+private val LOG = logger<BuiltInServerManager>()
 
 class BuiltInServerManagerImpl : BuiltInServerManager() {
   private var serverStartFuture: Future<*>? = null
@@ -54,10 +61,8 @@ class BuiltInServerManagerImpl : BuiltInServerManager() {
   override fun createClientBootstrap() = NettyUtil.nioClientBootstrap(server!!.eventLoopGroup)
 
   companion object {
-    private val LOG = logger<BuiltInServerManager>()
-
     @JvmField
-    val NOTIFICATION_GROUP: NotNullLazyValue<NotificationGroup> = object : NotNullLazyValue<NotificationGroup>() {
+    internal val NOTIFICATION_GROUP: NotNullLazyValue<NotificationGroup> = object : NotNullLazyValue<NotificationGroup>() {
       override fun compute(): NotificationGroup {
         return NotificationGroup("Built-in Server", NotificationDisplayType.STICKY_BALLOON, true)
       }
@@ -76,7 +81,7 @@ class BuiltInServerManagerImpl : BuiltInServerManager() {
       }
 
       val options = BuiltInServerOptions.getInstance()
-      val idePort = BuiltInServerManager.getInstance().port
+      val idePort = getInstance().port
       if (options.builtInServerPort != port && idePort != port) {
         return false
       }
@@ -98,8 +103,12 @@ class BuiltInServerManagerImpl : BuiltInServerManager() {
     }
   }
 
+  fun createServerBootstrap() = serverBootstrap(server!!.eventLoopGroup)
+
   override fun waitForStart(): BuiltInServerManager {
-    LOG.assertTrue(ApplicationManager.getApplication().isUnitTestMode || !ApplicationManager.getApplication().isDispatchThread)
+    LOG.assertTrue(ApplicationManager.getApplication().isUnitTestMode ||
+                   ApplicationManager.getApplication().isHeadlessEnvironment ||
+                   !ApplicationManager.getApplication().isDispatchThread)
 
     var future: Future<*>?
     synchronized(this) {
@@ -115,28 +124,28 @@ class BuiltInServerManagerImpl : BuiltInServerManager() {
   }
 
   private fun startServerInPooledThread(): Future<*> {
-    return AppExecutorUtil.getAppExecutorService().submit {
-      try {
-        val mainServer = StartupUtil.getServer()
-        @Suppress("DEPRECATION")
-        server = when {
-          mainServer == null || mainServer.eventLoopGroup is io.netty.channel.oio.OioEventLoopGroup -> BuiltInServer.start(recommendedWorkerCount, defaultPort, PORTS_COUNT)
-          else -> BuiltInServer.start(mainServer.eventLoopGroup, false, defaultPort, PORTS_COUNT, true, null)
+    return StartupUtil.getServerFuture()
+      .thenAcceptAsync(Consumer { mainServer ->
+        try {
+          @Suppress("DEPRECATION")
+          server = when {
+            mainServer == null || mainServer.eventLoopGroup is io.netty.channel.oio.OioEventLoopGroup -> BuiltInServer.start(recommendedWorkerCount, defaultPort, PORTS_COUNT)
+            else -> BuiltInServer.start(mainServer.eventLoopGroup, false, defaultPort, PORTS_COUNT, true, null)
+          }
+          bindCustomPorts(server!!)
         }
-        bindCustomPorts(server!!)
-      }
-      catch (e: Throwable) {
-        LOG.info(e)
-        NOTIFICATION_GROUP.value.createNotification(
-          "Cannot start internal HTTP server. Git integration, JavaScript debugger and LiveEdit may operate with errors. " +
-          "Please check your firewall settings and restart " + ApplicationNamesInfo.getInstance().fullProductName,
-          NotificationType.ERROR).notify(null)
-        return@submit
-      }
+        catch (e: Throwable) {
+          LOG.info(e)
+          NOTIFICATION_GROUP.value.createNotification(
+            BuiltInServerBundle.message("notification.content.cannot.start.internal.http.server.git.integration.javascript.debugger.and.liveedit.may.operate.with.errors") +
+            BuiltInServerBundle.message("notification.content.please.check.your.firewall.settings.and.restart") + ApplicationNamesInfo.getInstance().fullProductName,
+            NotificationType.ERROR).notify(null)
+          return@Consumer
+        }
 
-      LOG.info("built-in server started, port ${server!!.port}")
-      Disposer.register(ApplicationManager.getApplication(), server!!)
-    }
+        LOG.info("built-in server started, port ${server!!.port}")
+        Disposer.register(ApplicationManager.getApplication(), server!!)
+      }, AppExecutorUtil.getAppExecutorService())
   }
 
   override fun isOnBuiltInWebServer(url: Url?): Boolean {

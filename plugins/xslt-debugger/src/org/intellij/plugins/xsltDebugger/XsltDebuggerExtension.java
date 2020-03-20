@@ -26,15 +26,15 @@ import com.intellij.execution.process.ProcessListener;
 import com.intellij.execution.runners.RunTab;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
-import com.intellij.ide.plugins.PluginManager;
 import com.intellij.ide.plugins.PluginManagerCore;
-import com.intellij.openapi.application.ex.ApplicationManagerEx;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.UserDataHolder;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiManager;
@@ -56,6 +56,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
@@ -69,6 +70,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
   public static final Key<XsltChecker.LanguageLevel> VERSION = Key.create("VERSION");
   private static final Key<Integer> PORT = Key.create("PORT");
   private static final Key<Manifest> MANIFEST = Key.create("MANIFEST");
+  private static final Key<String> ACCESS_TOKEN = Key.create("access token");
 
   @NonNls
   private static final String SAXON_6_JAR = "saxon.jar";
@@ -86,7 +88,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
   public ProcessListener createProcessListener(Project project, UserDataHolder extensionData) {
     final Integer port = extensionData.getUserData(PORT);
     assert port != null;
-    return new DebugProcessListener(project, port);
+    return new DebugProcessListener(project, port, extensionData.getUserData(ACCESS_TOKEN));
   }
 
   @Override
@@ -129,6 +131,10 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
       throw new CantRunException("Unable to find a free network port");
     }
 
+    String token = UUID.randomUUID().toString();
+    parameters.getVMParametersList().defineProperty("xslt.debugger.token", token);
+    extensionData.putUserData(ACCESS_TOKEN, token);
+
     final char c = File.separatorChar;
 
     final PluginId pluginId = PluginManagerCore.getPluginByClassName(getClass().getName());
@@ -137,7 +143,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
 
     final File pluginPath;
     if (pluginId != null) {
-      final IdeaPluginDescriptor descriptor = PluginManager.getPlugin(pluginId);
+      final IdeaPluginDescriptor descriptor = PluginManagerCore.getPlugin(pluginId);
       assert descriptor != null;
       pluginPath = descriptor.getPath();
     }
@@ -158,13 +164,13 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
       parameters.getClassPath().addTail(engineImpl.getAbsolutePath());
     } else {
       if (!(rtClasspath = new File(pluginPath, "classes")).exists()) {
-        if (ApplicationManagerEx.getApplicationEx().isInternal() && new File(pluginPath, "org").exists()) {
+        if (ApplicationManager.getApplication().isInternal() && new File(pluginPath, "org").exists()) {
           rtClasspath = pluginPath;
           final File engineImplInternal = new File(pluginPath, ".." + c + "intellij.xslt.debugger.engine.impl");
           assert engineImplInternal.exists() : engineImplInternal.getAbsolutePath();
           parameters.getClassPath().addTail(engineImplInternal.getAbsolutePath());
         } else {
-          throw new CantRunException("Runtime classes not found");
+          throw new CantRunException("Runtime classes not found at " + rtClasspath.getAbsolutePath());
         }
       }
 
@@ -192,7 +198,7 @@ public class XsltDebuggerExtension extends XsltRunnerExtension {
       }
     } else if (type != null) {
       throw new CantRunException("Unsupported Transformer type '" + type + "'");
-    } else if (parameters.getClassPath().getPathsString().toLowerCase().contains("xalan")) {
+    } else if (StringUtil.toLowerCase(parameters.getClassPath().getPathsString()).contains("xalan")) {
       if (isValidXalanPresent(parameters) == Boolean.TRUE) {
         parameters.getVMParametersList().defineProperty("xslt.transformer.type", "xalan");
       }

@@ -18,6 +18,7 @@ import com.intellij.psi.SingleRootFileViewProvider;
 import com.intellij.psi.search.ProjectScope;
 import com.intellij.psi.util.PsiUtilBase;
 import com.intellij.util.messages.MessageBus;
+import com.intellij.vcsUtil.VcsUtil;
 import org.jdom.Element;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -30,9 +31,11 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
   @NonNls private static final String ROOT_ATT_PREFIX = "root";
   @NonNls private static final String FILE_ATT = "file";
   private final MessageBus myBus;
+  private final Set<String> vcsIgnoreFileNames;
 
-  public HighlightingSettingsPerFile(MessageBus bus) {
+  public HighlightingSettingsPerFile(@NotNull Project project, @NotNull MessageBus bus) {
     myBus = bus;
+    vcsIgnoreFileNames = VcsUtil.getVcsIgnoreFileNames(project);
   }
 
   public static HighlightingSettingsPerFile getInstance(Project project){
@@ -84,8 +87,7 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
     return FileHighlightingSetting.FORCE_HIGHLIGHTING;
   }
 
-  @NotNull
-  private static FileHighlightingSetting[] getDefaults(@NotNull PsiFile file){
+  private static FileHighlightingSetting @NotNull [] getDefaults(@NotNull PsiFile file){
     final int rootsCount = file.getViewProvider().getLanguages().size();
     final FileHighlightingSetting[] fileHighlightingSettings = new FileHighlightingSetting[rootsCount];
     for (int i = 0; i < fileHighlightingSettings.length; i++) {
@@ -175,7 +177,7 @@ public class HighlightingSettingsPerFile extends HighlightingLevelManager implem
     final VirtualFile virtualFile = psiRoot.getContainingFile().getVirtualFile();
     if (virtualFile == null || !virtualFile.isValid()) return false;
 
-    if (ProjectUtil.isProjectOrWorkspaceFile(virtualFile)) {
+    if (ProjectUtil.isProjectOrWorkspaceFile(virtualFile) && !vcsIgnoreFileNames.contains(virtualFile.getName())) {
       return false;
     }
 

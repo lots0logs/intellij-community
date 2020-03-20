@@ -1,18 +1,4 @@
-/*
-* Copyright 2000-2017 JetBrains s.r.o.
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-* http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.uast.java
 
@@ -26,33 +12,36 @@ abstract class AbstractJavaUVariable(givenParent: UElement?) : JavaAbstractUElem
 
   abstract override val javaPsi: PsiVariable
 
-  @Suppress("unused") // Used in Kotlin 1.1.4, to be removed in 2018.1
-  @Deprecated("use AbstractJavaUVariable(givenParent) instead", ReplaceWith("AbstractJavaUVariable(givenParent)"))
-  constructor() : this(null)
+  @Suppress("OverridingDeprecatedMember")
+  override val psi
+    get() = javaPsi
 
   override val uastInitializer: UExpression? by lz {
-    val initializer = psi.initializer ?: return@lz null
-    getLanguagePlugin().convertElement(initializer, this) as? UExpression
+    val initializer = javaPsi.initializer ?: return@lz null
+    UastFacade.findPlugin(initializer)?.convertElement(initializer, this) as? UExpression
   }
 
-  override val annotations: List<JavaUAnnotation> by lz { psi.annotations.map { JavaUAnnotation(it, this) } }
-  override val typeReference: UTypeReferenceExpression? by lz { getLanguagePlugin().convertOpt<UTypeReferenceExpression>(psi.typeElement, this) }
+  override val uAnnotations: List<JavaUAnnotation> by lz { javaPsi.annotations.map { JavaUAnnotation(it, this) } }
+  override val typeReference: UTypeReferenceExpression? by lz {
+    javaPsi.typeElement?.let { UastFacade.findPlugin(it)?.convertOpt<UTypeReferenceExpression>(javaPsi.typeElement, this) }
+  }
 
   override val uastAnchor: UIdentifier
-    get() = UIdentifier(psi.nameIdentifier, this)
+    get() = UIdentifier(javaPsi.nameIdentifier, this)
 
-  override fun equals(other: Any?): Boolean = other is AbstractJavaUVariable && psi == other.psi
-  override fun hashCode(): Int = psi.hashCode()
+  override fun equals(other: Any?): Boolean = other is AbstractJavaUVariable && javaPsi == other.javaPsi
+  override fun hashCode(): Int = javaPsi.hashCode()
 }
 
 open class JavaUVariable(
-  psi: PsiVariable,
+  override val sourcePsi: PsiVariable,
   givenParent: UElement?
-) : AbstractJavaUVariable(givenParent), UVariableEx, PsiVariable by psi {
+) : AbstractJavaUVariable(givenParent), UVariableEx, PsiVariable by sourcePsi {
+  @Suppress("OverridingDeprecatedMember")
   override val psi: PsiVariable
     get() = javaPsi
 
-  override val javaPsi: PsiVariable = unwrap<UVariable, PsiVariable>(psi)
+  override val javaPsi: PsiVariable = sourcePsi
 
   companion object {
     fun create(psi: PsiVariable, containingElement: UElement?): UVariable {
@@ -65,36 +54,44 @@ open class JavaUVariable(
       }
     }
   }
+  override fun getOriginalElement(): PsiElement? = sourcePsi.originalElement
 }
 
 open class JavaUParameter(
-  psi: PsiParameter,
+  override val sourcePsi: PsiParameter,
   givenParent: UElement?
-) : AbstractJavaUVariable(givenParent), UParameterEx, PsiParameter by psi {
+) : AbstractJavaUVariable(givenParent), UParameterEx, PsiParameter by sourcePsi {
+
+  @Suppress("OverridingDeprecatedMember")
   override val psi: PsiParameter
     get() = javaPsi
 
-  override val javaPsi: PsiParameter = unwrap<UParameter, PsiParameter>(psi)
+  override val javaPsi: PsiParameter = sourcePsi
+  override fun getOriginalElement(): PsiElement? = sourcePsi.originalElement
 }
 
 open class JavaUField(
-  psi: PsiField,
+  override val sourcePsi: PsiField,
   givenParent: UElement?
-) : AbstractJavaUVariable(givenParent), UFieldEx, PsiField by psi {
+) : AbstractJavaUVariable(givenParent), UFieldEx, PsiField by sourcePsi {
+  @Suppress("OverridingDeprecatedMember")
   override val psi: PsiField
     get() = javaPsi
 
-  override val javaPsi: PsiField = unwrap<UField, PsiField>(psi)
+  override val javaPsi: PsiField = unwrap<UField, PsiField>(sourcePsi)
+  override fun getOriginalElement(): PsiElement? = sourcePsi.originalElement
 }
 
 open class JavaULocalVariable(
-  psi: PsiLocalVariable,
+  override val sourcePsi: PsiLocalVariable,
   givenParent: UElement?
-) : AbstractJavaUVariable(givenParent), ULocalVariableEx, PsiLocalVariable by psi {
+) : AbstractJavaUVariable(givenParent), ULocalVariableEx, PsiLocalVariable by sourcePsi {
+
+  @Suppress("OverridingDeprecatedMember")
   override val psi: PsiLocalVariable
     get() = javaPsi
 
-  override val javaPsi: PsiLocalVariable = unwrap<ULocalVariable, PsiLocalVariable>(psi)
+  override val javaPsi: PsiLocalVariable = unwrap<ULocalVariable, PsiLocalVariable>(sourcePsi)
 
   override fun getPsiParentForLazyConversion(): PsiElement? = super.getPsiParentForLazyConversion()?.let {
     when (it) {
@@ -103,18 +100,21 @@ open class JavaULocalVariable(
     }
   }
 
+  override fun getOriginalElement(): PsiElement? = sourcePsi.originalElement
+
 }
 
 open class JavaUEnumConstant(
-  psi: PsiEnumConstant,
+  override val sourcePsi: PsiEnumConstant,
   givenParent: UElement?
-) : AbstractJavaUVariable(givenParent), UEnumConstantEx, UCallExpressionEx, PsiEnumConstant by psi, UMultiResolvable {
-  override val initializingClass: UClass? by lz { getLanguagePlugin().convertOpt<UClass>(psi.initializingClass, this) }
+) : AbstractJavaUVariable(givenParent), UEnumConstantEx, UCallExpressionEx, PsiEnumConstant by sourcePsi, UMultiResolvable {
+  override val initializingClass: UClass? by lz { UastFacade.findPlugin(sourcePsi)?.convertOpt<UClass>(sourcePsi.initializingClass, this) }
 
+  @Suppress("OverridingDeprecatedMember")
   override val psi: PsiEnumConstant
     get() = javaPsi
 
-  override val javaPsi: PsiEnumConstant = unwrap<UEnumConstant, PsiEnumConstant>(psi)
+  override val javaPsi: PsiEnumConstant get() = sourcePsi
 
   override val kind: UastCallKind
     get() = UastCallKind.CONSTRUCTOR_CALL
@@ -125,45 +125,47 @@ open class JavaUEnumConstant(
   override val methodIdentifier: UIdentifier?
     get() = null
   override val classReference: UReferenceExpression?
-    get() = JavaEnumConstantClassReference(psi, this)
+    get() = JavaEnumConstantClassReference(sourcePsi, this)
   override val typeArgumentCount: Int
     get() = 0
   override val typeArguments: List<PsiType>
     get() = emptyList()
   override val valueArgumentCount: Int
-    get() = psi.argumentList?.expressions?.size ?: 0
+    get() = sourcePsi.argumentList?.expressions?.size ?: 0
 
   override val valueArguments: List<UExpression> by lz {
-    psi.argumentList?.expressions?.map {
-      getLanguagePlugin().convertElement(it, this) as? UExpression ?: UastEmptyExpression(this)
+    sourcePsi.argumentList?.expressions?.map {
+      UastFacade.findPlugin(it)?.convertElement(it, this) as? UExpression ?: UastEmptyExpression(this)
     } ?: emptyList()
   }
 
   override fun getArgumentForParameter(i: Int): UExpression? = valueArguments.getOrNull(i)
 
   override val returnType: PsiType?
-    get() = psi.type
+    get() = sourcePsi.type
 
-  override fun resolve(): PsiMethod? = psi.resolveMethod()
+  override fun resolve(): PsiMethod? = sourcePsi.resolveMethod()
 
   override fun multiResolve(): Iterable<ResolveResult> =
-    listOfNotNull(psi.resolveMethodGenerics())
+    listOfNotNull(sourcePsi.resolveMethodGenerics())
 
   override val methodName: String?
     get() = null
 
   private class JavaEnumConstantClassReference(
-    override val psi: PsiEnumConstant,
+    override val sourcePsi: PsiEnumConstant,
     givenParent: UElement?
   ) : JavaAbstractUExpression(givenParent), USimpleNameReferenceExpression, UMultiResolvable {
-    override fun resolve() = psi.containingClass
+    override fun resolve() = sourcePsi.containingClass
     override fun multiResolve(): Iterable<ResolveResult> =
       listOfNotNull(resolve()?.let { PsiTypesUtil.getClassType(it).resolveGenerics() })
 
     override val resolvedName: String?
-      get() = psi.containingClass?.name
+      get() = sourcePsi.containingClass?.name
 
     override val identifier: String
-      get() = psi.containingClass?.name ?: "<error>"
+      get() = sourcePsi.containingClass?.name ?: "<error>"
   }
+
+  override fun getOriginalElement(): PsiElement? = sourcePsi.originalElement
 }

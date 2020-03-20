@@ -22,6 +22,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.util.Consumer;
 import git4idea.GitFormatException;
+import git4idea.GitUtil;
 import git4idea.commands.GitLineHandler;
 import git4idea.commands.GitLineHandlerListener;
 import git4idea.i18n.GitBundle;
@@ -33,17 +34,17 @@ import org.jetbrains.annotations.Nullable;
  * It does not store output in order to save memory.
  * Parsed records are passed to the specified {@link Consumer}.
  */
-class GitLogOutputSplitter implements GitLineHandlerListener {
+class GitLogOutputSplitter<R extends GitLogRecord> implements GitLineHandlerListener {
   @NotNull private final GitLineHandler myHandler;
-  @NotNull private final GitLogParser myParser;
-  @NotNull private final Consumer<? super GitLogRecord> myRecordConsumer;
+  @NotNull private final GitLogParser<R> myParser;
+  @NotNull private final Consumer<? super R> myRecordConsumer;
 
   @NotNull private final StringBuilder myErrors = new StringBuilder();
   @Nullable private VcsException myException = null;
 
   GitLogOutputSplitter(@NotNull GitLineHandler handler,
-                              @NotNull GitLogParser parser,
-                              @NotNull Consumer<? super GitLogRecord> recordConsumer) {
+                       @NotNull GitLogParser<R> parser,
+                       @NotNull Consumer<? super R> recordConsumer) {
     myHandler = handler;
     myParser = parser;
     myRecordConsumer = recordConsumer;
@@ -54,7 +55,7 @@ class GitLogOutputSplitter implements GitLineHandlerListener {
   @Override
   public void onLineAvailable(String line, Key outputType) {
     if (outputType == ProcessOutputTypes.STDERR) {
-      myErrors.append(line).append("\n");
+      myErrors.append(GitUtil.cleanupErrorPrefixes(line)).append("\n");
     }
     else if (outputType == ProcessOutputTypes.STDOUT) {
       try {
@@ -74,7 +75,7 @@ class GitLogOutputSplitter implements GitLineHandlerListener {
 
   private void processOutputLine(@NotNull String line) throws VcsException {
     try {
-      GitLogRecord record = myParser.parseLine(line);
+      R record = myParser.parseLine(line);
       if (record != null) {
         record.setUsedHandler(myHandler);
         myRecordConsumer.consume(record);
@@ -97,7 +98,7 @@ class GitLogOutputSplitter implements GitLineHandlerListener {
     }
     else {
       try {
-        GitLogRecord record = myParser.finish();
+        R record = myParser.finish();
         if (record != null) {
           record.setUsedHandler(myHandler);
           myRecordConsumer.consume(record);

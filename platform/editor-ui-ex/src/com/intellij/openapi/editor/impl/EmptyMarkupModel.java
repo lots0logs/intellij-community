@@ -66,13 +66,13 @@ public class EmptyMarkupModel implements MarkupModelEx {
                                                                    TextAttributes textAttributes,
                                                                    @NotNull HighlighterTargetArea targetArea,
                                                                    boolean isPersistent,
-                                                                   Consumer<RangeHighlighterEx> changeAttributesAction) {
+                                                                   Consumer<? super RangeHighlighterEx> changeAttributesAction) {
     throw new ProcessCanceledException();
   }
 
   @Override
   public void changeAttributesInBatch(@NotNull RangeHighlighterEx highlighter,
-                                      @NotNull Consumer<RangeHighlighterEx> changeAttributesAction) {
+                                      @NotNull Consumer<? super RangeHighlighterEx> changeAttributesAction) {
   }
 
   @Override
@@ -90,8 +90,7 @@ public class EmptyMarkupModel implements MarkupModelEx {
   }
 
   @Override
-  @NotNull
-  public RangeHighlighter[] getAllHighlighters() {
+  public RangeHighlighter @NotNull [] getAllHighlighters() {
     return RangeHighlighter.EMPTY_ARRAY;
   }
 
@@ -140,6 +139,15 @@ public class EmptyMarkupModel implements MarkupModelEx {
   @NotNull
   @Override
   public MarkupIterator<RangeHighlighterEx> overlappingIterator(int startOffset, int endOffset) {
+    return MarkupIterator.EMPTY;
+  }
+
+  @NotNull
+  @Override
+  public MarkupIterator<RangeHighlighterEx> overlappingIterator(int startOffset,
+                                                                int endOffset,
+                                                                boolean onlyRenderedInGutter,
+                                                                boolean onlyRenderedInScrollBar) {
     return MarkupIterator.EMPTY;
   }
 

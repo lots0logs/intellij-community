@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.uiDesigner.actions;
 
 import com.intellij.codeInsight.documentation.DocumentationComponent;
@@ -27,11 +27,11 @@ import java.awt.*;
  * @author Vladimir Kondratyev
  */
 public final class ShowJavadocAction extends AnAction {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.actions.ShowJavadocAction");
+  private static final Logger LOG = Logger.getInstance(ShowJavadocAction.class);
 
   @Override
   public void actionPerformed(@NotNull final AnActionEvent e) {
-    final PropertyInspectorTable inspector = PropertyInspectorTable.DATA_KEY.getData(e.getDataContext());
+    final PropertyInspectorTable inspector = e.getData(PropertyInspectorTable.DATA_KEY);
     final IntrospectedProperty introspectedProperty = inspector.getSelectedIntrospectedProperty();
     final PsiClass aClass = inspector.getComponentClass();
 
@@ -74,7 +74,7 @@ public final class ShowJavadocAction extends AnAction {
 
   @Override
   public void update(@NotNull final AnActionEvent e) {
-    final PropertyInspectorTable inspector = PropertyInspectorTable.DATA_KEY.getData(e.getDataContext());
+    final PropertyInspectorTable inspector = e.getData(PropertyInspectorTable.DATA_KEY);
     e.getPresentation().setEnabled(inspector != null &&
                                    inspector.getSelectedIntrospectedProperty() != null &&
                                    inspector.getComponentClass() != null);

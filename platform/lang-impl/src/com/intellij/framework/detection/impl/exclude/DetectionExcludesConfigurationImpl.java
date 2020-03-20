@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.framework.detection.impl.exclude;
 
 import com.intellij.framework.FrameworkType;
@@ -20,9 +20,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-/**
- * @author nik
- */
 @State(name = "FrameworkDetectionExcludesConfiguration")
 public class DetectionExcludesConfigurationImpl extends DetectionExcludesConfiguration
          implements PersistentStateComponent<ExcludesConfigurationState>, Disposable {
@@ -33,9 +30,9 @@ public class DetectionExcludesConfigurationImpl extends DetectionExcludesConfigu
   private boolean myDetectionEnabled = true;
   private boolean myConverted;
 
-  public DetectionExcludesConfigurationImpl(Project project, VirtualFilePointerManager pointerManager) {
+  public DetectionExcludesConfigurationImpl(@NotNull Project project) {
     myProject = project;
-    myPointerManager = pointerManager;
+    myPointerManager = VirtualFilePointerManager.getInstance();
     myExcludedFrameworks = new HashSet<>();
     myExcludedFiles = FactoryMap.create(key -> myPointerManager.createContainer(this));
   }
@@ -43,6 +40,8 @@ public class DetectionExcludesConfigurationImpl extends DetectionExcludesConfigu
   @Override
   public void addExcludedFramework(@NotNull FrameworkType type) {
     convert();
+    if (!myDetectionEnabled) return;
+
     myExcludedFrameworks.add(type.getId());
     final VirtualFilePointerContainer container = myExcludedFiles.remove(type.getId());
     if (container != null) {
@@ -54,7 +53,7 @@ public class DetectionExcludesConfigurationImpl extends DetectionExcludesConfigu
   public void addExcludedFile(@NotNull VirtualFile file, @Nullable FrameworkType type) {
     convert();
     final String typeId = type != null ? type.getId() : null;
-    if (typeId != null && myExcludedFrameworks.contains(typeId) || isFileExcluded(file, typeId)) {
+    if (!myDetectionEnabled || typeId != null && myExcludedFrameworks.contains(typeId) || isFileExcluded(file, typeId)) {
       return;
     }
 
@@ -80,7 +79,7 @@ public class DetectionExcludesConfigurationImpl extends DetectionExcludesConfigu
 
     convert();
     final String typeId = type != null ? type.getId() : null;
-    if (typeId != null && myExcludedFrameworks.contains(typeId)) {
+    if (!myDetectionEnabled || typeId != null && myExcludedFrameworks.contains(typeId)) {
       return;
     }
     myExcludedFiles.get(typeId).add(url);

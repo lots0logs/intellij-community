@@ -10,8 +10,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.Serializable;
-import java.util.*;
 import java.util.HashMap;
+import java.util.*;
 
 /**
  * Consider to use factory methods {@link #createLinked()}, {@link #createSet()}, {@link #createSmart()}, {@link #create(TObjectHashingStrategy)} instead of override.
@@ -21,7 +21,7 @@ import java.util.HashMap;
  */
 @Debug.Renderer(text = "\"size = \" + size()", hasChildren = "!isEmpty()", childrenArray = "entrySet().toArray()")
 public class MultiMap<K, V> implements Serializable {
-  public static final MultiMap EMPTY = new EmptyMap();
+  public static final MultiMap<?,?> EMPTY = new EmptyMap();
   private static final long serialVersionUID = -2632269270151455493L;
 
   protected final Map<K, Collection<V>> myMap;
@@ -40,7 +40,7 @@ public class MultiMap<K, V> implements Serializable {
   public MultiMap<K, V> copy() {
     return new MultiMap<>(this);
   }
-  
+
   public MultiMap(int initialCapacity, float loadFactor) {
     myMap = createMap(initialCapacity, loadFactor);
   }
@@ -108,13 +108,13 @@ public class MultiMap<K, V> implements Serializable {
         return false;
       }
     }
-    return true;    
+    return true;
   }
 
   public boolean containsKey(K key) {
     return myMap.containsKey(key);
   }
-  
+
   public boolean containsScalarValue(V value) {
     for(Collection<V> valueList: myMap.values()) {
       if (valueList.contains(value)) {
@@ -173,7 +173,7 @@ public class MultiMap<K, V> implements Serializable {
   }
 
   @NotNull
-  public Collection<? extends V> values() {
+  public Collection<V> values() {
     if (values == null) {
       values = new AbstractCollection<V>() {
         @NotNull
@@ -183,7 +183,7 @@ public class MultiMap<K, V> implements Serializable {
 
             private final Iterator<Collection<V>> mapIterator = myMap.values().iterator();
 
-            private Iterator<V> itr = EmptyIterator.getInstance();
+            private Iterator<V> itr = Collections.emptyIterator();
 
             @Override
             public boolean hasNext() {
@@ -280,7 +280,7 @@ public class MultiMap<K, V> implements Serializable {
       @NotNull
       @Override
       protected Collection<V> createCollection() {
-        return ContainerUtil.newLinkedHashSet();
+        return new LinkedHashSet<>();
       }
 
       @NotNull
@@ -298,6 +298,23 @@ public class MultiMap<K, V> implements Serializable {
       @Override
       protected Collection<V> createCollection() {
         return new OrderedSet<>();
+      }
+
+      @NotNull
+      @Override
+      protected Collection<V> createEmptyCollection() {
+        return Collections.emptySet();
+      }
+    };
+  }
+
+  @NotNull
+  public static <K, V> MultiMap<K, V> createObjectLinkedOpenHashSet() {
+    return new LinkedMultiMap<K, V>() {
+      @NotNull
+      @Override
+      protected Collection<V> createCollection() {
+        return new ObjectLinkedOpenHashSet<>();
       }
 
       @NotNull
@@ -381,7 +398,7 @@ public class MultiMap<K, V> implements Serializable {
 
   @Override
   public boolean equals(Object o) {
-    return this == o || o instanceof MultiMap && myMap.equals(((MultiMap)o).myMap);
+    return this == o || o instanceof MultiMap && myMap.equals(((MultiMap<?,?>)o).myMap);
   }
 
   @Override
@@ -399,13 +416,13 @@ public class MultiMap<K, V> implements Serializable {
    */
   public static <K, V> MultiMap<K, V> empty() {
     //noinspection unchecked
-    return EMPTY;
+    return (MultiMap<K, V>)EMPTY;
   }
 
-  private static class EmptyMap extends MultiMap {
+  private static class EmptyMap extends MultiMap<Object, Object> {
     @NotNull
     @Override
-    protected Map createMap() {
+    protected Map<Object, Collection<Object>> createMap() {
       return Collections.emptyMap();
     }
 
@@ -436,7 +453,7 @@ public class MultiMap<K, V> implements Serializable {
 
     @Nullable
     @Override
-    public Collection remove(Object key) {
+    public Collection<Object> remove(Object key) {
       throw new UnsupportedOperationException();
     }
   }

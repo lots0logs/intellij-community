@@ -7,6 +7,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.refactoring.introduceVariable.IntroduceVariableBase;
+import com.siyeh.InspectionGadgetsBundle;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 
@@ -47,14 +48,23 @@ public class RedundantExplicitVariableTypeInspection extends AbstractBaseJavaLoc
          PsiTypeElement typeElementCopy = copyVariable.getTypeElement();
          if (typeElementCopy != null) {
            IntroduceVariableBase.expandDiamondsAndReplaceExplicitTypeWithVar(typeElementCopy, variable);
-           if (variable.getType().equals(copyVariable.getType())) {
+           if (variable.getType().equals(getNormalizedType(copyVariable))) {
              holder.registerProblem(element2Highlight,
-                                    "Explicit type of local variable can be omitted",
+                                    InspectionGadgetsBundle.message("inspection.redundant.explicit.variable.type.description"),
                                     ProblemHighlightType.LIKE_UNUSED_SYMBOL,
                                     new ReplaceWithVarFix());
            }
          }
        }
+
+      private PsiType getNormalizedType(PsiVariable copyVariable) {
+        PsiType type = copyVariable.getType();
+        PsiClass refClass = PsiUtil.resolveClassInType(type);
+        if (refClass instanceof PsiAnonymousClass) {
+          type = ((PsiAnonymousClass)refClass).getBaseClassType();
+        }
+        return type;
+      }
     };
   }
 
@@ -63,7 +73,7 @@ public class RedundantExplicitVariableTypeInspection extends AbstractBaseJavaLoc
     @NotNull
     @Override
     public String getFamilyName() {
-      return "Replace explicit type with 'var'";
+      return InspectionGadgetsBundle.message("replace.with.var.fix.family.name");
     }
 
     @Override

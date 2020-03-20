@@ -3,10 +3,12 @@
 // found in the LICENSE file.
 package com.intellij.codeInspection.i18n;
 
-import com.intellij.codeInsight.CodeInsightBundle;
 import com.intellij.codeInsight.FileModificationService;
+import com.intellij.codeInsight.intention.HighPriorityAction;
 import com.intellij.codeInspection.LocalQuickFix;
 import com.intellij.codeInspection.ProblemDescriptor;
+import com.intellij.java.i18n.JavaI18nBundle;
+import com.intellij.lang.properties.PropertiesBundle;
 import com.intellij.lang.properties.psi.PropertiesFile;
 import com.intellij.lang.properties.psi.PropertyCreationHandler;
 import com.intellij.openapi.application.ApplicationManager;
@@ -21,7 +23,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.JavaCodeStyleManager;
-import com.intellij.psi.util.PsiUtilBase;
+import com.intellij.psi.util.PsiEditorUtil;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -31,8 +33,8 @@ import java.util.Collection;
 /**
  * @author cdr
  */
-public class I18nizeQuickFix implements LocalQuickFix, I18nQuickFixHandler {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.codeInsight.i18n.I18nizeQuickFix");
+public class I18nizeQuickFix implements LocalQuickFix, I18nQuickFixHandler, HighPriorityAction {
+  private static final Logger LOG = Logger.getInstance(I18nizeQuickFix.class);
   private TextRange mySelectionRange;
 
   @Override
@@ -48,7 +50,7 @@ public class I18nizeQuickFix implements LocalQuickFix, I18nQuickFixHandler {
   @Override
   @NotNull
   public String getFamilyName() {
-    return CodeInsightBundle.message("inspection.i18n.quickfix");
+    return JavaI18nBundle.message("inspection.i18n.quickfix");
   }
 
   @Override
@@ -65,7 +67,7 @@ public class I18nizeQuickFix implements LocalQuickFix, I18nQuickFixHandler {
         return;
       }
     }
-    String message = CodeInsightBundle.message("i18nize.error.message");
+    String message = JavaI18nBundle.message("i18nize.error.message");
     throw new IncorrectOperationException(message);
   }
 
@@ -85,8 +87,8 @@ public class I18nizeQuickFix implements LocalQuickFix, I18nQuickFixHandler {
     }
     catch (IncorrectOperationException e) {
       ApplicationManager.getApplication().invokeLater(() -> Messages.showErrorDialog(project,
-                                                                                     CodeInsightBundle.message("inspection.i18n.expression.is.invalid.error.message"),
-                                                                                     CodeInsightBundle.message("inspection.error.dialog.title")));
+                                                                                     JavaI18nBundle.message("inspection.i18n.expression.is.invalid.error.message"),
+                                                                                     JavaI18nBundle.message("inspection.error.dialog.title")));
     }
   }
 
@@ -116,14 +118,13 @@ public class I18nizeQuickFix implements LocalQuickFix, I18nQuickFixHandler {
 
     CommandProcessor.getInstance().executeCommand(project, () -> ApplicationManager.getApplication().runWriteAction(() -> {
       try {
-        performI18nization(psiFile, PsiUtilBase.findEditor(psiFile), dialog.getLiteralExpression(), propertiesFiles, dialog.getKey(),
-                           dialog.getValue(), dialog.getI18nizedText(), dialog.getParameters(),
-                           dialog.getPropertyCreationHandler());
+        performI18nization(psiFile, PsiEditorUtil.findEditor(psiFile), dialog.getLiteralExpression(), propertiesFiles, dialog.getKey(),
+                           dialog.getValue(), dialog.getI18nizedText(), dialog.getParameters(), dialog.getPropertyCreationHandler());
       }
       catch (IncorrectOperationException e) {
         LOG.error(e);
       }
-    }), CodeInsightBundle.message("quickfix.i18n.command.name"), project);
+    }), PropertiesBundle.message("quickfix.i18n.command.name"), project);
   }
 
   protected PsiElement doReplacementInJava(@NotNull final PsiFile psiFile,
@@ -140,13 +141,12 @@ public class I18nizeQuickFix implements LocalQuickFix, I18nQuickFixHandler {
   }
 
   protected JavaI18nizeQuickFixDialog createDialog(final Project project, final PsiFile context, final PsiLiteralExpression literalExpression) {
-    String value = (String)literalExpression.getValue();
+    String value = StringUtil.notNullize((String)literalExpression.getValue());
     if (mySelectionRange != null) {
       TextRange literalRange = literalExpression.getTextRange();
       TextRange intersection = literalRange.intersection(mySelectionRange);
       value = literalExpression.getText().substring(intersection.getStartOffset() - literalRange.getStartOffset(), intersection.getEndOffset() - literalRange.getStartOffset());
     }
-    value = StringUtil.escapeStringCharacters(value);
     return new JavaI18nizeQuickFixDialog(project, context, literalExpression, value, null, true, true);
   }
 

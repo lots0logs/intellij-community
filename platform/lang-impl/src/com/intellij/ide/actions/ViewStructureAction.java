@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.ide.actions;
 
@@ -31,6 +17,7 @@ import com.intellij.openapi.actionSystem.PlatformDataKeys;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.ex.util.EditorUtil;
 import com.intellij.openapi.fileEditor.FileEditor;
+import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
@@ -38,12 +25,13 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
+import com.intellij.ui.EditorTextField;
 import com.intellij.ui.PlaceHolder;
-import com.intellij.util.ObjectUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 public class ViewStructureAction extends DumbAwareAction {
 
@@ -55,28 +43,22 @@ public class ViewStructureAction extends DumbAwareAction {
   public void actionPerformed(@NotNull AnActionEvent e) {
     Project project = e.getData(CommonDataKeys.PROJECT);
     if (project == null) return;
-    final FileEditor fileEditor = e.getData(PlatformDataKeys.FILE_EDITOR);
+    FileEditor fileEditor = e.getData(PlatformDataKeys.FILE_EDITOR);
     if (fileEditor == null) return;
-    final VirtualFile virtualFile;
 
-    final Editor editor = e.getData(CommonDataKeys.EDITOR);
-    if (editor == null) {
-      virtualFile = e.getData(CommonDataKeys.VIRTUAL_FILE);
-    }
-    else {
+    VirtualFile virtualFile = fileEditor.getFile();
+    Editor editor = fileEditor instanceof TextEditor ? ((TextEditor)fileEditor).getEditor() :
+                    e.getData(CommonDataKeys.EDITOR);
+    if (editor != null) {
       PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
-      PsiFile psiFile = PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
-      if (psiFile == null) return;
-
-      virtualFile = psiFile.getVirtualFile();
     }
-    String title = virtualFile == null? fileEditor.getName() : virtualFile.getName();
 
     FeatureUsageTracker.getInstance().triggerFeatureUsed("navigation.popup.file.structure");
 
     FileStructurePopup popup = createPopup(project, fileEditor);
     if (popup == null) return;
 
+    String title = virtualFile == null ? fileEditor.getName() : virtualFile.getName();
     popup.setTitle(title);
     popup.show();
   }
@@ -114,7 +96,13 @@ public class ViewStructureAction extends DumbAwareAction {
     }
 
     FileEditor fileEditor = e.getData(PlatformDataKeys.FILE_EDITOR);
-    e.getPresentation().setEnabled(fileEditor != null && fileEditor.getStructureViewBuilder() != null);
+    Editor editor = fileEditor instanceof TextEditor ? ((TextEditor)fileEditor).getEditor() :
+                    e.getData(CommonDataKeys.EDITOR);
+
+    boolean enabled = fileEditor != null &&
+                      (!Boolean.TRUE.equals(EditorTextField.SUPPLEMENTARY_KEY.get(editor))) &&
+                      fileEditor.getStructureViewBuilder() != null;
+    e.getPresentation().setEnabled(enabled);
   }
 
   @NotNull
@@ -125,7 +113,7 @@ public class ViewStructureAction extends DumbAwareAction {
     VirtualFile virtualFile = fileEditor.getFile();
     if (structureView instanceof StructureViewComposite && virtualFile != null) {
       StructureViewComposite.StructureViewDescriptor[] views = ((StructureViewComposite)structureView).getStructureViews();
-      PsiFile psiFile = ObjectUtils.notNull(PsiManager.getInstance(project).findFile(virtualFile));
+      PsiFile psiFile = Objects.requireNonNull(PsiManager.getInstance(project).findFile(virtualFile));
       treeModel = new StructureViewCompositeModel(psiFile, EditorUtil.getEditorEx(fileEditor), Arrays.asList(views));
       Disposer.register(structureView, treeModel);
     }

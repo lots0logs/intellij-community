@@ -21,10 +21,10 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.ReflectionUtil;
 import com.intellij.util.SmartList;
+import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.containers.FactoryMap;
 import com.intellij.util.xml.*;
 import gnu.trove.THashMap;
-import gnu.trove.THashSet;
 import gnu.trove.TIntObjectHashMap;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
  * @author peter
  */
 public class StaticGenericInfoBuilder {
-  private static final Set<Class<?>> ADDER_PARAMETER_TYPES = new THashSet<>(Arrays.asList(Class.class, int.class));
+  private static final Set<Class<?>> ADDER_PARAMETER_TYPES = ContainerUtil.set(Class.class, int.class);
   private static final Logger LOG = Logger.getInstance(StaticGenericInfoBuilder.class);
   private final Class myClass;
   private final MultiValuesMap<XmlName, JavaMethod> myCollectionGetters = new MultiValuesMap<>();
@@ -167,6 +167,8 @@ public class StaticGenericInfoBuilder {
     final Type type = myCollectionChildrenTypes.get(tagName);
     if (type == null || !ReflectionUtil.getRawType(type).isAssignableFrom(method.getReturnType())) return false;
 
+    if (method.getParameterCount() == 0) return true;
+
     return ADDER_PARAMETER_TYPES.containsAll(Arrays.asList(method.getParameterTypes()));
   }
 
@@ -263,8 +265,11 @@ public class StaticGenericInfoBuilder {
     return false;
   }
 
+  private static final Set<JavaMethodSignature> ourDomElementMethods =
+    ContainerUtil.map2Set(DomElement.class.getMethods(), JavaMethodSignature::new);
+
   private static boolean isCoreMethod(final JavaMethod method) {
-    if (method.getSignature().findMethod(DomElement.class) != null) return true;
+    if (ourDomElementMethods.contains(method.getSignature())) return true;
 
     final Class<?> aClass = method.getDeclaringClass();
     return aClass.equals(GenericAttributeValue.class) || aClass.equals(GenericDomValue.class) && "getConverter".equals(method.getName());

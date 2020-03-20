@@ -15,6 +15,7 @@
  */
 package com.intellij.credentialStore.kdbx;
 
+import com.intellij.util.io.DigestUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayInputStream;
@@ -55,14 +56,14 @@ final class HashedBlockInputStream extends InputStream {
   private final InputStream inputStream;
   private ByteArrayInputStream blockInputStream = new ByteArrayInputStream(new byte[0]);
 
-  private final MessageDigest md = KdbxKt.sha256MessageDigest();
+  private final MessageDigest md = DigestUtil.sha256();
 
   HashedBlockInputStream(@NotNull InputStream inputStream) {
     this.inputStream = inputStream;
   }
 
   @Override
-  public int read(@NotNull byte[] b, int offset, int length) throws IOException {
+  public int read(byte @NotNull [] b, int offset, int length) throws IOException {
     return get(b, offset, length);
   }
 

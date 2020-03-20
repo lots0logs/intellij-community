@@ -19,6 +19,7 @@ import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.ShortcutSet;
+import com.intellij.openapi.compiler.JavaCompilerBundle;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
@@ -76,65 +77,9 @@ public class AnnotationProcessorsPanel extends JPanel {
     }
     myTree = new Tree(new MyTreeModel());
     myTree.setRootVisible(false);
-        final JPanel treePanel =
-          ToolbarDecorator.createDecorator(myTree).addExtraAction(new AnActionButton("Move to", AllIcons.Actions.Forward) {
-            @Override
-            public void actionPerformed(@NotNull AnActionEvent e) {
-              final MyModuleNode node = (MyModuleNode)myTree.getSelectionPath().getLastPathComponent();
-              final TreePath[] selectedNodes = myTree.getSelectionPaths();
-              final ProcessorConfigProfile nodeProfile = ((ProfileNode)node.getParent()).myProfile;
-              final List<ProcessorConfigProfile> profiles = new ArrayList<>();
-              profiles.add(myDefaultProfile);
-              profiles.addAll(myModuleProfiles);
-              profiles.remove(nodeProfile);
-              final JBPopup popup = JBPopupFactory.getInstance()
-                .createPopupChooserBuilder(profiles)
-                .setTitle("Move to")
-                .setItemChosenCallback((chosenProfile) -> {
-                  final Module toSelect = (Module)node.getUserObject();
-                  if (selectedNodes != null) {
-                    for (TreePath selectedNode : selectedNodes) {
-                      final Object node1 = selectedNode.getLastPathComponent();
-                      if (node1 instanceof MyModuleNode) {
-                        final Module module = (Module)((MyModuleNode)node1).getUserObject();
-                        if (nodeProfile != myDefaultProfile) {
-                          nodeProfile.removeModuleName(module.getName());
-                        }
-                        if (chosenProfile != myDefaultProfile) {
-                          chosenProfile.addModuleName(module.getName());
-                        }
-                      }
-                    }
-                  }
-
-                  final RootNode root = (RootNode)myTree.getModel().getRoot();
-                  root.sync();
-                  final DefaultMutableTreeNode node1 = TreeUtil.findNodeWithObject(root, toSelect);
-                  if (node1 != null) {
-                    TreeUtil.selectNode(myTree, node1);
-                  }
-                })
-                .createPopup();
-              RelativePoint point =
-                e.getInputEvent() instanceof MouseEvent ? getPreferredPopupPoint() : TreeUtil.getPointForSelection(myTree);
-              popup.show(point);
-            }
-
-            @Override
-            public ShortcutSet getShortcut() {
-              return ActionManager.getInstance().getAction("Move").getShortcutSet();
-            }
-
-            @Override
-            public boolean isEnabled() {
-              return myTree.getSelectionPath() != null
-                     && myTree.getSelectionPath().getLastPathComponent() instanceof MyModuleNode
-                     && !myModuleProfiles.isEmpty();
-            }
-          }).createPanel();
+    final JPanel treePanel = ToolbarDecorator.createDecorator(myTree).addExtraAction(new MoveProfileAction()).createPanel();
     splitter.setFirstComponent(treePanel);
     myTree.setCellRenderer(new MyCellRenderer());
-
     myTree.addTreeSelectionListener(new TreeSelectionListener() {
       @Override
       public void valueChanged(TreeSelectionEvent e) {
@@ -177,7 +122,6 @@ public class AnnotationProcessorsPanel extends JPanel {
     if (node != null) {
       TreeUtil.selectNode(myTree, node);
     }
-
   }
 
   public ProcessorConfigProfile getDefaultProfile() {
@@ -193,7 +137,7 @@ public class AnnotationProcessorsPanel extends JPanel {
     if (myDefaultProfile != selectedProfile) {
       myProfilePanel.saveTo(selectedProfile);
     }
-    return myModuleProfiles;
+    return Collections.unmodifiableList(myModuleProfiles);
   }
 
   private class MyTreeModel extends DefaultTreeModel implements EditableTreeModel{
@@ -204,12 +148,12 @@ public class AnnotationProcessorsPanel extends JPanel {
     @Override
     public TreePath addNode(TreePath parentOrNeighbour) {
       final String newProfileName = Messages.showInputDialog(
-        myProject, "Profile name", "Create new profile", null, "",
+        myProject, JavaCompilerBundle.message("dialog.message.profile.name"), JavaCompilerBundle.message("title.create.new.profile"), null, "",
         new InputValidatorEx() {
           @Override
           public boolean checkInput(String inputString) {
             if (StringUtil.isEmpty(inputString) ||
-                Comparing.equal(inputString, myDefaultProfile.getName())) {
+              Comparing.equal(inputString, myDefaultProfile.getName())) {
               return false;
             }
             for (ProcessorConfigProfile profile : myModuleProfiles) {
@@ -231,8 +175,8 @@ public class AnnotationProcessorsPanel extends JPanel {
               return null;
             }
             return StringUtil.isEmpty(inputString)
-                   ? "Profile name shouldn't be empty"
-                   : "Profile " + inputString + " already exists";
+              ? "Profile name shouldn't be empty"
+              : "Profile " + inputString + " already exists";
           }
         });
       if (newProfileName != null) {
@@ -253,7 +197,7 @@ public class AnnotationProcessorsPanel extends JPanel {
     }
 
     @Override
-    public void removeNodes(Collection<TreePath> paths) {
+    public void removeNodes(Collection<? extends TreePath> paths) {
       final List<ProcessorConfigProfile> toRemove = new SmartList<>();
       for (TreePath path : paths) {
         Object node = path.getLastPathComponent();
@@ -382,4 +326,64 @@ public class AnnotationProcessorsPanel extends JPanel {
     }
   }
 
+  private class MoveProfileAction extends AnActionButton {
+
+    MoveProfileAction() {
+      super(JavaCompilerBundle.messagePointer("action.text.move.to"), AllIcons.Actions.Forward);
+    }
+
+    @Override
+    public void actionPerformed(@NotNull AnActionEvent e) {
+      final MyModuleNode node = (MyModuleNode)myTree.getSelectionPath().getLastPathComponent();
+      final TreePath[] selectedNodes = myTree.getSelectionPaths();
+      final ProcessorConfigProfile nodeProfile = ((ProfileNode)node.getParent()).myProfile;
+      final List<ProcessorConfigProfile> profiles = new ArrayList<>();
+      profiles.add(myDefaultProfile);
+      profiles.addAll(myModuleProfiles);
+      profiles.remove(nodeProfile);
+      final JBPopup popup = JBPopupFactory.getInstance()
+        .createPopupChooserBuilder(profiles)
+        .setTitle(JavaCompilerBundle.message("action.text.move.to"))
+        .setItemChosenCallback((chosenProfile) -> {
+          final Module toSelect = (Module)node.getUserObject();
+          if (selectedNodes != null) {
+            for (TreePath selectedNode : selectedNodes) {
+              final Object node1 = selectedNode.getLastPathComponent();
+              if (node1 instanceof MyModuleNode) {
+                final Module module = (Module)((MyModuleNode)node1).getUserObject();
+                if (nodeProfile != myDefaultProfile) {
+                  nodeProfile.removeModuleName(module.getName());
+                }
+                if (chosenProfile != myDefaultProfile) {
+                  chosenProfile.addModuleName(module.getName());
+                }
+              }
+            }
+          }
+
+          final RootNode root = (RootNode)myTree.getModel().getRoot();
+          root.sync();
+          final DefaultMutableTreeNode node1 = TreeUtil.findNodeWithObject(root, toSelect);
+          if (node1 != null) {
+            TreeUtil.selectNode(myTree, node1);
+          }
+        }).createPopup();
+      RelativePoint point = e.getInputEvent() instanceof MouseEvent ? getPreferredPopupPoint() : TreeUtil.getPointForSelection(myTree);
+      popup.show(point);
+    }
+
+    @Override
+    public ShortcutSet getShortcut() {
+      return ActionManager.getInstance().getAction("Move").getShortcutSet();
+    }
+
+    @Override
+    public boolean isEnabled() {
+      if (myModuleProfiles.isEmpty()) {
+        return false;
+      }
+      final TreePath selectionPath = myTree.getSelectionPath();
+      return selectionPath != null && selectionPath.getLastPathComponent() instanceof MyModuleNode;
+    }
+  }
 }

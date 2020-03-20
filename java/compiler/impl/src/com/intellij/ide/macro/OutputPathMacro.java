@@ -1,24 +1,10 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.macro;
 
-import com.intellij.ide.IdeBundle;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
-import com.intellij.openapi.compiler.ex.CompilerPathsEx;
+import com.intellij.openapi.compiler.JavaCompilerBundle;
+import com.intellij.openapi.compiler.CompilerPaths;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
@@ -27,22 +13,25 @@ import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 
 public final class OutputPathMacro extends Macro {
+  @NotNull
   @Override
   public String getName() {
     return "OutputPath";
   }
 
+  @NotNull
   @Override
   public String getDescription() {
-    return IdeBundle.message("macro.output.path");
+    return JavaCompilerBundle.message("macro.output.path");
   }
 
   @Override
-  public String expand(DataContext dataContext) {
+  public String expand(@NotNull DataContext dataContext) {
     Project project = CommonDataKeys.PROJECT.getData(dataContext);
     if (project == null) {
       return null;
@@ -65,7 +54,7 @@ public final class OutputPathMacro extends Macro {
     if (allModules.length == 0) {
       return null;
     }
-    String[] paths = CompilerPathsEx.getOutputPaths(allModules);
+    String[] paths = CompilerPaths.getOutputPaths(allModules);
     final StringBuilder outputPath = new StringBuilder();
     for (int idx = 0; idx < paths.length; idx++) {
       String path = paths[idx];

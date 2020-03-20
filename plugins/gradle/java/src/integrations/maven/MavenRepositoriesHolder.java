@@ -19,6 +19,7 @@ import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.idea.maven.indices.MavenIndex;
 import org.jetbrains.idea.maven.indices.MavenIndicesManager;
+import org.jetbrains.idea.maven.indices.MavenSearchIndex;
 import org.jetbrains.idea.maven.model.MavenRemoteRepository;
 import org.jetbrains.plugins.gradle.util.GradleBundle;
 import org.jetbrains.plugins.gradle.util.GradleConstants;
@@ -69,7 +70,7 @@ public class MavenRepositoriesHolder {
     if (notificationManager.isNotificationActive(NOTIFICATION_KEY)) return;
 
     final MavenIndicesManager indicesManager = MavenIndicesManager.getInstance();
-    for (MavenIndex index : indicesManager.getIndices()) {
+    for (MavenSearchIndex index : indicesManager.getIndices()) {
       if (indicesManager.getUpdatingState(index) != IDLE) return;
     }
 
@@ -87,7 +88,7 @@ public class MavenRepositoriesHolder {
           ContainerUtil.filter(indicesManager.getIndices(), index -> isNotIndexed(index.getRepositoryPathOrUrl()));
         indicesManager.scheduleUpdate(myProject, notIndexed).onSuccess(aVoid -> {
           if (myNotIndexedUrls.isEmpty()) return;
-          for (MavenIndex index : notIndexed) {
+          for (MavenSearchIndex index : notIndexed) {
             if (index.getUpdateTimestamp() != -1 || index.getFailureMessage() != null) {
               myNotIndexedUrls.remove(index.getRepositoryPathOrUrl());
             }
@@ -102,12 +103,11 @@ public class MavenRepositoriesHolder {
       protected void hyperlinkActivated(@NotNull Notification notification, @NotNull HyperlinkEvent e) {
         final int result =
           Messages.showYesNoDialog(myProject,
-                                   "Notification will be disabled for all projects.\n\n" +
-                                   "Settings | Appearance & Behavior | Notifications | " +
-                                   UNINDEXED_MAVEN_REPOSITORIES_NOTIFICATION_GROUP +
-                                   "\ncan be used to configure the notification.",
-                                   "Unindexed Maven Repositories Gradle Detection",
-                                   "Disable Notification", CommonBundle.getCancelButtonText(),
+                                   GradleBundle.message("gradle.integrations.maven.notification.to.be.disabled",
+                                                        UNINDEXED_MAVEN_REPOSITORIES_NOTIFICATION_GROUP),
+                                   GradleBundle.message("gradle.integrations.maven.notification.detection"),
+                                   GradleBundle.message("gradle.integrations.maven.notification.disable.text"),
+                                   CommonBundle.getCancelButtonText(),
                                    Messages.getWarningIcon());
         if (result == Messages.YES) {
           NotificationsConfigurationImpl.getInstanceImpl().changeSettings(UNINDEXED_MAVEN_REPOSITORIES_NOTIFICATION_GROUP,

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
 import com.intellij.ide.IdeBundle;
@@ -9,10 +9,12 @@ import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
@@ -22,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static com.intellij.ide.actions.CopyReferenceUtil.*;
@@ -51,7 +53,7 @@ public class CopyReferenceAction extends DumbAwareAction {
       enabled = true;
     }
     else {
-      List<PsiElement> elements = getElementsToCopy(editor, dataContext);
+      List<PsiElement> elements = getPsiElements(dataContext, editor);
       enabled = !elements.isEmpty();
       plural = elements.size() > 1;
       paths = elements.stream().allMatch(el -> el instanceof PsiFileSystemItem && getQualifiedNameFromProviders(el) == null);
@@ -65,8 +67,17 @@ public class CopyReferenceAction extends DumbAwareAction {
       e.getPresentation().setVisible(true);
     }
     e.getPresentation().setText(
-      paths ? plural ? "Cop&y Relative Paths" : "Cop&y Relative Path"
-            : plural ? "Cop&y References" : "Cop&y Reference");
+      paths ? plural ? IdeBundle.message("copy.relative.paths") : IdeBundle.message("copy.relative.path")
+            : plural ? IdeBundle.message("copy.references") : IdeBundle.message("copy.reference"));
+
+    if (paths) {
+      e.getPresentation().setEnabledAndVisible(false);
+    }
+  }
+
+  @NotNull
+  protected List<PsiElement> getPsiElements(DataContext dataContext, Editor editor) {
+    return getElementsToCopy(editor, dataContext);
   }
 
   @Override
@@ -74,9 +85,9 @@ public class CopyReferenceAction extends DumbAwareAction {
     DataContext dataContext = e.getDataContext();
     Editor editor = CommonDataKeys.EDITOR.getData(dataContext);
     Project project = CommonDataKeys.PROJECT.getData(dataContext);
-    List<PsiElement> elements = getElementsToCopy(editor, dataContext);
+    List<PsiElement> elements = getPsiElements(dataContext, editor);
 
-    String copy = CopyReferenceUtil.doCopy(elements, editor);
+    String copy = getQualifiedName(editor, elements);
     if (copy != null) {
       CopyPasteManager.getInstance().setContents(new CopyReferenceFQNTransferable(copy));
       setStatusBarText(project, IdeBundle.message("message.reference.to.fqn.has.been.copied", copy));
@@ -94,8 +105,12 @@ public class CopyReferenceAction extends DumbAwareAction {
     highlight(editor, project, elements);
   }
 
+  protected String getQualifiedName(Editor editor, List<PsiElement> elements) {
+    return CopyReferenceUtil.doCopy(elements, editor);
+  }
+
   public static boolean doCopy(final PsiElement element, final Project project) {
-    return doCopy(Arrays.asList(element), project);
+    return doCopy(Collections.singletonList(element), project);
   }
 
   private static boolean doCopy(List<? extends PsiElement> elements, @Nullable final Project project) {
@@ -109,5 +124,16 @@ public class CopyReferenceAction extends DumbAwareAction {
   @Nullable
   public static String elementToFqn(@Nullable final PsiElement element) {
     return CopyReferenceUtil.elementToFqn(element, null);
+  }
+
+  public interface VirtualFileQualifiedNameProvider {
+    ExtensionPointName<VirtualFileQualifiedNameProvider> EP_NAME =
+      ExtensionPointName.create("com.intellij.virtualFileQualifiedNameProvider");
+
+    /**
+     * @return {@code virtualFile} fqn (relative path for example) or null if not handled by this provider
+     */
+    @Nullable
+    String getQualifiedName(@NotNull Project project, @NotNull VirtualFile virtualFile);
   }
 }

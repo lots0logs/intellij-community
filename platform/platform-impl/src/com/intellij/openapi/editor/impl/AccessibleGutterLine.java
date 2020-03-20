@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.editor.impl;
 
 import com.intellij.codeInsight.daemon.GutterMark;
@@ -13,11 +13,12 @@ import com.intellij.openapi.editor.event.CaretListener;
 import com.intellij.openapi.editor.markup.ActiveGutterRenderer;
 import com.intellij.openapi.editor.markup.LineMarkerRenderer;
 import com.intellij.openapi.project.DumbAwareAction;
+import com.intellij.openapi.ui.popup.Balloon;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.paint.LinePainter2D;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ObjectUtils;
-import com.intellij.util.ui.JBUI;
 import com.intellij.util.ui.accessibility.SimpleAccessible;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -174,25 +175,23 @@ class AccessibleGutterLine extends JPanel {
     /* icons */
     if (myGutter.areIconsShown()) {
       List<GutterMark> row = myGutter.getGutterRenderers(myVisualLineNum);
-      if (row != null) {
-        myGutter.processIconsRow(myVisualLineNum, row, (x, y, renderer) -> {
-          Icon icon = myGutter.scaleIcon(renderer.getIcon());
-          addNewElement(new SimpleAccessible() {
-            @NotNull
-            @Override
-            public String getAccessibleName() {
-              if (renderer instanceof SimpleAccessible) {
-                return ((SimpleAccessible)renderer).getAccessibleName();
-              }
-              return "icon: " + renderer.getClass().getSimpleName();
+      myGutter.processIconsRow(myVisualLineNum, row, (x, y, renderer) -> {
+        Icon icon = myGutter.scaleIcon(renderer.getIcon());
+        addNewElement(new SimpleAccessible() {
+          @NotNull
+          @Override
+          public String getAccessibleName() {
+            if (renderer instanceof SimpleAccessible) {
+              return ((SimpleAccessible)renderer).getAccessibleName();
             }
-            @Override
-            public String getAccessibleTooltipText() {
-              return renderer.getTooltipText();
-            }
-          }, x, 0, icon.getIconWidth(), lineHeight);
-        });
-      }
+            return "icon: " + renderer.getClass().getSimpleName();
+          }
+          @Override
+          public String getAccessibleTooltipText() {
+            return renderer.getTooltipText();
+          }
+        }, x, 0, icon.getIconWidth(), lineHeight);
+      });
     }
 
     /* active markers */
@@ -330,9 +329,9 @@ class AccessibleGutterLine extends JPanel {
         Point parentLoc = getParent().getLocation();
         Rectangle bounds = getBounds();
         bounds.setLocation(parentLoc.x + bounds.x, parentLoc.y + bounds.y);
-        int y = bounds.y + bounds.height - JBUI.scale(1);
+        int y = bounds.y + bounds.height - JBUIScale.scale(1);
         LinePainter2D.paint((Graphics2D)g, bounds.x, y, bounds.x + bounds.width, y,
-                            LinePainter2D.StrokeType.INSIDE, JBUI.scale(1));
+                            LinePainter2D.StrokeType.INSIDE, JBUIScale.scale(1));
       } finally {
         g.setColor(oldColor);
       }
@@ -344,8 +343,7 @@ class AccessibleGutterLine extends JPanel {
         Rectangle pBounds = getParent().getBounds();
         int x = pBounds.x + bounds.x + bounds.width / 2;
         int y = pBounds.y + bounds.y + bounds.height / 2;
-        MouseEvent e = new MouseEvent(myGutter, MouseEvent.MOUSE_MOVED, System.currentTimeMillis(), 0, x, y, 0, false, MouseEvent.BUTTON1);
-        myGutter.tooltipAvailable(myAccessible.getAccessibleTooltipText(), e, null);
+        myGutter.showToolTip(myAccessible.getAccessibleTooltipText(), new Point(x, y), Balloon.Position.atRight);
       }
     }
 

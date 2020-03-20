@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.idea.eclipse;
 
@@ -6,12 +6,12 @@ import com.intellij.openapi.application.PathMacros;
 import com.intellij.openapi.application.PluginPathManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.testFramework.IdeaTestCase;
+import com.intellij.testFramework.JavaProjectTestCase;
 import org.jetbrains.annotations.NonNls;
 
 import java.io.File;
 
-public abstract class EclipseVarsTest extends IdeaTestCase {
+public abstract class EclipseVarsTest extends JavaProjectTestCase {
   @NonNls private static final String VARIABLE = "variable";
   @NonNls private static final String SRCVARIABLE = "srcvariable";
 
@@ -42,8 +42,9 @@ public abstract class EclipseVarsTest extends IdeaTestCase {
   @Override
   protected void tearDown() throws Exception {
     try {
-      PathMacros.getInstance().removeMacro(VARIABLE);
-      PathMacros.getInstance().removeMacro(SRCVARIABLE);
+      PathMacros pathMacros = PathMacros.getInstance();
+      pathMacros.setMacro(VARIABLE, null);
+      pathMacros.setMacro(SRCVARIABLE, null);
     }
     catch (Throwable e) {
       addSuppressedException(e);

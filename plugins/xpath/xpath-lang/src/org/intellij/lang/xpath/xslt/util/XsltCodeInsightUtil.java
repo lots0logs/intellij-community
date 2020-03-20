@@ -40,13 +40,8 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 
 public class XsltCodeInsightUtil {
-    public static final PsiElementFilter XSLT_PARAM_FILTER = new PsiElementFilter() {
-        @Override
-        public boolean isAccepted(@NotNull PsiElement element) {
-            return element instanceof XmlTag && XsltSupport.isParam((XmlTag)element);
-        }
-    };
-    public static final Comparator<PsiElement> POSITION_COMPARATOR = (o1, o2) -> o1.getTextOffset() - o2.getTextOffset();
+    public static final PsiElementFilter XSLT_PARAM_FILTER = element -> element instanceof XmlTag && XsltSupport.isParam((XmlTag)element);
+    public static final Comparator<PsiElement> POSITION_COMPARATOR = Comparator.comparingInt(PsiElement::getTextOffset);
 
     private XsltCodeInsightUtil() {
     }
@@ -176,7 +171,7 @@ public class XsltCodeInsightUtil {
       // collect all other possible unresolved references with the same name in the current template
       usageBlock.accept(new PsiRecursiveElementVisitor() {
         @Override
-        public void visitElement(PsiElement element) {
+        public void visitElement(@NotNull PsiElement element) {
           if (element instanceof XPathVariableReference) {
             visitXPathVariableReference(((XPathVariableReference)element));
           }

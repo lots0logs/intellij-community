@@ -1,9 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.env.python.debug;
 
 import com.google.common.collect.Sets;
-import com.intellij.execution.*;
+import com.intellij.execution.ExecutionException;
+import com.intellij.execution.Executor;
+import com.intellij.execution.RunManager;
+import com.intellij.execution.RunnerAndConfigurationSettings;
 import com.intellij.execution.configurations.ConfigurationFactory;
+import com.intellij.execution.configurations.GeneralCommandLine;
+import com.intellij.execution.configurations.ParamsGroup;
 import com.intellij.execution.configurations.RunProfile;
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.process.KillableColoredProcessHandler;
@@ -11,15 +16,17 @@ import com.intellij.execution.process.ProcessAdapter;
 import com.intellij.execution.process.ProcessEvent;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.runners.ExecutionEnvironment;
+import com.intellij.execution.runners.ProgramRunner;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.projectRoots.Sdk;
 import com.intellij.openapi.util.Key;
 import com.intellij.xdebugger.*;
-import com.jetbrains.env.python.PythonDebuggerTest;
+import com.jetbrains.python.PythonHelper;
 import com.jetbrains.python.debugger.PyDebugProcess;
 import com.jetbrains.python.debugger.PyDebugRunner;
 import com.jetbrains.python.debugger.PyDebugValueExecutionService;
+import com.jetbrains.python.run.CommandLinePatcher;
 import com.jetbrains.python.run.PythonCommandLineState;
 import com.jetbrains.python.run.PythonConfigurationType;
 import com.jetbrains.python.run.PythonRunConfiguration;
@@ -29,12 +36,11 @@ import org.junit.Assert;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
 
-/**
- * @author traff
- */
 public class PyDebuggerTask extends PyBaseDebuggerTask {
 
   private boolean myMultiprocessDebug = false;
@@ -60,7 +66,7 @@ public class PyDebuggerTask extends PyBaseDebuggerTask {
   @Nullable
   @Override
   public Set<String> getTagsToCover() {
-    return Sets.newHashSet("python2.6", "python2.7", "python3.5", "python3.6", "jython", "IronPython", "pypy");
+    return Sets.newHashSet("python2.7", "python3.5", "python3.6", "python3.7", "python3.8", "jython", "IronPython", "pypy");
   }
 
   @Override
@@ -87,7 +93,7 @@ public class PyDebuggerTask extends PyBaseDebuggerTask {
       Assert.assertSame(settings, runManager.getSelectedConfiguration());
     });
 
-    final PyDebugRunner runner = (PyDebugRunner)ProgramRunnerUtil.getRunner(getExecutorId(), settings);
+    PyDebugRunner runner = (PyDebugRunner)ProgramRunner.getRunner(getExecutorId(), settings.getConfiguration());
     Assert.assertTrue(runner.canRun(getExecutorId(), myRunConfiguration));
 
     final Executor executor = DefaultDebugExecutor.getDebugExecutorInstance();
@@ -111,7 +117,7 @@ public class PyDebuggerTask extends PyBaseDebuggerTask {
     final int serverLocalPort = serverSocket.getLocalPort();
     final RunProfile profile = env.getRunProfile();
 
-    PythonDebuggerTest.createExceptionBreak(myFixture, false, false, false); //turn off exception breakpoints by default
+    createExceptionBreak(myFixture, false, false, false); //turn off exception breakpoints by default
 
     before();
 
@@ -121,7 +127,7 @@ public class PyDebuggerTask extends PyBaseDebuggerTask {
 
     WriteAction.computeAndWait(() -> {
       myExecutionResult =
-        pyState.execute(executor, runner.createCommandLinePatchers(myFixture.getProject(), pyState, profile, serverLocalPort));
+        pyState.execute(executor, createCommandLinePatchers(runner, pyState, profile, serverLocalPort));
 
       mySession = XDebuggerManager.getInstance(getProject()).
         startSession(env, new XDebugProcessStarter() {
@@ -180,6 +186,35 @@ public class PyDebuggerTask extends PyBaseDebuggerTask {
     });
 
     doTest(myOutputPrinter);
+  }
+
+  protected boolean usePytestRunner() {
+    return false;
+  }
+
+  protected CommandLinePatcher[] createCommandLinePatchers(PyDebugRunner runner, PythonCommandLineState pyState, RunProfile profile,
+                                                           int serverLocalPort) {
+    final CommandLinePatcher[] debugPatchers = runner.createCommandLinePatchers(myFixture.getProject(), pyState, profile, serverLocalPort);
+    if (!usePytestRunner()) {
+      return debugPatchers;
+    }
+    ArrayList<CommandLinePatcher> result = new ArrayList<>();
+    result.add(pytestPatcher());
+    result.addAll(Arrays.asList(debugPatchers));
+    return result.toArray(new CommandLinePatcher[0]);
+  }
+
+  private static CommandLinePatcher pytestPatcher() {
+    return new CommandLinePatcher() {
+      @Override
+      public void patchCommandLine(GeneralCommandLine commandLine) {
+        final ParamsGroup scriptGroup = commandLine.getParametersList().getParamsGroup(PythonCommandLineState.GROUP_SCRIPT);
+        scriptGroup.addParameterAt(0, "--path");
+        scriptGroup.addParameterAt(0, PythonHelper.PYTEST.asParamString());
+
+        commandLine.getEnvironment().put("PYTEST_RUN_CONFIG", "True");
+      }
+    };
   }
 
   protected String getExecutorId() {
@@ -254,5 +289,29 @@ public class PyDebuggerTask extends PyBaseDebuggerTask {
     else {
       myDebugProcess.getProcessHandler().destroyProcess();
     }
+  }
+
+  /**
+   * Toggles breakpoint in the script returned by {@link PyDebuggerTask#getScriptName()}.
+   *
+   * @param line starting with 0
+   */
+  protected void toggleBreakpoint(int line) {
+    toggleBreakpoint(getFilePath(getScriptName()), line);
+  }
+
+  /**
+   * Toggles multiple breakpoints with {@link PyDebuggerTask#toggleBreakpoint(int)}.
+   */
+  protected void toggleBreakpoints(int... lines) {
+    toggleBreakpoints(getFilePath(getScriptName()), lines);
+  }
+
+  /**
+   * Toggles multiple breakpoints with {@link PyDebuggerTask#toggleBreakpoint(String, int)}.
+   */
+  protected void toggleBreakpoints(@NotNull String file, int... lines) {
+    for(int line : lines)
+      toggleBreakpoint(file, line);
   }
 }

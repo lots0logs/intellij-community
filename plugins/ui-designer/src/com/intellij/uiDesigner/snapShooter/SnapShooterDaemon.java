@@ -1,12 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.uiDesigner.snapShooter;
 
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.uiDesigner.XmlWriter;
 import com.intellij.uiDesigner.radComponents.RadComponent;
 import com.intellij.uiDesigner.radComponents.RadRootContainer;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import org.jetbrains.annotations.NonNls;
 
 import javax.accessibility.AccessibleContext;
@@ -19,6 +18,7 @@ import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -62,9 +62,9 @@ public class SnapShooterDaemon implements Runnable {
     try {
       clientSocket = serverSocket.accept();
       System.out.println("SnapShooter connection accepted");
-      InputStreamReader reader = new InputStreamReader(clientSocket.getInputStream(), CharsetToolkit.UTF8_CHARSET);
+      InputStreamReader reader = new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8);
       BufferedReader bufferedReader = new BufferedReader(reader);
-      OutputStreamWriter writer = new OutputStreamWriter(clientSocket.getOutputStream(), CharsetToolkit.UTF8_CHARSET);
+      OutputStreamWriter writer = new OutputStreamWriter(clientSocket.getOutputStream(), StandardCharsets.UTF_8);
       while(true) {
         String command;
         try {
@@ -116,7 +116,7 @@ public class SnapShooterDaemon implements Runnable {
                                                                getChildText(child));
       result.add(rc.toProtocolString());
     }
-    return ArrayUtil.toStringArray(result);
+    return ArrayUtilRt.toStringArray(result);
   }
 
   private static String getLayoutManagerClass(final Component component) {

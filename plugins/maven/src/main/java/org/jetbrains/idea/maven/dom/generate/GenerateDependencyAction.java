@@ -34,6 +34,7 @@ import org.jetbrains.idea.maven.dom.model.MavenDomDependency;
 import org.jetbrains.idea.maven.dom.model.MavenDomDependencyManagement;
 import org.jetbrains.idea.maven.dom.model.MavenDomProjectModel;
 import org.jetbrains.idea.maven.indices.MavenArtifactSearchDialog;
+import org.jetbrains.idea.maven.model.MavenCoordinate;
 import org.jetbrains.idea.maven.model.MavenId;
 
 import java.util.List;
@@ -41,59 +42,75 @@ import java.util.Map;
 
 public class GenerateDependencyAction extends GenerateDomElementAction {
   public GenerateDependencyAction() {
-    super(new MavenGenerateProvider<MavenDomDependency>(MavenDomBundle.message("generate.dependency"), MavenDomDependency.class) {
-        @Nullable
-        @Override
-        protected MavenDomDependency doGenerate(@NotNull final MavenDomProjectModel mavenModel, final Editor editor) {
-          Project project = mavenModel.getManager().getProject();
+    super(new MavenGenerateProvider<MavenDomDependency>(MavenDomBundle.message("generate.dependency.title"), MavenDomDependency.class) {
+      @Nullable
+      @Override
+      protected MavenDomDependency doGenerate(@NotNull final MavenDomProjectModel mavenModel, final Editor editor) {
+        Project project = mavenModel.getManager().getProject();
 
-          final Map<DependencyConflictId, MavenDomDependency> managedDependencies = GenerateManagedDependencyAction.collectManagingDependencies(mavenModel);
+        final Map<DependencyConflictId, MavenDomDependency> managedDependencies =
+          GenerateManagedDependencyAction.collectManagingDependencies(mavenModel);
 
-          final List<MavenId> ids = MavenArtifactSearchDialog.searchForArtifact(project, managedDependencies.values());
-          if (ids.isEmpty()) return null;
+        final List<MavenId> ids = MavenArtifactSearchDialog.searchForArtifact(project, managedDependencies.values());
+        if (ids.isEmpty()) return null;
 
           PsiDocumentManager.getInstance(project).commitAllDocuments();
 
           XmlFile psiFile = DomUtil.getFile(mavenModel);
-          return WriteCommandAction.writeCommandAction(psiFile.getProject(), psiFile).withName("Generate Dependency").compute(() -> {
-              boolean isInsideManagedDependencies;
-
-              MavenDomDependencyManagement dependencyManagement = mavenModel.getDependencyManagement();
-              XmlElement managedDependencyXml = dependencyManagement.getXmlElement();
-              if (managedDependencyXml != null && managedDependencyXml.getTextRange().contains(editor.getCaretModel().getOffset())) {
-                isInsideManagedDependencies = true;
-              }
-              else {
-                isInsideManagedDependencies = false;
-              }
-
-              for (MavenId each : ids) {
-                MavenDomDependency res;
-                if (isInsideManagedDependencies) {
-                  res = MavenDomUtil.createDomDependency(dependencyManagement.getDependencies(), editor, each);
-                }
-                else {
-                  DependencyConflictId conflictId = new DependencyConflictId(each.getGroupId(), each.getArtifactId(), null, null);
-                  MavenDomDependency managedDependenciesDom = managedDependencies.get(conflictId);
-
-                  if (managedDependenciesDom != null
-                      && Comparing.equal(each.getVersion(), managedDependenciesDom.getVersion().getStringValue())) {
-                    // Generate dependency without <version> tag
-                    res = MavenDomUtil.createDomDependency(mavenModel.getDependencies(), editor);
-
-                    res.getGroupId().setStringValue(conflictId.getGroupId());
-                    res.getArtifactId().setStringValue(conflictId.getArtifactId());
-                  }
-                  else {
-                    res = MavenDomUtil.createDomDependency(mavenModel.getDependencies(), editor, each);
-                  }
-                }
-                return (res);
-              }
-              return null;
-            });
+          return createDependencyInWriteAction(mavenModel, editor, managedDependencies, ids, psiFile);
         }
       }, AllIcons.Nodes.PpLib);
+  }
+
+  public static MavenDomDependency createDependencyInWriteAction(@NotNull MavenDomProjectModel mavenModel,
+                                                                 @NotNull Editor editor,
+                                                                 @NotNull Map<DependencyConflictId, MavenDomDependency> managedDependencies,
+                                                                 @NotNull List<? extends MavenCoordinate> ids,
+                                                                 @NotNull XmlFile psiFile) {
+    return WriteCommandAction.writeCommandAction(psiFile.getProject(), psiFile).withName(MavenDomBundle.message("generate.dependency"))
+      .compute(() -> createDependency(mavenModel, editor, managedDependencies, ids));
+  }
+
+  @Nullable
+  public static MavenDomDependency createDependency(@NotNull MavenDomProjectModel mavenModel,
+                                                     @NotNull Editor editor,
+                                                     @NotNull Map<DependencyConflictId, MavenDomDependency> managedDependencies,
+                                                     @NotNull List<? extends MavenCoordinate> ids) {
+    boolean isInsideManagedDependencies;
+
+    MavenDomDependencyManagement dependencyManagement = mavenModel.getDependencyManagement();
+    XmlElement managedDependencyXml = dependencyManagement.getXmlElement();
+    if (managedDependencyXml != null && managedDependencyXml.getTextRange().contains(editor.getCaretModel().getOffset())) {
+      isInsideManagedDependencies = true;
+    }
+    else {
+      isInsideManagedDependencies = false;
+    }
+
+    for (MavenCoordinate each : ids) {
+      MavenDomDependency res;
+      if (isInsideManagedDependencies) {
+        res = MavenDomUtil.createDomDependency(dependencyManagement.getDependencies(), editor, each);
+      }
+      else {
+        DependencyConflictId conflictId = new DependencyConflictId(each.getGroupId(), each.getArtifactId(), null, null);
+        MavenDomDependency managedDependenciesDom = managedDependencies.get(conflictId);
+
+        if (managedDependenciesDom != null
+            && Comparing.equal(each.getVersion(), managedDependenciesDom.getVersion().getStringValue())) {
+          // Generate dependency without <version> tag
+          res = MavenDomUtil.createDomDependency(mavenModel.getDependencies(), editor);
+
+          res.getGroupId().setStringValue(conflictId.getGroupId());
+          res.getArtifactId().setStringValue(conflictId.getArtifactId());
+        }
+        else {
+          res = MavenDomUtil.createDomDependency(mavenModel.getDependencies(), editor, each);
+        }
+      }
+      return (res);
+    }
+    return null;
   }
 
   @Override

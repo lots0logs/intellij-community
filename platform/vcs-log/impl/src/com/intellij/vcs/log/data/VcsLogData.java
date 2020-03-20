@@ -1,25 +1,10 @@
-/*
- * Copyright 2000-2013 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.data;
 
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
@@ -29,7 +14,6 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.Consumer;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.vcs.log.*;
 import com.intellij.vcs.log.data.index.VcsLogIndex;
@@ -44,24 +28,14 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static com.intellij.vcs.log.util.VcsLogUtil.registerWithParentAndProject;
-
 public class VcsLogData implements Disposable, VcsLogDataProvider {
   private static final Logger LOG = Logger.getInstance(VcsLogData.class);
-  private static final Consumer<Exception> FAILING_EXCEPTION_HANDLER = e -> {
-    if (!(e instanceof ProcessCanceledException)) {
-      LOG.error(e);
-    }
-  };
   public static final int RECENT_COMMITS_COUNT = Registry.intValue("vcs.log.recent.commits.count");
   public static final VcsLogProgress.ProgressKey DATA_PACK_REFRESH = new VcsLogProgress.ProgressKey("data pack");
 
@@ -74,7 +48,7 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
    * Current user name, as specified in the VCS settings.
    * It can be configured differently for different roots => store in a map.
    */
-  private final Map<VirtualFile, VcsUser> myCurrentUser = ContainerUtil.newHashMap();
+  private final Map<VirtualFile, VcsUser> myCurrentUser = new HashMap<>();
 
   /**
    * Cached details of the latest commits.
@@ -105,7 +79,7 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
     myUserRegistry = (VcsUserRegistryImpl)ServiceManager.getService(project, VcsUserRegistry.class);
     myFatalErrorsConsumer = fatalErrorsConsumer;
 
-    VcsLogProgress progress = new VcsLogProgress(project, this);
+    VcsLogProgress progress = new VcsLogProgress(this);
 
     if (VcsLogCachesInvalidator.getInstance().isValid()) {
       myStorage = createStorage();
@@ -122,9 +96,9 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
       // restart won't help here
       // and can not shut down ide because of this
       // so use memory storage (probably leading to out of memory at some point) + no index
-      String message = "Could not delete " + PersistentUtil.LOG_CACHE + "\nDelete it manually and restart IDEA.";
-      LOG.error(message);
-      myFatalErrorsConsumer.displayFatalErrorMessage(message);
+
+      LOG.error("Could not delete " + PersistentUtil.LOG_CACHE + "\nDelete it manually and restart IDEA.");
+      myFatalErrorsConsumer.displayFatalErrorMessage(VcsLogBundle.message("vcs.log.fatal.error.message", PersistentUtil.LOG_CACHE));
       myStorage = new InMemoryStorage();
       myIndex = new EmptyIndex();
     }
@@ -134,13 +108,13 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
     myDetailsGetter = new CommitDetailsGetter(myStorage, logProviders, myIndex, this);
 
     myRefresher = new VcsLogRefresherImpl(myProject, myStorage, myLogProviders, myUserRegistry, myIndex, progress, myTopCommitsDetailsCache,
-                                          this::fireDataPackChangeEvent, FAILING_EXCEPTION_HANDLER, RECENT_COMMITS_COUNT);
+                                          this::fireDataPackChangeEvent, RECENT_COMMITS_COUNT);
     Disposer.register(this, myRefresher);
 
     myContainingBranchesGetter = new ContainingBranchesGetter(this, this);
 
     Disposer.register(parentDisposable, this);
-    registerWithParentAndProject(this, project, () -> {
+    Disposer.register(this, () -> {
       synchronized (myLock) {
         if (myInitialization != null) {
           myInitialization.cancel();
@@ -167,7 +141,9 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
       if (myState.equals(State.CREATED)) {
         myState = State.INITIALIZED;
         StopWatch stopWatch = StopWatch.start("initialize");
-        Task.Backgroundable backgroundable = new Task.Backgroundable(myProject, "Loading History...", false) {
+        Task.Backgroundable backgroundable = new Task.Backgroundable(myProject,
+                                                                     VcsLogBundle.message("vcs.log.initial.loading.process"),
+                                                                     false) {
           @Override
           public void run(@NotNull ProgressIndicator indicator) {
             indicator.setIndeterminate(true);
@@ -248,7 +224,7 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
       for (DataPackChangeListener listener : myDataPackChangeListeners) {
         listener.onDataPackChange(dataPack);
       }
-    });
+    }, o -> Disposer.isDisposed(this));
   }
 
   public void addDataPackChangeListener(@NotNull final DataPackChangeListener listener) {
@@ -315,17 +291,6 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
   }
 
   /**
-   * Refreshes specified roots.
-   * Does not re-read all log but rather the most recent commits.
-   *
-   * @param roots roots to refresh
-   */
-  public void refreshSoftly(@NotNull Set<VirtualFile> roots) {
-    initialize();
-    myRefresher.refresh(roots);
-  }
-
-  /**
    * Makes the log perform refresh for the given root.
    * This refresh can be optimized, i. e. it can query VCS just for the part of the log.
    */
@@ -334,6 +299,7 @@ public class VcsLogData implements Disposable, VcsLogDataProvider {
     myRefresher.refresh(roots);
   }
 
+  @NotNull
   public CommitDetailsGetter getCommitDetailsGetter() {
     return myDetailsGetter;
   }

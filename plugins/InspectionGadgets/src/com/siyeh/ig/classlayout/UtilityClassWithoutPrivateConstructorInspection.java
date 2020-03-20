@@ -64,9 +64,8 @@ public class UtilityClassWithoutPrivateConstructorInspection extends BaseInspect
     return panel;
   }
 
-  @NotNull
   @Override
-  protected InspectionGadgetsFix[] buildFixes(Object... infos) {
+  protected InspectionGadgetsFix @NotNull [] buildFixes(Object... infos) {
     final List<InspectionGadgetsFix> fixes = new ArrayList<>();
     final PsiClass aClass = (PsiClass)infos[0];
     final PsiMethod constructor = getNullArgConstructor(aClass);
@@ -82,12 +81,6 @@ public class UtilityClassWithoutPrivateConstructorInspection extends BaseInspect
     }
     AddToIgnoreIfAnnotatedByListQuickFix.build(aClass, ignorableAnnotations, fixes);
     return fixes.toArray(InspectionGadgetsFix.EMPTY_ARRAY);
-  }
-
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("utility.class.without.private.constructor.display.name");
   }
 
   @Override
@@ -138,8 +131,10 @@ public class UtilityClassWithoutPrivateConstructorInspection extends BaseInspect
         final PsiElement context = element.getParent();
         if (context instanceof PsiNewExpression) {
           SwingUtilities.invokeLater(() -> Messages.showInfoMessage(aClass.getProject(),
-                                                                    "Utility class has instantiations, private constructor will not be created",
-                                                                    "Can't generate constructor"));
+                                                                    InspectionGadgetsBundle.message(
+                                                                      "utility.class.without.private.constructor.cant.generate.constructor.message"),
+                                                                    InspectionGadgetsBundle.message(
+                                                                      "utility.class.without.private.constructor.cant.generate.constructor.title")));
           return;
         }
       }

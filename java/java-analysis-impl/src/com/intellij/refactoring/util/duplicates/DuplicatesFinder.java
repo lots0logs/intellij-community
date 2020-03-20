@@ -42,27 +42,27 @@ import java.util.*;
  * @author dsl
  */
 public class DuplicatesFinder {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.refactoring.util.duplicates.DuplicatesFinder");
+  private static final Logger LOG = Logger.getInstance(DuplicatesFinder.class);
   public static final Key<Parameter> PARAMETER = Key.create("PARAMETER");
-  @NotNull private final PsiElement[] myPattern;
+  private final PsiElement @NotNull [] myPattern;
   private final InputVariables myParameters;
   private final List<? extends PsiVariable> myOutputParameters;
   private final List<PsiElement> myPatternAsList;
   private boolean myMultipleExitPoints;
   @Nullable private final ReturnValue myReturnValue;
-  @Nullable private final Set<TextRange> myTextRanges;
+  @Nullable private final Set<? extends TextRange> myTextRanges;
   private final MatchType myMatchType;
-  private final Set<PsiVariable> myEffectivelyLocal;
+  private final Set<? extends PsiVariable> myEffectivelyLocal;
   private ComplexityHolder myPatternComplexityHolder;
   private ComplexityHolder myCandidateComplexityHolder;
 
-  public DuplicatesFinder(@NotNull PsiElement[] pattern,
+  public DuplicatesFinder(PsiElement @NotNull [] pattern,
                           InputVariables parameters,
                           @Nullable ReturnValue returnValue,
                           @NotNull List<? extends PsiVariable> outputParameters,
                           @NotNull MatchType matchType,
-                          @Nullable Set<PsiVariable> effectivelyLocal,
-                          @Nullable Set<TextRange> textRanges) {
+                          @Nullable Set<? extends PsiVariable> effectivelyLocal,
+                          @Nullable Set<? extends TextRange> textRanges) {
     myReturnValue = returnValue;
     LOG.assertTrue(pattern.length > 0);
     myPattern = pattern;
@@ -103,7 +103,7 @@ public class DuplicatesFinder {
     myParameters = parameters;
   }
 
-  public DuplicatesFinder(@NotNull PsiElement[] pattern,
+  public DuplicatesFinder(PsiElement @NotNull [] pattern,
                           InputVariables parameters,
                           @Nullable ReturnValue returnValue,
                           @NotNull List<? extends PsiVariable> outputParameters) {
@@ -121,8 +121,7 @@ public class DuplicatesFinder {
     return myParameters;
   }
 
-  @NotNull
-  public PsiElement[] getPattern() {
+  public PsiElement @NotNull [] getPattern() {
     return myPattern;
   }
 
@@ -516,7 +515,7 @@ public class DuplicatesFinder {
       return match.putDeclarationCorrespondence(resolveResult1, resolveResult2);
     }
     if (resolveResult1 instanceof PsiVariable && myEffectivelyLocal.contains((PsiVariable)resolveResult1)) {
-      return (resolveResult2 instanceof PsiLocalVariable || resolveResult2 instanceof PsiParameter) &&
+      return PsiUtil.isJvmLocalVariable(resolveResult2) &&
              match.putDeclarationCorrespondence(resolveResult1, resolveResult2);
     }
     PsiElement qualifier2 = candidate.getQualifier();
@@ -715,8 +714,8 @@ public class DuplicatesFinder {
     return contextClass == (candidateQualifier != null ? candidateQualifier.resolve() : RefactoringChangeUtil.getThisClass(candidate));
   }
 
-  private boolean matchChildren(@NotNull PsiElement[] children1,
-                                @NotNull PsiElement[] children2,
+  private boolean matchChildren(PsiElement @NotNull [] children1,
+                                PsiElement @NotNull [] children2,
                                 @NotNull List<PsiElement> candidates,
                                 @NotNull Match match) {
     if (children1.length != children2.length) return false;
@@ -931,14 +930,12 @@ public class DuplicatesFinder {
     return false;
   }
 
-  @NotNull
-  public static PsiElement[] getFilteredChildren(@NotNull PsiElement element) {
+  public static PsiElement @NotNull [] getFilteredChildren(@NotNull PsiElement element) {
     PsiElement[] children = element.getChildren();
     return getDeeplyFilteredElements(children);
   }
 
-  @NotNull
-  public static PsiElement[] getDeeplyFilteredElements(@NotNull PsiElement[] children) {
+  public static PsiElement @NotNull [] getDeeplyFilteredElements(PsiElement @NotNull [] children) {
     ArrayList<PsiElement> array = new ArrayList<>();
     for (PsiElement child : children) {
       if (child instanceof PsiWhiteSpace || child instanceof PsiComment || child instanceof PsiEmptyStatement) {

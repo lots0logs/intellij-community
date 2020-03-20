@@ -1,9 +1,11 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.plugins.newui;
 
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.ide.plugins.InstalledPluginsState;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
+import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.updateSettings.impl.PluginDownloader;
 import com.intellij.openapi.updateSettings.impl.UpdateChecker;
 import org.jetbrains.annotations.NotNull;
@@ -24,11 +26,12 @@ public class PluginUpdatesService {
   private static Collection<PluginDownloader> myCache;
   private static boolean myPrepared;
   private static boolean myPreparing;
+  private static boolean myReset;
 
   private Consumer<Integer> myTreeCallback;
   private Consumer<Integer> myTabCallback;
-  private Consumer<Collection<PluginDownloader>> myInstalledPanelCallback;
-  private Consumer<Collection<PluginDownloader>> myUpdatePanelCallback;
+  private Consumer<? super Collection<PluginDownloader>> myInstalledPanelCallback;
+  private Consumer<? super Collection<PluginDownloader>> myUpdatePanelCallback;
 
   @NotNull
   public static PluginUpdatesService connectTreeRenderer(@NotNull Consumer<Integer> callback) {
@@ -66,7 +69,7 @@ public class PluginUpdatesService {
     return service;
   }
 
-  public void connectInstalled(@NotNull Consumer<Collection<PluginDownloader>> callback) {
+  public void connectInstalled(@NotNull Consumer<? super Collection<PluginDownloader>> callback) {
     checkAccess();
     myInstalledPanelCallback = callback;
 
@@ -78,7 +81,7 @@ public class PluginUpdatesService {
     }
   }
 
-  public void calculateUpdates(@NotNull Consumer<Collection<PluginDownloader>> callback) {
+  public void calculateUpdates(@NotNull Consumer<? super Collection<PluginDownloader>> callback) {
     checkAccess();
     myUpdatePanelCallback = callback;
 
@@ -113,15 +116,36 @@ public class PluginUpdatesService {
     }
   }
 
+  public void finishUpdate() {
+    checkAccess();
+
+    if (!myPrepared || myCache == null) {
+      return;
+    }
+
+    Integer countValue = getCount();
+    for (PluginUpdatesService service : SERVICES) {
+      service.runCountCallbacks(countValue);
+    }
+  }
+
   public void recalculateUpdates() {
     checkAccess();
-    assert !myPreparing;
 
     for (PluginUpdatesService service : SERVICES) {
       service.runAllCallbacks(0);
     }
 
-    calculateUpdates();
+    if (myPreparing) {
+      resetUpdates();
+    }
+    else {
+      calculateUpdates();
+    }
+  }
+
+  private static void resetUpdates() {
+    myReset = true;
   }
 
   public void dispose() {
@@ -139,6 +163,27 @@ public class PluginUpdatesService {
     }
   }
 
+  public static boolean isNeedUpdate(@NotNull IdeaPluginDescriptor descriptor) {
+    checkAccess();
+
+    PluginId pluginId = descriptor.getPluginId();
+    if (myPrepared && myCache != null) {
+      for (PluginDownloader downloader : myCache) {
+        if (pluginId == downloader.getId()) {
+          return true;
+        }
+      }
+    }
+
+    return InstalledPluginsState.getInstance().hasNewerVersion(pluginId);
+  }
+
+  @Nullable
+  public static Collection<PluginDownloader> getUpdates() {
+    checkAccess();
+    return !myPrepared || myPreparing || myCache == null ? null : myCache;
+  }
+
   private static void calculateUpdates() {
     if (myPreparing) {
       return;
@@ -153,6 +198,13 @@ public class PluginUpdatesService {
         checkAccess();
 
         myPreparing = false;
+
+        if (myReset) {
+          myReset = false;
+          calculateUpdates();
+          return;
+        }
+
         myPrepared = true;
         myCache = updates;
 

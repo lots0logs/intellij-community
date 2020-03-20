@@ -43,6 +43,8 @@ public class PyMethodParametersInspection extends PyInspection {
   @Nullable
   @Override
   public JComponent createOptionsPanel() {
+    //TODO: simplify this (drop this?)
+    // it should offer only one default option mcs or metacls, inspection should accept both
     ComboBox comboBox = new ComboBox<>(new String[] {"mcs", "metacls"});
     comboBox.setSelectedItem(MCS);
     comboBox.addActionListener(new ActionListener() {
@@ -54,19 +56,12 @@ public class PyMethodParametersInspection extends PyInspection {
     });
 
     JPanel option = new JPanel(new BorderLayout());
-    option.add(new JLabel("Metaclass method first argument name"), BorderLayout.WEST);
+    option.add(new JLabel(PyBundle.message("INSP.method.parameters.metaclass.method.first.argument.name")), BorderLayout.WEST);
     option.add(comboBox, BorderLayout.EAST);
 
     final JPanel root = new JPanel(new BorderLayout());
     root.add(option, BorderLayout.PAGE_START);
     return root;
-  }
-
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.problematic.first.parameter");
   }
 
   @Override

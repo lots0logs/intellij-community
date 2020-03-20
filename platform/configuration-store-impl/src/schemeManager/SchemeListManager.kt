@@ -1,26 +1,25 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore.schemeManager
 
 import com.intellij.configurationStore.LOG
 import com.intellij.openapi.options.ExternalizableScheme
-import com.intellij.openapi.util.Condition
-import com.intellij.util.containers.ConcurrentList
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.containers.filterSmart
 import com.intellij.util.text.UniqueNameGenerator
 import gnu.trove.THashSet
 import java.util.concurrent.atomic.AtomicReference
+import java.util.function.Predicate
 
 internal class SchemeListManager<T : Any>(private val schemeManager: SchemeManagerImpl<T, *>) {
-  private val schemesRef = AtomicReference(ContainerUtil.createLockFreeCopyOnWriteList<T>() as ConcurrentList<T>)
+  private val schemesRef = AtomicReference(ContainerUtil.createLockFreeCopyOnWriteList<T>())
 
   internal val readOnlyExternalizableSchemes = ContainerUtil.newConcurrentMap<String, T>()
 
-  val schemes: ConcurrentList<T>
+  val schemes: MutableList<T>
     get() = schemesRef.get()
 
-  fun replaceSchemeList(oldList: ConcurrentList<T>, newList: List<T>) {
-    if (!schemesRef.compareAndSet(oldList, ContainerUtil.createLockFreeCopyOnWriteList(newList) as ConcurrentList<T>)) {
+  fun replaceSchemeList(oldList: List<T>, newList: List<T>) {
+    if (!schemesRef.compareAndSet(oldList, ContainerUtil.createLockFreeCopyOnWriteList(newList))) {
       throw IllegalStateException("Scheme list was modified")
     }
   }
@@ -77,21 +76,21 @@ internal class SchemeListManager<T : Any>(private val schemeManager: SchemeManag
     schemeManager.processPendingCurrentSchemeName(scheme)
   }
 
-  fun setSchemes(newSchemes: List<T>, newCurrentScheme: T?, removeCondition: Condition<T>?) {
+  fun setSchemes(newSchemes: List<T>, newCurrentScheme: T?, removeCondition: Predicate<T>?) {
     if (schemes.isNotEmpty()) {
       if (removeCondition == null) {
         schemes.clear()
       }
       else {
         // we must not use remove or removeAll to avoid "equals" call
-        schemesRef.set(ContainerUtil.createConcurrentList(schemes.filterSmart { !removeCondition.value(it) }))
+        schemesRef.set(ContainerUtil.createConcurrentList(schemes.filterSmart { !removeCondition.test(it) }))
       }
     }
 
     schemes.addAll(newSchemes)
 
     val oldCurrentScheme = schemeManager.activeScheme
-    schemeManager.retainExternalInfo()
+    schemeManager.retainExternalInfo(isScheduleToDelete = true)
 
     if (oldCurrentScheme != newCurrentScheme) {
       val newScheme: T?
@@ -108,7 +107,7 @@ internal class SchemeListManager<T : Any>(private val schemeManager: SchemeManag
       }
 
       if (oldCurrentScheme != newScheme) {
-        schemeManager.processor.onCurrentSchemeSwitched(oldCurrentScheme, newScheme)
+        schemeManager.processor.onCurrentSchemeSwitched(oldCurrentScheme, newScheme, false)
       }
     }
   }
@@ -117,5 +116,12 @@ internal class SchemeListManager<T : Any>(private val schemeManager: SchemeManag
     val result = THashSet<String>(schemes.size)
     schemes.mapTo(result) { schemeManager.processor.getSchemeKey(it) }
     return result
+  }
+}
+
+private fun ExternalizableScheme.renameScheme(newName: String) {
+  if (newName != name) {
+    name = newName
+    LOG.assertTrue(newName == name)
   }
 }

@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.ant.config.explorer;
 
 import com.intellij.ide.util.treeView.AbstractTreeStructure;
@@ -25,14 +11,14 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.ui.JBColor;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
 final class AntExplorerTreeStructure extends AbstractTreeStructure {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.lang.ant.config.explorer.AntExplorerTreeStructure");
+  private static final Logger LOG = Logger.getInstance(AntExplorerTreeStructure.class);
   private final Project myProject;
   private final Object myRoot = new Object();
   private boolean myFilteredTargets = false;
@@ -64,26 +50,25 @@ final class AntExplorerTreeStructure extends AbstractTreeStructure {
     if (element == myRoot) {
       return new RootNodeDescriptor(myProject, parentDescriptor);
     }
-    
+
     if (element instanceof String) {
       return new TextInfoNodeDescriptor(myProject, parentDescriptor, (String)element);
     }
-    
+
     if (element instanceof AntBuildFileBase) {
       return new AntBuildFileNodeDescriptor(myProject, parentDescriptor, (AntBuildFileBase)element);
     }
-    
+
     if (element instanceof AntBuildTargetBase) {
       return new AntTargetNodeDescriptor(myProject, parentDescriptor, (AntBuildTargetBase)element);
     }
-    
+
     LOG.error("Unknown element for this tree structure " + element);
     return null;
   }
 
-  @NotNull
   @Override
-  public Object[] getChildElements(@NotNull Object element) {
+  public Object @NotNull [] getChildElements(@NotNull Object element) {
     final AntConfiguration configuration = AntConfiguration.getInstance(myProject);
     if (element == myRoot) {
       if (!configuration.isInitialized()) {
@@ -107,7 +92,7 @@ final class AntExplorerTreeStructure extends AbstractTreeStructure {
       return targets.toArray(new AntBuildTarget[0]);
     }
 
-    return ArrayUtil.EMPTY_OBJECT_ARRAY;
+    return ArrayUtilRt.EMPTY_OBJECT_ARRAY;
   }
 
   @Override
@@ -119,11 +104,11 @@ final class AntExplorerTreeStructure extends AbstractTreeStructure {
       }
       return ((AntBuildTarget)element).getModel().getBuildFile();
     }
-    
+
     if (element instanceof AntBuildFile) {
       return myRoot;
     }
-    
+
     return null;
   }
 
@@ -159,11 +144,6 @@ final class AntExplorerTreeStructure extends AbstractTreeStructure {
     }
 
     @Override
-    public boolean isAutoExpand() {
-      return true;
-    }
-
-    @Override
     public Object getElement() {
       return myRoot;
     }
@@ -189,11 +169,6 @@ final class AntExplorerTreeStructure extends AbstractTreeStructure {
 
     @Override
     public boolean update() {
-      return true;
-    }
-
-    @Override
-    public boolean isAutoExpand() {
       return true;
     }
   }

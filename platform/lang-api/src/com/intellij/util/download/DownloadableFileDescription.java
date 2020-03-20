@@ -22,8 +22,6 @@ import org.jetbrains.annotations.NotNull;
  * Describes file which can be downloaded from the net
  *
  * Use {@link DownloadableFileService#createFileDescription(String, String)} to create instances of this interface
- *
- * @author nik
  */
 public interface DownloadableFileDescription {
   @NotNull
@@ -39,5 +37,5 @@ public interface DownloadableFileDescription {
   String getDefaultFileName();
 
   @NotNull
-  String generateFileName(@NotNull Condition<String> validator);
+  String generateFileName(@NotNull Condition<? super String> validator);
 }

@@ -1,19 +1,15 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.compiler.impl;
 
 import com.intellij.codeInsight.daemon.impl.actions.SuppressFix;
 import com.intellij.codeInsight.daemon.impl.actions.SuppressForClassFix;
 import com.intellij.compiler.CompilerWorkspaceConfiguration;
-import com.intellij.ide.errorTreeView.ErrorTreeElement;
-import com.intellij.ide.errorTreeView.NavigatableMessageElement;
-import com.intellij.ide.errorTreeView.NewErrorTreeViewPanel;
+import com.intellij.ide.errorTreeView.*;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.CommandProcessor;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
-import com.intellij.openapi.module.LanguageLevelUtil;
+import com.intellij.openapi.module.EffectiveLanguageLevelUtil;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleUtilCore;
 import com.intellij.openapi.project.Project;
@@ -27,6 +23,7 @@ import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class CompilerErrorTreeView extends NewErrorTreeViewPanel {
   public CompilerErrorTreeView(Project project, Runnable rerunAction) {
@@ -43,7 +40,12 @@ public class CompilerErrorTreeView extends NewErrorTreeViewPanel {
   @Override
   protected void addExtraPopupMenuActions(DefaultActionGroup group) {
     group.addSeparator();
-    group.add(new ExcludeFromCompileAction(myProject, this));
+    group.add(new ExcludeFromCompileAction(myProject) {
+      @Override
+      protected @Nullable VirtualFile getFile() {
+        return getSelectedFile();
+      }
+    });
     group.add(new SuppressJavacWarningsAction());
     group.add(new SuppressJavacWarningForClassAction());
     ActionGroup popupGroup = (ActionGroup)ActionManager.getInstance().getAction(IdeActions.GROUP_COMPILER_ERROR_VIEW_POPUP);
@@ -57,6 +59,22 @@ public class CompilerErrorTreeView extends NewErrorTreeViewPanel {
   @Override
   protected boolean shouldShowFirstErrorInEditor() {
     return CompilerWorkspaceConfiguration.getInstance(myProject).AUTO_SHOW_ERRORS_IN_EDITOR;
+  }
+
+  @Override
+  protected ErrorViewStructure createErrorViewStructure(Project project, boolean canHideWarnings) {
+    return new ErrorViewStructure(project, canHideWarnings) {
+      @NotNull
+      @Override
+      protected GroupingElement createGroupingElement(String groupName, Object data, VirtualFile file) {
+        return new GroupingElement(groupName, data, file) {
+          @Override
+          public boolean isRenderWithBoldFont() {
+            return false;
+          }
+        };
+      }
+    };
   }
 
   private class SuppressJavacWarningsAction extends AnAction {
@@ -84,8 +102,7 @@ public class CompilerErrorTreeView extends NewErrorTreeViewPanel {
     @Override
     public void update(@NotNull final AnActionEvent e) {
       final Presentation presentation = e.getPresentation();
-      presentation.setVisible(false);
-      presentation.setEnabled(false);
+      presentation.setEnabledAndVisible(false);
       final Project project = e.getProject();
       if (project == null) {
         return;
@@ -95,7 +112,7 @@ public class CompilerErrorTreeView extends NewErrorTreeViewPanel {
         final NavigatableMessageElement messageElement = (NavigatableMessageElement)errorTreeElement;
         final String[] text = messageElement.getText();
         if (text.length > 0) {
-          if (text[0].startsWith("[") && text[0].indexOf("]") != -1) {
+          if (text[0].startsWith("[") && text[0].contains("]")) {
             final Navigatable navigatable = messageElement.getNavigatable();
             if (navigatable instanceof OpenFileDescriptor) {
               final OpenFileDescriptor fileDescriptor = (OpenFileDescriptor)navigatable;
@@ -116,7 +133,7 @@ public class CompilerErrorTreeView extends NewErrorTreeViewPanel {
               if (psiFile == null) {
                 return;
               }
-              if (LanguageLevelUtil.getEffectiveLanguageLevel(module).compareTo(LanguageLevel.JDK_1_5) < 0) return;
+              if (EffectiveLanguageLevelUtil.getEffectiveLanguageLevel(module).compareTo(LanguageLevel.JDK_1_5) < 0) return;
               final PsiElement context = psiFile.findElementAt(fileDescriptor.getOffset());
               if (context == null) {
                 return;
@@ -124,8 +141,7 @@ public class CompilerErrorTreeView extends NewErrorTreeViewPanel {
               final String id = text[0].substring(1, text[0].indexOf("]"));
               final SuppressFix suppressInspectionFix = getSuppressAction(id);
               final boolean available = suppressInspectionFix.isAvailable(project, context);
-              presentation.setEnabled(available);
-              presentation.setVisible(available);
+              presentation.setEnabledAndVisible(available);
               if (available) {
                 presentation.setText(suppressInspectionFix.getText());
               }

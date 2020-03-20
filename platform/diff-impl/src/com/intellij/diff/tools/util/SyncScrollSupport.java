@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.diff.tools.util;
 
 import com.intellij.diff.util.Range;
@@ -27,13 +13,13 @@ import com.intellij.openapi.editor.event.VisibleAreaListener;
 import com.intellij.openapi.editor.ex.EditorEx;
 import com.intellij.openapi.editor.impl.FoldingModelImpl;
 import com.intellij.util.ArrayUtil;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.CalledInAwt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Arrays;
 import java.util.List;
 
 public class SyncScrollSupport {
@@ -79,7 +65,7 @@ public class SyncScrollSupport {
     @Override
     @NotNull
     protected List<? extends ScrollHelper> getScrollHelpers() {
-      return ContainerUtil.list(myHelper1, myHelper2);
+      return Arrays.asList(myHelper1, myHelper2);
     }
 
     @NotNull
@@ -151,7 +137,7 @@ public class SyncScrollSupport {
     @Override
     @NotNull
     protected List<? extends ScrollHelper> getScrollHelpers() {
-      return ContainerUtil.list(myHelper12, myHelper21, myHelper23, myHelper32);
+      return Arrays.asList(myHelper12, myHelper21, myHelper23, myHelper32);
     }
 
     @NotNull
@@ -455,18 +441,16 @@ public class SyncScrollSupport {
     return header == null ? 0 : header.getHeight();
   }
 
-  @NotNull
-  public static int[] getTargetOffsets(@NotNull Editor editor1, @NotNull Editor editor2,
-                                       int startLine1, int endLine1, int startLine2, int endLine2,
-                                       int preferredTopShift) {
+  public static int @NotNull [] getTargetOffsets(@NotNull Editor editor1, @NotNull Editor editor2,
+                                                 int startLine1, int endLine1, int startLine2, int endLine2,
+                                                 int preferredTopShift) {
     return getTargetOffsets(new Editor[]{editor1, editor2},
                             new int[]{startLine1, startLine2},
                             new int[]{endLine1, endLine2},
                             preferredTopShift);
   }
 
-  @NotNull
-  private static int[] getTargetOffsets(@NotNull Editor[] editors, int[] startLines, int[] endLines, int preferredTopShift) {
+  private static int @NotNull [] getTargetOffsets(Editor @NotNull [] editors, int[] startLines, int[] endLines, int preferredTopShift) {
     int count = editors.length;
     assert startLines.length == count;
     assert endLines.length == count;

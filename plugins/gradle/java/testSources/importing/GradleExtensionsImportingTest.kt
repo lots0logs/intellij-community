@@ -13,7 +13,8 @@ class GradleExtensionsImportingTest : GradleImportingTestCase() {
 
   @Test
   fun testJavaProject() {
-    importProject("apply plugin: 'java'")
+    importProject("apply plugin: 'java'\n" +
+                  "apply plugin: 'idea'")
 
     assertModules("project", "project.main", "project.test")
 
@@ -24,7 +25,7 @@ class GradleExtensionsImportingTest : GradleImportingTestCase() {
                           "java" to "org.gradle.api.plugins.JavaPluginConvention"),
                     conventionsMap)
 
-    val extensionsMap = extensions.extensions.map { it.name to it.typeFqn }.toMap()
+    val extensionsMap = extensions.extensions.mapValues { entry -> entry.value.typeFqn }
 
 
     val baseVer = GradleVersion.version(gradleVersion).baseVersion
@@ -32,27 +33,32 @@ class GradleExtensionsImportingTest : GradleImportingTestCase() {
     when {
       baseVer <= GradleVersion.version("2.7") ->
         expectedExtensions = mapOf<String, String?>("ext" to extraPropertiesExtensionFqn,
+                                                    "idea" to "org.gradle.plugins.ide.idea.model.IdeaModel",
                                                     "sources" to "org.gradle.language.base.internal.DefaultProjectSourceSet",
                                                     "binaries" to "org.gradle.platform.base.internal.DefaultBinaryContainer",
                                                     "defaultArtifacts" to "org.gradle.api.internal.plugins.DefaultArtifactPublicationSet",
                                                     "reporting" to "org.gradle.api.reporting.ReportingExtension")
       baseVer <= GradleVersion.version("2.8") ->
         expectedExtensions = mapOf<String, String?>("ext" to extraPropertiesExtensionFqn,
+                                                    "idea" to "org.gradle.plugins.ide.idea.model.IdeaModel",
                                                     "binaries" to "org.gradle.platform.base.internal.DefaultBinaryContainer",
                                                     "defaultArtifacts" to "org.gradle.api.internal.plugins.DefaultArtifactPublicationSet",
                                                     "reporting" to "org.gradle.api.reporting.ReportingExtension")
       baseVer <= GradleVersion.version("4.9") ->
         expectedExtensions = mapOf<String, String?>("ext" to extraPropertiesExtensionFqn,
+                                                    "idea" to "org.gradle.plugins.ide.idea.model.IdeaModel",
                                                     "defaultArtifacts" to "org.gradle.api.internal.plugins.DefaultArtifactPublicationSet",
                                                     "reporting" to "org.gradle.api.reporting.ReportingExtension")
-      baseVer <= GradleVersion.version("4.10.3") ->
+      baseVer < GradleVersion.version("4.10.3") ->
         expectedExtensions = mapOf<String, String?>("ext" to extraPropertiesExtensionFqn,
+                                                    "idea" to "org.gradle.plugins.ide.idea.model.IdeaModel",
                                                     "defaultArtifacts" to "org.gradle.api.internal.plugins.DefaultArtifactPublicationSet",
                                                     "reporting" to "org.gradle.api.reporting.ReportingExtension",
                                                     "sourceSets" to "org.gradle.api.internal.tasks.DefaultSourceSetContainer",
                                                     "java" to "org.gradle.api.plugins.internal.DefaultJavaPluginExtension")
       else ->
         expectedExtensions = mapOf<String, String?>("ext" to extraPropertiesExtensionFqn,
+                                                    "idea" to "org.gradle.plugins.ide.idea.model.IdeaModel",
                                                     "defaultArtifacts" to "org.gradle.api.internal.plugins.DefaultArtifactPublicationSet",
                                                     "reporting" to "org.gradle.api.reporting.ReportingExtension",
                                                     "sourceSets" to "org.gradle.api.tasks.SourceSetContainer",

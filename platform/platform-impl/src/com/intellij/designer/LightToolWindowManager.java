@@ -1,20 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.designer;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.AnAction;
@@ -24,9 +11,7 @@ import com.intellij.openapi.fileEditor.FileEditor;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
 import com.intellij.openapi.fileEditor.FileEditorManagerListener;
-import com.intellij.openapi.project.DumbAwareRunnable;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectUtil;
 import com.intellij.openapi.startup.StartupManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
@@ -49,29 +34,17 @@ public abstract class LightToolWindowManager implements Disposable {
 
   private final MergingUpdateQueue myWindowQueue = new MergingUpdateQueue(getComponentName(), 200, true, null, this);
   protected final Project myProject;
-  protected final FileEditorManager myFileEditorManager;
   protected volatile ToolWindow myToolWindow;
 
-  private final PropertiesComponent myPropertiesComponent;
   public final String myEditorModeKey;
-  private ToggleEditorModeAction myLeftEditorModeAction;
-  private ToggleEditorModeAction myRightEditorModeAction;
 
   private MessageBusConnection myConnection;
 
-  protected LightToolWindowManager(Project project, FileEditorManager fileEditorManager) {
+  protected LightToolWindowManager(@NotNull Project project) {
     myProject = project;
-    myFileEditorManager = fileEditorManager;
-    myPropertiesComponent = PropertiesComponent.getInstance(myProject);
     myEditorModeKey = EDITOR_MODE + getComponentName() + ".STATE";
 
-    ProjectUtil.runWhenProjectOpened(project, () -> projectOpened());
-  }
-
-  protected void projectOpened() {
-    initToolWindow();
-
-    StartupManager.getInstance(myProject).runWhenProjectIsInitialized((DumbAwareRunnable)() -> {
+    StartupManager.getInstance(myProject).runAfterOpened(() -> {
       if (getEditorMode() == null) {
         initListeners();
         bindToDesigner(getActiveDesigner());
@@ -109,7 +82,8 @@ public abstract class LightToolWindowManager implements Disposable {
 
   @Nullable
   public DesignerEditorPanelFacade getActiveDesigner() {
-    for (FileEditor editor : myFileEditorManager.getSelectedEditors()) {
+    if (myProject.isDisposed()) return null;
+    for (FileEditor editor : FileEditorManager.getInstance(myProject).getSelectedEditors()) {
       DesignerEditorPanelFacade designer = getDesigner(editor);
       if (designer != null) {
         return designer;
@@ -153,17 +127,11 @@ public abstract class LightToolWindowManager implements Disposable {
   //////////////////////////////////////////////////////////////////////////////////////////
 
   public AnAction createGearActions() {
-    DefaultActionGroup group = new DefaultActionGroup("In Editor Mode", true);
+    DefaultActionGroup group = DefaultActionGroup.createPopupGroup(IdeBundle.messagePointer("popup.title.in.editor.mode"));
 
-    if (myLeftEditorModeAction == null) {
-      myLeftEditorModeAction = createToggleAction(ToolWindowAnchor.LEFT);
-    }
-    group.add(myLeftEditorModeAction);
-
-    if (myRightEditorModeAction == null) {
-      myRightEditorModeAction = createToggleAction(ToolWindowAnchor.RIGHT);
-    }
-    group.add(myRightEditorModeAction);
+    group.add(createToggleAction(ToolWindowAnchor.LEFT));
+    group.add(createToggleAction(ToolWindowAnchor.RIGHT));
+    group.add(createToggleAction(null));
 
     return group;
   }
@@ -196,7 +164,7 @@ public abstract class LightToolWindowManager implements Disposable {
                                                 @NotNull JComponent component,
                                                 @NotNull JComponent focusedComponent,
                                                 int defaultWidth,
-                                                @Nullable AnAction[] actions) {
+                                                AnAction @Nullable [] actions) {
     return new LightToolWindow(content,
                                title,
                                icon,
@@ -206,7 +174,6 @@ public abstract class LightToolWindowManager implements Disposable {
                                getEditorMode(),
                                this,
                                myProject,
-                               myPropertiesComponent,
                                getComponentName(),
                                defaultWidth,
                                actions);
@@ -231,7 +198,7 @@ public abstract class LightToolWindowManager implements Disposable {
   private final Consumer<DesignerEditorPanelFacade> myDisposeAction = designer -> disposeContent(designer);
 
   private void runUpdateContent(Consumer<? super DesignerEditorPanelFacade> action) {
-    for (FileEditor editor : myFileEditorManager.getAllEditors()) {
+    for (FileEditor editor : FileEditorManager.getInstance(myProject).getAllEditors()) {
       DesignerEditorPanelFacade designer = getDesigner(editor);
       if (designer != null) {
         action.accept(designer);
@@ -245,7 +212,7 @@ public abstract class LightToolWindowManager implements Disposable {
 
   @Nullable
   public final ToolWindowAnchor getEditorMode() {
-    String value = myPropertiesComponent.getValue(myEditorModeKey);
+    String value = PropertiesComponent.getInstance(myProject).getValue(myEditorModeKey);
     if (value == null) {
       return getAnchor();
     }
@@ -254,7 +221,7 @@ public abstract class LightToolWindowManager implements Disposable {
 
   protected final void setEditorMode(@Nullable ToolWindowAnchor newState) {
     ToolWindowAnchor oldState = getEditorMode();
-    myPropertiesComponent.setValue(myEditorModeKey, newState == null ? "ToolWindow" : newState.toString());
+    PropertiesComponent.getInstance(myProject).setValue(myEditorModeKey, newState == null ? "ToolWindow" : newState.toString());
 
     if (oldState != null && newState != null) {
       runUpdateContent(myUpdateAnchorAction);

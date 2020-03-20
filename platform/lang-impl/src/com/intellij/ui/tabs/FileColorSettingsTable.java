@@ -16,6 +16,7 @@
 
 package com.intellij.ui.tabs;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.ui.FileColorManager;
 import com.intellij.ui.table.JBTable;
 import com.intellij.util.ui.ColorIcon;
@@ -43,10 +44,10 @@ public abstract class FileColorSettingsTable extends JBTable {
   private static final int NAME_COLUMN = 0;
   private static final int COLOR_COLUMN = 1;
 
-  private final List<FileColorConfiguration> myOriginal;
+  private final List<? extends FileColorConfiguration> myOriginal;
   @NotNull private final FileColorManager myManager;
 
-  public FileColorSettingsTable(@NotNull final FileColorManager manager, @NotNull final List<FileColorConfiguration> configurations) {
+  public FileColorSettingsTable(@NotNull final FileColorManager manager, @NotNull final List<? extends FileColorConfiguration> configurations) {
     super(new ModelAdapter(manager, copy(configurations)));
     myManager = manager;
     setStriped(true);
@@ -62,7 +63,7 @@ public abstract class FileColorSettingsTable extends JBTable {
     colorColumn.setCellRenderer(new ColorCellRenderer(manager));
   }
 
-  private static List<FileColorConfiguration> copy(@NotNull final List<FileColorConfiguration> configurations) {
+  private static List<FileColorConfiguration> copy(@NotNull final List<? extends FileColorConfiguration> configurations) {
     final List<FileColorConfiguration> result = new ArrayList<>();
     for (FileColorConfiguration c : configurations) {
       try {
@@ -76,7 +77,7 @@ public abstract class FileColorSettingsTable extends JBTable {
     return result;
   }
 
-  protected abstract void apply(@NotNull final List<FileColorConfiguration> configurations);
+  protected abstract void apply(@NotNull final List<? extends FileColorConfiguration> configurations);
 
   @Override
   public ModelAdapter getModel() {
@@ -180,7 +181,9 @@ public abstract class FileColorSettingsTable extends JBTable {
 
     @Override
     public String getColumnName(int column) {
-      return column == NAME_COLUMN ? "Scope" : "Color";
+      return column == NAME_COLUMN
+             ? IdeBundle.message("settings.file.color.column.scope")
+             : IdeBundle.message("settings.file.color.column.color");
     }
 
     @Override
@@ -216,7 +219,7 @@ public abstract class FileColorSettingsTable extends JBTable {
       fireTableRowsInserted(myConfigurations.size() - 1, myConfigurations.size() - 1);
     }
 
-    public void setConfigurations(List<FileColorConfiguration> original) {
+    public void setConfigurations(List<? extends FileColorConfiguration> original) {
       myConfigurations = copy(original);
       fireTableDataChanged();
     }

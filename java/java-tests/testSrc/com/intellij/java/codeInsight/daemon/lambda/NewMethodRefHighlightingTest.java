@@ -34,9 +34,8 @@ public class NewMethodRefHighlightingTest extends LightDaemonAnalyzerTestCase {
     enableInspectionTool(new UnusedDeclarationInspection());
   }
 
-  @NotNull
   @Override
-  protected LocalInspectionTool[] configureLocalInspectionTools() {
+  protected LocalInspectionTool @NotNull [] configureLocalInspectionTools() {
     return new LocalInspectionTool[]{
       new UncheckedWarningLocalInspection()
     };
@@ -84,10 +83,7 @@ public class NewMethodRefHighlightingTest extends LightDaemonAnalyzerTestCase {
     doHighlighting()
       .stream()
       .filter(info -> info.type == HighlightInfoType.ERROR)
-      .forEach(info -> Assert.assertEquals("<html><body>Incompatible types." +
-                                           "<table><tr><td>Required:</td><td><font color='red'><b>Test.I</b></font></td></tr><tr><td>" +
-                                           "Found:</td><td><font color='red'><b>&lt;method reference&gt;</b></font></td></tr></table><br/>" +
-                                           "reason: method reference is ambiguous: both 'Test.m(Test, String)' and 'Test.m(String)' match</body></html>",
+      .forEach(info -> Assert.assertEquals("<html>Cannot resolve method 'm'</html>",
                                            info.getToolTip()));
   }
   public void testSuperClassPotentiallyApplicableMembers() { doTest(); }
@@ -194,9 +190,13 @@ public class NewMethodRefHighlightingTest extends LightDaemonAnalyzerTestCase {
   public void testSkipInferenceForInapplicableMethodReference() { doTest(); }
   public void testRegisterVariablesForNonFoundParameterizations() { doTest(); }
 
+  public void testConstructorReferenceOnRawTypeWithInferredSubtypes() { doTest(); }
   public void testPreferErrorOnTopLevelToFailedSubstitutorOnNestedLevel() { doTest(); }
   public void testDontIgnoreIncompatibilitiesDuringFirstApplicabilityCheck() { doTest(); }
   public void testCaptureOnDedicatedParameterOfSecondSearch() { doTest(); }
+  public void testVoidConflict() { doTest(); }
+  public void testCreateMethodFromMethodRefApplicability() { doTest(); }
+  public void testErrorMessageOnTopCallWhenFunctionalInterfaceIsNotInferred() { doTest(); }
 
   private void doTest() {
     doTest(false);

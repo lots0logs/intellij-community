@@ -78,7 +78,7 @@ public class VcsRootIterator {
       myRoot = root;
       myVcsName = vcsName;
 
-      myExcludedByOthers = new LinkedList<>();
+      myExcludedByOthers = new ArrayList<>();
     }
 
     private void init(final VcsRoot[] allRoots) {
@@ -87,12 +87,9 @@ public class VcsRootIterator {
       for (VcsRoot root : allRoots) {
         final AbstractVcs vcs = root.getVcs();
         if (vcs == null || Comparing.equal(vcs.getName(), myVcsName)) continue;
-        final VirtualFile path = root.getPath();
-        if (path != null) {
-          final String url = path.getUrl();
-          if (url.startsWith(ourPath)) {
-            myExcludedByOthers.add(url);
-          }
+        final String url = root.getPath().getUrl();
+        if (url.startsWith(ourPath)) {
+          myExcludedByOthers.add(url);
         }
       }
 
@@ -160,7 +157,7 @@ public class VcsRootIterator {
     }
 
     public void iterate() {
-      VfsUtilCore.visitChildrenRecursively(myRoot, new VirtualFileVisitor(VirtualFileVisitor.NO_FOLLOW_SYMLINKS) {
+      VfsUtilCore.visitChildrenRecursively(myRoot, new VirtualFileVisitor<Void>(VirtualFileVisitor.NO_FOLLOW_SYMLINKS) {
         @Override
         public void afterChildrenVisited(@NotNull VirtualFile file) {
           if (myDirectoryFilter != null) {

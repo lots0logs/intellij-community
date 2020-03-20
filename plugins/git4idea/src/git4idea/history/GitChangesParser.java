@@ -19,7 +19,6 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.FileStatus;
-import com.intellij.openapi.vcs.VcsException;
 import com.intellij.openapi.vcs.changes.Change;
 import com.intellij.openapi.vcs.changes.ContentRevision;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
@@ -40,10 +39,10 @@ public class GitChangesParser {
   @NotNull
   public static List<Change> parse(@NotNull Project project,
                                    @NotNull VirtualFile root,
-                                   @NotNull List<VcsFileStatusInfo> statusInfos,
+                                   @NotNull List<? extends VcsFileStatusInfo> statusInfos,
                                    @NotNull String hash,
                                    @NotNull Date date,
-                                   @Nullable String parentsHash) throws VcsException {
+                                   @Nullable String parentsHash) {
     GitRevisionNumber thisRevision = new GitRevisionNumber(hash, date);
     GitRevisionNumber parentRevision = parentsHash == null ? null : new GitRevisionNumber(parentsHash);
 
@@ -59,11 +58,11 @@ public class GitChangesParser {
                                     @NotNull VirtualFile vcsRoot,
                                     @NotNull VcsRevisionNumber thisRevision,
                                     @Nullable VcsRevisionNumber parentRevision,
-                                    @NotNull VcsFileStatusInfo statusInfo) throws VcsException {
+                                    @NotNull VcsFileStatusInfo statusInfo) {
     final ContentRevision before;
     final ContentRevision after;
     final String path = statusInfo.getFirstPath();
-    final FilePath filePath = GitContentRevision.createPath(vcsRoot, path, false);
+    final FilePath filePath = GitContentRevision.createPath(vcsRoot, path);
 
     FileStatus status;
     switch (statusInfo.getType()) {
@@ -85,7 +84,7 @@ public class GitChangesParser {
       case MOVED:
         status = FileStatus.MODIFIED;
         String secondPath = statusInfo.getSecondPath();
-        final FilePath filePathAfterRename = secondPath == null ? filePath : GitContentRevision.createPath(vcsRoot, secondPath, false);
+        final FilePath filePathAfterRename = secondPath == null ? filePath : GitContentRevision.createPath(vcsRoot, secondPath);
         before = GitContentRevision.createRevision(filePath, parentRevision, project);
         after = GitContentRevision.createRevision(filePathAfterRename, thisRevision, project);
         break;
@@ -96,7 +95,7 @@ public class GitChangesParser {
   }
 
   @NotNull
-  public static Change.Type getChangeType(@NotNull GitChangeType type) {
+  static Change.Type getChangeType(@NotNull GitChangeType type) {
     switch (type) {
       case ADDED:
         return Change.Type.NEW;

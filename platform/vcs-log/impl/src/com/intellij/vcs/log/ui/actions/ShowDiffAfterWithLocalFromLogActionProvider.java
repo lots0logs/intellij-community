@@ -1,27 +1,24 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.vcs.log.ui.actions;
 
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.AnActionExtensionProvider;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.changes.ChangeListManager;
 import com.intellij.openapi.vcs.changes.ui.ChangesBrowserBase;
-import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.vcs.log.CommitId;
 import com.intellij.vcs.log.VcsLog;
 import com.intellij.vcs.log.VcsLogDataKeys;
 import com.intellij.vcs.log.VcsLogDiffHandler;
-import com.intellij.vcs.log.history.FileHistoryUi;
 import com.intellij.vcs.log.statistics.VcsLogUsageTriggerCollector;
 import com.intellij.vcs.log.ui.VcsLogInternalDataKeys;
 import com.intellij.vcs.log.util.VcsLogUtil;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.Objects;
 
-import static com.intellij.util.ObjectUtils.notNull;
 import static com.intellij.util.containers.ContainerUtil.getFirstItem;
 
 public class ShowDiffAfterWithLocalFromLogActionProvider implements AnActionExtensionProvider {
@@ -58,7 +55,7 @@ public class ShowDiffAfterWithLocalFromLogActionProvider implements AnActionExte
 
     List<CommitId> commits = log.getSelectedCommits();
     if (commits.size() != 1) return;
-    CommitId commit = notNull(getFirstItem(commits));
+    CommitId commit = Objects.requireNonNull(getFirstItem(commits));
 
     if (ChangeListManager.getInstance(project).isFreezedWithNotification(null)) return;
 

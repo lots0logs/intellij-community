@@ -15,128 +15,95 @@
  */
 package com.jetbrains.python.sdk.flavors;
 
+import com.intellij.execution.ExecutionException;
+import com.intellij.openapi.application.ReadAction;
 import com.intellij.openapi.module.Module;
-import com.intellij.openapi.util.SystemInfo;
-import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.projectRoots.Sdk;
+import com.intellij.openapi.util.UserDataHolder;
 import com.intellij.openapi.vfs.StandardFileSystems;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.SystemProperties;
-import com.jetbrains.python.packaging.PyCondaPackageService;
-import com.jetbrains.python.sdk.PythonSdkType;
+import com.jetbrains.python.sdk.PythonSdkUtil;
+import com.jetbrains.python.sdk.conda.PyCondaSdkCustomizer;
 import icons.PythonIcons;
+import one.util.streamex.StreamEx;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.SystemDependent;
 
 import javax.swing.*;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
-import static com.jetbrains.python.sdk.flavors.VirtualEnvSdkFlavor.findInDirectory;
+import static com.jetbrains.python.sdk.flavors.VirtualEnvSdkFlavor.findInRootDirectory;
 
 public class CondaEnvSdkFlavor extends CPythonSdkFlavor {
   private CondaEnvSdkFlavor() {
   }
 
-  public final static String[] CONDA_DEFAULT_ROOTS = new String[]{"anaconda", "anaconda2", "anaconda3", "miniconda", "miniconda2",
-    "miniconda3", "Anaconda", "Anaconda2", "Anaconda3", "Miniconda", "Miniconda2", "Miniconda3"};
-
-  public static final CondaEnvSdkFlavor INSTANCE = new CondaEnvSdkFlavor();
+  public static CondaEnvSdkFlavor getInstance() {
+    return PythonSdkFlavor.EP_NAME.findExtension(CondaEnvSdkFlavor.class);
+  }
 
   @Override
-  public Collection<String> suggestHomePaths(@Nullable Module module) {
-    List<String> candidates = new ArrayList<>();
-
-    for (VirtualFile file : getCondaDefaultLocations()) {
-      candidates.addAll(findInDirectory(file));
-    }
-
-    return candidates;
+  public boolean isPlatformIndependent() {
+    return true;
   }
 
-  public static List<VirtualFile> getCondaDefaultLocations() {
-    List<VirtualFile> roots = new ArrayList<>();
-    final VirtualFile userHome = LocalFileSystem.getInstance().findFileByPath(SystemProperties.getUserHome().replace('\\','/'));
-    if (userHome != null) {
-      final VirtualFile condaHidden = userHome.findChild(".conda");
-      if (condaHidden != null) {
-        addEnvsFolder(roots, condaHidden);
-      }
-      for (String root : CONDA_DEFAULT_ROOTS) {
-        VirtualFile condaFolder = userHome.findChild(root);
-        addEnvsFolder(roots, condaFolder);
-        if (SystemInfo.isWindows) {
-          final VirtualFile appData = userHome.findFileByRelativePath("AppData\\Local\\Continuum\\" + root);
-          addEnvsFolder(roots, appData);
-          condaFolder = LocalFileSystem.getInstance().findFileByPath("C:\\" + root);
-        }
-        else {
-          final String systemWidePath = "/opt/anaconda";
-          condaFolder = LocalFileSystem.getInstance().findFileByPath(systemWidePath);
-        }
-        addEnvsFolder(roots, condaFolder);
+  @NotNull
+  @Override
+  public Collection<String> suggestHomePaths(@Nullable Module module, @Nullable UserDataHolder context) {
+    final List<String> results = new ArrayList<>();
+    final Sdk sdk = ReadAction.compute(() -> PythonSdkUtil.findPythonSdk(module));
+    try {
+      final List<String> environments = PyCondaRunKt.listCondaEnvironments(sdk);
+      for (String environment : environments) {
+        results.addAll(ReadAction.compute(() -> {
+          final VirtualFile root = StandardFileSystems.local().findFileByPath(environment);
+          final Collection<String> found = findInRootDirectory(root);
+          if (PyCondaSdkCustomizer.Companion.getInstance().getDetectEnvironmentsOutsideEnvsFolder()) {
+            return found;
+          }
+          else {
+            return StreamEx.of(found).filter(s -> getCondaEnvRoot(s) != null).toList();
+          }
+        }));
       }
     }
-    addEnvsFolder(roots, findPreferredCondaEnvsFolder());
-    return roots;
-  }
-
-  @Nullable
-  private static VirtualFile findPreferredCondaEnvsFolder() {
-    @SystemDependent final String path = PyCondaPackageService.getInstance().PREFERRED_CONDA_PATH;
-    if (path == null) return null;
-    final VirtualFile conda = StandardFileSystems.local().findFileByPath(path);
-    if (conda == null) return null;
-    final VirtualFile binFolder = conda.getParent();
-    if (binFolder == null) return null;
-    return binFolder.getParent();
-  }
-
-  private static void addEnvsFolder(@NotNull final List<VirtualFile> roots, @Nullable final VirtualFile condaFolder) {
-    if (condaFolder != null) {
-      final VirtualFile envs = condaFolder.findChild("envs");
-      if (envs != null) {
-        roots.add(envs);
-      }
+    catch (ExecutionException e) {
+      return Collections.emptyList();
     }
+    return results;
   }
 
   @Override
   public boolean isValidSdkPath(@NotNull File file) {
     if (!super.isValidSdkPath(file)) return false;
-    final File bin = file.getParentFile();
-    String condaName = "conda";
-    if (SystemInfo.isWindows) {
-      condaName = new File(bin, "envs").exists() ? "conda.exe" : "conda.bat";
-    }
-    if (bin != null) {
-      final File conda = new File(bin, condaName);
-      if (conda.exists()) {
-        return true;
-      }
-      final File condaFolder = bin.getParentFile();
-      final File condaExecutable = PythonSdkType.findExecutableFile(condaFolder, condaName);
-      if (condaExecutable != null) return true;
-    }
-    return false;
+    return PythonSdkUtil.isConda(file.getPath());
   }
 
   @Nullable
   public static File getCondaEnvRoot(@NotNull final String binaryPath) {
     final File binary = new File(binaryPath);
-    final File bin = binary.getParentFile();
-    if (bin == null) return null;
-    final File root = bin.getParentFile();
-    if (root == null) return null;
-    final File rootContainer = root.getParentFile();
-    if (rootContainer == null) return null;
-    return "envs".equals(rootContainer.getName()) ? root : null;
+    final File parent = binary.getParentFile();
+    if (parent == null) return null;
+    final File parent2 = parent.getParentFile();
+    if (parent2 == null) return null;
+    final File parent3 = parent2.getParentFile();
+    if (parent3 != null && "envs".equals(parent3.getName())) {
+      return parent2;
+    }
+    else if ("envs".equals(parent2.getName())) {
+      return parent;
+    }
+    else {
+      return null;
+    }
   }
 
   @Override
   public Icon getIcon() {
-    return PythonIcons.Python.Condaenv;
+    return PythonIcons.Python.Anaconda;
   }
 }

@@ -6,13 +6,13 @@ import com.intellij.codeInsight.hints.settings.ParameterNameHintsSettings
 import com.intellij.testFramework.LightProjectDescriptor
 import groovy.transform.CompileStatic
 import org.jdom.Element
-import org.jetbrains.plugins.groovy.GroovyLightProjectDescriptor
+import org.jetbrains.plugins.groovy.GroovyProjectDescriptors
 import org.jetbrains.plugins.groovy.LightGroovyTestCase
 
 @CompileStatic
 class GroovyInlayParameterHintsProviderTest extends LightGroovyTestCase {
 
-  final LightProjectDescriptor projectDescriptor = GroovyLightProjectDescriptor.GROOVY_LATEST
+  final LightProjectDescriptor projectDescriptor = GroovyProjectDescriptors.GROOVY_LATEST
 
   @Override
   void setUp() {
@@ -80,6 +80,8 @@ foo.with {
   defaultArgs(<hint name="a">1, <hint name="c">2)
   defaultArgs(<hint name="a">1, <hint name="b">2, <hint name="c">3)
   mapArgs(foo: 1, <hint name="a">null, bar: 2)
+  varArgs(<hint name="a">1, <hint name="b">null)        // 'null' passed as is
+  varArgs(<hint name="a">1, <hint name="...b">null, null)  // 'null'-s wrapped into array
   varArgs(<hint name="a">1, <hint name="...b">2)
   varArgs(<hint name="a">1, <hint name="...b">2, 3, 4)
   varArgs(<hint name="a">1, <hint name="...b">2, aa)

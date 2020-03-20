@@ -10,7 +10,6 @@ import com.intellij.ide.util.PsiElementListCellRenderer;
 import com.intellij.navigation.ChooseByNameContributor;
 import com.intellij.navigation.NavigationItem;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.fileTypes.FileType;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.io.FileUtil;
@@ -24,7 +23,6 @@ import com.intellij.psi.codeStyle.MinusculeMatcher;
 import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.ui.IdeUICustomization;
 import com.intellij.util.containers.JBIterable;
-import com.intellij.util.indexing.FileBasedIndex;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +33,7 @@ import java.util.Comparator;
 /**
  * Model for "Go to | File" action
  */
-public class GotoFileModel extends FilteringGotoByModel<FileType> implements DumbAware, Comparator<Object> {
+public class GotoFileModel extends FilteringGotoByModel<FileTypeRef> implements DumbAware, Comparator<Object> {
   private final int myMaxSize;
 
   public GotoFileModel(@NotNull Project project) {
@@ -61,14 +59,13 @@ public class GotoFileModel extends FilteringGotoByModel<FileType> implements Dum
   protected boolean acceptItem(final NavigationItem item) {
     if (item instanceof PsiFile) {
       final PsiFile file = (PsiFile)item;
-      final Collection<FileType> types = getFilterItems();
+      final Collection<FileTypeRef> types = getFilterItems();
       // if language substitutors are used, PsiFile.getFileType() can be different from
       // PsiFile.getVirtualFile().getFileType()
       if (types != null) {
-        if (types.contains(file.getFileType())) return true;
+        if (types.contains(FileTypeRef.forFileType(file.getFileType()))) return true;
         VirtualFile vFile = file.getVirtualFile();
-        if (vFile != null && types.contains(vFile.getFileType())) return true;
-        return false;
+        return vFile != null && types.contains(FileTypeRef.forFileType(vFile.getFileType()));
       }
       return true;
     }
@@ -79,8 +76,8 @@ public class GotoFileModel extends FilteringGotoByModel<FileType> implements Dum
 
   @Nullable
   @Override
-  protected FileType filterValueFor(NavigationItem item) {
-    return item instanceof PsiFile ? ((PsiFile) item).getFileType() : null;
+  protected FileTypeRef filterValueFor(NavigationItem item) {
+    return item instanceof PsiFile ? FileTypeRef.forFileType(((PsiFile) item).getFileType()) : null;
   }
 
   @Override
@@ -93,15 +90,16 @@ public class GotoFileModel extends FilteringGotoByModel<FileType> implements Dum
     if (NonProjectScopeDisablerEP.isSearchInNonProjectDisabled()) {
       return null;
     }
-    return IdeBundle.message("checkbox.include.non.project.files", IdeUICustomization.getInstance().getProjectConceptName());
+    return IdeUICustomization.getInstance().projectMessage("checkbox.include.non.project.files");
   }
 
-
+  @NotNull
   @Override
   public String getNotInMessage() {
     return "";
   }
 
+  @NotNull
   @Override
   public String getNotFoundMessage() {
     return IdeBundle.message("label.no.files.found");
@@ -122,6 +120,7 @@ public class GotoFileModel extends FilteringGotoByModel<FileType> implements Dum
     }
   }
 
+  @NotNull
   @Override
   public PsiElementListCellRenderer getListCellRenderer() {
     return new GotoFileCellRenderer(myMaxSize) {
@@ -138,12 +137,12 @@ public class GotoFileModel extends FilteringGotoByModel<FileType> implements Dum
 
   @Override
   public boolean sameNamesForProjectAndLibraries() {
-    return !FileBasedIndex.ourEnableTracingOfKeyHashToVirtualFileMapping;
+    return false;
   }
 
   @Override
   @Nullable
-  public String getFullName(final Object element) {
+  public String getFullName(@NotNull final Object element) {
     return element instanceof PsiFileSystemItem ? getFullName(((PsiFileSystemItem)element).getVirtualFile()) : getElementName(element);
   }
 
@@ -165,8 +164,7 @@ public class GotoFileModel extends FilteringGotoByModel<FileType> implements Dum
   }
 
   @Override
-  @NotNull
-  public String[] getSeparators() {
+  public String @NotNull [] getSeparators() {
     return new String[] {"/", "\\"};
   }
 
@@ -183,7 +181,7 @@ public class GotoFileModel extends FilteringGotoByModel<FileType> implements Dum
   @NotNull
   @Override
   public String removeModelSpecificMarkup(@NotNull String pattern) {
-    if ((pattern.endsWith("/") || pattern.endsWith("\\"))) {
+    if (pattern.endsWith("/") || pattern.endsWith("\\")) {
       return pattern.substring(0, pattern.length() - 1);
     }
     return pattern;

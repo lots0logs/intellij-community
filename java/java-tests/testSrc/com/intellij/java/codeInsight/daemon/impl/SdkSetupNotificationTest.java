@@ -1,6 +1,8 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.codeInsight.daemon.impl;
 
+import com.intellij.codeInsight.daemon.impl.JavaProjectSdkSetupValidator;
+import com.intellij.idea.TestFor;
 import com.intellij.testFramework.IdeaTestUtil;
 import com.intellij.ui.EditorNotificationPanel;
 
@@ -9,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * @author Pavel.Dolgov
  */
+@TestFor(classes = JavaProjectSdkSetupValidator.class)
 public class SdkSetupNotificationTest extends SdkSetupNotificationTestBase {
   public void testProjectSdk() {
     final EditorNotificationPanel panel = configureBySdkAndText(IdeaTestUtil.getMockJdk18(), false, "Sample.java", "class Sample {}");
@@ -17,7 +20,7 @@ public class SdkSetupNotificationTest extends SdkSetupNotificationTestBase {
 
   public void testNoProjectSdk() {
     final EditorNotificationPanel panel = configureBySdkAndText(null, false, "Sample.java", "class Sample {}");
-    assertSdkSetupPanelShown(panel, "Project SDK is not defined");
+    assertSdkSetupPanelShown(panel, "Setup SDK");
   }
 
   public void testModuleSdk() {
@@ -27,6 +30,6 @@ public class SdkSetupNotificationTest extends SdkSetupNotificationTestBase {
 
   public void testNoModuleSdk() {
     final EditorNotificationPanel panel = configureBySdkAndText(null, true, "Sample.java", "class Sample {}");
-    assertSdkSetupPanelShown(panel, "Module SDK is not defined");
+    assertSdkSetupPanelShown(panel, "Setup SDK");
   }
 }

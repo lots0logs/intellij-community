@@ -12,8 +12,8 @@
 // limitations under the License.
 package org.zmlx.hg4idea.provider.commit;
 
-import com.intellij.dvcs.AmendComponent;
 import com.intellij.dvcs.push.ui.VcsPushDialog;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.progress.ProgressIndicator;
@@ -23,31 +23,25 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vcs.CheckinProjectPanel;
 import com.intellij.openapi.vcs.FilePath;
 import com.intellij.openapi.vcs.VcsException;
-import com.intellij.openapi.vcs.changes.Change;
-import com.intellij.openapi.vcs.changes.ChangesUtil;
-import com.intellij.openapi.vcs.changes.ContentRevision;
-import com.intellij.openapi.vcs.changes.VcsDirtyScopeManager;
+import com.intellij.openapi.vcs.VcsRoot;
+import com.intellij.openapi.vcs.changes.*;
 import com.intellij.openapi.vcs.checkin.CheckinEnvironment;
 import com.intellij.openapi.vcs.ui.RefreshableOnComponent;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.GuiUtils;
-import com.intellij.util.FunctionUtil;
-import com.intellij.util.NullableFunction;
-import com.intellij.util.PairConsumer;
 import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.ui.GridBag;
 import com.intellij.util.ui.JBUI;
+import com.intellij.vcs.commit.*;
 import com.intellij.vcsUtil.VcsUtil;
 import com.intellij.xml.util.XmlStringUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.concurrency.CancellablePromise;
 import org.zmlx.hg4idea.*;
-import org.zmlx.hg4idea.action.HgActionUtil;
 import org.zmlx.hg4idea.command.*;
 import org.zmlx.hg4idea.command.mq.HgQNewCommand;
 import org.zmlx.hg4idea.execution.HgCommandException;
-import org.zmlx.hg4idea.execution.HgCommandExecutor;
-import org.zmlx.hg4idea.execution.HgCommandResult;
 import org.zmlx.hg4idea.provider.HgCurrentBinaryContentRevision;
 import org.zmlx.hg4idea.repo.HgRepository;
 import org.zmlx.hg4idea.repo.HgRepositoryManager;
@@ -55,41 +49,37 @@ import org.zmlx.hg4idea.util.HgUtil;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.util.List;
 import java.util.*;
 
-import static com.intellij.util.ObjectUtils.assertNotNull;
+import static com.intellij.vcs.commit.AbstractCommitWorkflowKt.isAmendCommitMode;
+import static com.intellij.vcs.commit.LocalChangesCommitterKt.getCommitWithoutChangesRoots;
+import static com.intellij.vcs.commit.ToggleAmendCommitOption.isAmendCommitOptionSupported;
+import static java.util.Collections.emptySet;
+import static org.zmlx.hg4idea.provider.commit.HgCommitAndPushExecutorKt.isPushAfterCommit;
+import static org.zmlx.hg4idea.provider.commit.HgCommitOptionsKt.*;
 import static org.zmlx.hg4idea.util.HgUtil.getRepositoryManager;
 
-public class HgCheckinEnvironment implements CheckinEnvironment {
+public class HgCheckinEnvironment implements CheckinEnvironment, AmendCommitAware {
+  @NotNull private final HgVcs myVcs;
+  @NotNull private final Project myProject;
 
-  private final Project myProject;
-  private boolean myNextCommitIsPushed;
-  private boolean myNextCommitAmend; // If true, the next commit is amended
-  private boolean myShouldCommitSubrepos;
-  private boolean myMqNewPatch;
-  private boolean myCloseBranch;
-  @Nullable private Collection<HgRepository> myRepos;
-
-  public HgCheckinEnvironment(Project project) {
-    myProject = project;
+  public HgCheckinEnvironment(@NotNull HgVcs vcs) {
+    myVcs = vcs;
+    myProject = vcs.getProject();
   }
 
+  @Nullable
   @Override
-  public RefreshableOnComponent createAdditionalOptionsPanel(CheckinProjectPanel panel,
-                                                             PairConsumer<Object, Object> additionalDataConsumer) {
-    reset();
-    return new HgCommitAdditionalComponent(myProject, panel);
-  }
+  public RefreshableOnComponent createCommitOptions(@NotNull CheckinProjectPanel commitPanel, @NotNull CommitContext commitContext) {
+    Collection<HgRepository> repos =
+      ContainerUtil.map2SetNotNull(commitPanel.getRoots(), getRepositoryManager(myProject)::getRepositoryForFileQuick);
+    boolean hasSubrepos = ContainerUtil.exists(repos, HgRepository::hasSubrepos);
+    boolean showAmendOption = isAmendCommitOptionSupported(commitPanel, this);
 
-  private void reset() {
-    myNextCommitIsPushed = false;
-    myShouldCommitSubrepos = false;
-    myCloseBranch = false;
-    myMqNewPatch = false;
-    myRepos = null;
+    if (!hasSubrepos && !showAmendOption) return null;
+
+    return new HgCommitAdditionalComponent(commitPanel, commitContext, hasSubrepos, showAmendOption);
   }
 
   @Override
@@ -99,24 +89,51 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
 
   @Override
   public String getCheckinOperationName() {
-    return HgVcsMessages.message("hg4idea.commit");
+    return HgBundle.message("hg4idea.commit");
   }
 
   @Override
-  public List<VcsException> commit(List<Change> changes,
-                                   String preparedComment,
-                                   @NotNull NullableFunction<Object, Object> parametersHolder,
-                                   Set<String> feedback) {
+  public boolean isAmendCommitSupported() {
+    return getAmendService().isAmendCommitSupported();
+  }
+
+  @Nullable
+  @Override
+  public String getLastCommitMessage(@NotNull VirtualFile root) {
+    return getAmendService().getLastCommitMessage(root);
+  }
+
+  @NotNull
+  @Override
+  public CancellablePromise<EditedCommitDetails> getAmendCommitDetails(@NotNull VirtualFile root) {
+    return getAmendService().getAmendCommitDetails(root);
+  }
+
+  @NotNull
+  private HgAmendCommitService getAmendService() {
+    return myProject.getService(HgAmendCommitService.class);
+  }
+
+  @NotNull
+  @Override
+  public List<VcsException> commit(@NotNull List<Change> changes,
+                                   @NotNull String commitMessage,
+                                   @NotNull CommitContext commitContext,
+                                   @NotNull Set<String> feedback) {
     List<VcsException> exceptions = new LinkedList<>();
     Map<HgRepository, Set<HgFile>> repositoriesMap = getFilesByRepository(changes);
-    addRepositoriesWithoutChanges(repositoriesMap);
+    addRepositoriesWithoutChanges(repositoriesMap, commitContext);
+    boolean isAmend = isAmendCommitMode(commitContext);
     for (Map.Entry<HgRepository, Set<HgFile>> entry : repositoriesMap.entrySet()) {
 
       HgRepository repo = entry.getKey();
       Set<HgFile> selectedFiles = entry.getValue();
-      HgCommitTypeCommand command = myMqNewPatch ? new HgQNewCommand(myProject, repo, preparedComment, myNextCommitAmend) :
-                                    new HgCommitCommand(myProject, repo, preparedComment, myNextCommitAmend, myCloseBranch,
-                                                        myShouldCommitSubrepos && !selectedFiles.isEmpty());
+      boolean isCloseBranch = isCloseBranch(commitContext);
+      boolean isCommitSubrepositories = isCommitSubrepositories(commitContext);
+      HgCommitTypeCommand command =
+        isMqNewPatch(commitContext)
+        ? new HgQNewCommand(myProject, repo, commitMessage, isAmend)
+        : new HgCommitCommand(myProject, repo, commitMessage, isAmend, isCloseBranch, isCommitSubrepositories && !selectedFiles.isEmpty());
 
       if (isMergeCommit(repo.getRoot())) {
         //partial commits are not allowed during merges
@@ -163,8 +180,8 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
     }
 
     // push if needed
-    if (myNextCommitIsPushed && exceptions.isEmpty()) {
-      final List<HgRepository> preselectedRepositories = ContainerUtil.newArrayList(repositoriesMap.keySet());
+    if (isPushAfterCommit(commitContext) && exceptions.isEmpty()) {
+      final List<HgRepository> preselectedRepositories = new ArrayList<>(repositoriesMap.keySet());
       GuiUtils.invokeLaterIfNeeded(() ->
                                      new VcsPushDialog(myProject, preselectedRepositories, HgUtil.getCurrentRepository(myProject)).show(),
                                    ModalityState.defaultModalityState());
@@ -203,8 +220,8 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
     final int[] choice = new int[1];
     Runnable runnable = () -> choice[0] = Messages.showOkCancelDialog(
       myProject,
-      HgVcsMessages.message("hg4idea.commit.partial.merge.message", filesNotIncludedString),
-      HgVcsMessages.message("hg4idea.commit.partial.merge.title"),
+      HgBundle.message("hg4idea.commit.partial.merge.message", filesNotIncludedString),
+      HgBundle.message("hg4idea.commit.partial.merge.title"),
       null
     );
     ApplicationManager.getApplication().invokeAndWait(runnable);
@@ -212,12 +229,7 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
   }
 
   @Override
-  public List<VcsException> commit(List<Change> changes, String preparedComment) {
-    return commit(changes, preparedComment, FunctionUtil.nullConstant(), null);
-  }
-
-  @Override
-  public List<VcsException> scheduleMissingFileForDeletion(List<FilePath> files) {
+  public List<VcsException> scheduleMissingFileForDeletion(@NotNull List<FilePath> files) {
     final List<HgFile> filesWithRoots = new ArrayList<>();
     for (FilePath filePath : files) {
       VirtualFile vcsRoot = VcsUtil.getVcsRootFor(myProject, filePath);
@@ -236,7 +248,7 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
   }
 
   @Override
-  public List<VcsException> scheduleUnversionedFilesForAddition(final List<VirtualFile> files) {
+  public List<VcsException> scheduleUnversionedFilesForAddition(@NotNull final List<VirtualFile> files) {
     new HgAddCommand(myProject).addWithProgress(files);
     return null;
   }
@@ -282,27 +294,14 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
     hgFiles.add(new HgFile(repo.getRoot(), filePath));
   }
 
-  public void setNextCommitIsPushed() {
-    myNextCommitIsPushed = true;
-  }
+  private void addRepositoriesWithoutChanges(@NotNull Map<HgRepository, Set<HgFile>> repositoryMap, @NotNull CommitContext commitContext) {
+    HgRepositoryManager repositoryManager = getRepositoryManager(myProject);
 
-  public void setMqNew() {
-    myMqNewPatch = true;
-  }
+    for (VcsRoot root : getCommitWithoutChangesRoots(commitContext)) {
+      HgRepository repository = root.getVcs() == myVcs ? repositoryManager.getRepositoryForRoot(root.getPath()) : null;
 
-  public void setCloseBranch(boolean closeBranch) {
-    myCloseBranch = closeBranch;
-  }
-
-  public void setRepos(@NotNull Collection<HgRepository> repos) {
-    myRepos = repos;
-  }
-
-  private void addRepositoriesWithoutChanges(@NotNull Map<HgRepository, Set<HgFile>> repositoryMap) {
-    if (myRepos == null) return;
-    for (HgRepository repository : myRepos) {
-      if (!repositoryMap.keySet().contains(repository)) {
-        repositoryMap.put(repository, Collections.emptySet());
+      if (repository != null && !repositoryMap.containsKey(repository)) {
+        repositoryMap.put(repository, emptySet());
       }
     }
   }
@@ -310,27 +309,29 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
   /**
    * Commit options for hg
    */
-  public class HgCommitAdditionalComponent implements RefreshableOnComponent {
+  @SuppressWarnings("InnerClassMayBeStatic") // for compatibility with external plugins
+  public class HgCommitAdditionalComponent implements RefreshableOnComponent, AmendCommitModeListener, Disposable {
     @NotNull private final JPanel myPanel;
-    @NotNull private final AmendComponent myAmend;
     @NotNull private final JCheckBox myCommitSubrepos;
+    @NotNull private final CheckinProjectPanel myCommitPanel;
+    @NotNull private final CommitContext myCommitContext;
+    @Nullable private final ToggleAmendCommitOption myAmendOption;
 
-    HgCommitAdditionalComponent(@NotNull Project project, @NotNull CheckinProjectPanel panel) {
-      HgVcs vcs = assertNotNull(HgVcs.getInstance(myProject));
-
-      myAmend = new MyAmendComponent(project, getRepositoryManager(project), panel, "Amend Commit (QRefresh)");
-      myAmend.getComponent().setEnabled(vcs.getVersion().isAmendSupported());
+    HgCommitAdditionalComponent(@NotNull CheckinProjectPanel panel,
+                                @NotNull CommitContext commitContext,
+                                boolean hasSubrepos,
+                                boolean showAmendOption) {
+      myCommitPanel = panel;
+      myCommitContext = commitContext;
+      myAmendOption = showAmendOption ? new ToggleAmendCommitOption(myCommitPanel, this) : null;
 
       myCommitSubrepos = new JCheckBox("Commit subrepositories", false);
+      myCommitSubrepos.setVisible(hasSubrepos);
       myCommitSubrepos.setToolTipText(XmlStringUtil.wrapInHtml(
         "Commit all subrepos for selected repositories.<br>" +
         " <code>hg ci <i><b>files</b></i> -S <i><b>subrepos</b></i></code>"));
       myCommitSubrepos.setMnemonic('s');
-      Collection<HgRepository> repos = HgActionUtil.collectRepositoriesFromFiles(getRepositoryManager(myProject), panel.getRoots());
-      myCommitSubrepos.setVisible(ContainerUtil.exists(repos, HgRepository::hasSubrepos));
-
-      myCommitSubrepos.addActionListener(new MySelectionListener(myAmend.getCheckBox()));
-      myAmend.getCheckBox().addActionListener(new MySelectionListener(myCommitSubrepos));
+      myCommitSubrepos.addActionListener(e -> updateAmendState(!myCommitSubrepos.isSelected()));
 
       GridBag gb = new GridBag().
         setDefaultInsets(JBUI.insets(2)).
@@ -338,25 +339,38 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
         setDefaultWeightX(1).
         setDefaultFill(GridBagConstraints.HORIZONTAL);
       myPanel = new JPanel(new GridBagLayout());
-      myPanel.add(myAmend.getComponent(), gb.nextLine().next());
+      if (myAmendOption != null) myPanel.add(myAmendOption, gb.nextLine().next());
       myPanel.add(myCommitSubrepos, gb.nextLine().next());
+
+      getAmendHandler().addAmendCommitModeListener(this, this);
+    }
+
+    @NotNull
+    private AmendCommitHandler getAmendHandler() {
+      return myCommitPanel.getCommitWorkflowHandler().getAmendCommitHandler();
+    }
+
+    @Override
+    public void dispose() {
+    }
+
+    @Override
+    public void amendCommitModeToggled() {
+      updateCommitSubreposState();
     }
 
     @Override
     public void refresh() {
-      myAmend.refresh();
-      myNextCommitAmend = false;
-      myShouldCommitSubrepos = false;
     }
 
     @Override
     public void saveState() {
-      myNextCommitAmend = isAmend();
-      myShouldCommitSubrepos = myCommitSubrepos.isSelected();
+      setCommitSubrepositories(myCommitContext, myCommitSubrepos.isSelected());
     }
 
     @Override
     public void restoreState() {
+      updateCommitSubreposState();
       refresh();
     }
 
@@ -366,55 +380,20 @@ public class HgCheckinEnvironment implements CheckinEnvironment {
     }
 
     public boolean isAmend() {
-      return myAmend.isAmend();
+      return getAmendHandler().isAmendCommitMode();
     }
 
-    private class MyAmendComponent extends AmendComponent {
-      MyAmendComponent(@NotNull Project project,
-                              @NotNull HgRepositoryManager repoManager,
-                              @NotNull CheckinProjectPanel panel,
-                              @NotNull String title) {
-        super(project, repoManager, panel, title);
-      }
+    private void updateCommitSubreposState() {
+      boolean isAmendMode = isAmend();
 
-      @NotNull
-      @Override
-      protected Set<VirtualFile> getVcsRoots(@NotNull Collection<? extends FilePath> filePaths) {
-        return HgUtil.hgRoots(myProject, filePaths);
-      }
-
-      @Nullable
-      @Override
-      protected String getLastCommitMessage(@NotNull VirtualFile repo) {
-        HgCommandExecutor commandExecutor = new HgCommandExecutor(myProject);
-        List<String> args = new ArrayList<>();
-        args.add("-r");
-        args.add(".");
-        args.add("--template");
-        args.add("{desc}");
-        HgCommandResult result = commandExecutor.executeInCurrentThread(repo, "log", args);
-        return result == null ? "" : result.getRawOutput();
-      }
+      myCommitSubrepos.setEnabled(!isAmendMode);
+      if (isAmendMode) myCommitSubrepos.setSelected(false);
     }
 
-    private class MySelectionListener implements ActionListener {
-      private final JCheckBox myUnselectedComponent;
-
-      MySelectionListener(JCheckBox unselectedComponent) {
-        myUnselectedComponent = unselectedComponent;
-      }
-
-      @Override
-      public void actionPerformed(ActionEvent e) {
-        JCheckBox source = (JCheckBox)e.getSource();
-        if (source.isSelected()) {
-          myUnselectedComponent.setSelected(false);
-          myUnselectedComponent.setEnabled(false);
-        }
-        else {
-          myUnselectedComponent.setEnabled(true);
-        }
-      }
+    private void updateAmendState(boolean enable) {
+      getAmendHandler().setAmendCommitModeTogglingEnabled(enable);
+      if (myAmendOption != null) myAmendOption.setEnabled(enable);
+      if (!enable) getAmendHandler().setAmendCommitMode(false);
     }
   }
 }

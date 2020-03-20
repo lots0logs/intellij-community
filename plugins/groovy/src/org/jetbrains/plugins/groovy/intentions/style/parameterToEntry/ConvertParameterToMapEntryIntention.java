@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.intentions.style.parameterToEntry;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -64,7 +64,7 @@ import static org.jetbrains.plugins.groovy.lang.psi.util.GroovyCommonClassNames.
 public class ConvertParameterToMapEntryIntention extends Intention {
 
   private static final Logger LOG =
-    Logger.getInstance("#org.jetbrains.plugins.groovy.intentions.style.ConvertParameterToMapEntryIntention");
+    Logger.getInstance(ConvertParameterToMapEntryIntention.class);
   @NonNls private static final String CLOSURE_CAPTION = "closure";
   @NonNls private static final String CLOSURE_CAPTION_CAP = "Closure";
   @NonNls private static final String METHOD_CAPTION = "method";
@@ -417,7 +417,7 @@ public class ConvertParameterToMapEntryIntention extends Intention {
       .message("find.method.ro.closure.usages.0", owner instanceof GrClosableBlock ? CLOSURE_CAPTION : METHOD_CAPTION), true) {
       @Override
       public void run(@NotNull final ProgressIndicator indicator) {
-        final Collection<PsiReference> references = Collections.synchronizedSet(new HashSet<PsiReference>());
+        final Collection<PsiReference> references = Collections.synchronizedSet(new HashSet<>());
         final Processor<PsiReference> consumer = psiReference -> {
           references.add(psiReference);
           return true;

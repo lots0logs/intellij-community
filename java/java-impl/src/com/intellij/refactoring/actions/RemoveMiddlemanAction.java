@@ -25,7 +25,7 @@ import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.removemiddleman.RemoveMiddlemanHandler;
 import org.jetbrains.annotations.NotNull;
 
-public class RemoveMiddlemanAction extends BaseRefactoringAction{
+public class RemoveMiddlemanAction extends BaseJavaRefactoringAction{
 
   @Override
   protected RefactoringActionHandler getHandler(@NotNull DataContext context) {
@@ -43,7 +43,7 @@ public class RemoveMiddlemanAction extends BaseRefactoringAction{
   }
 
   @Override
-  public boolean isEnabledOnElements(@NotNull PsiElement[] elements) {
+  public boolean isEnabledOnElements(PsiElement @NotNull [] elements) {
     return elements.length == 1 && PsiTreeUtil.getParentOfType(elements[0], PsiField.class, false) != null;
   }
 }

@@ -84,20 +84,12 @@ import java.util.*;
 import static org.jetbrains.concurrency.Promises.rejectedPromise;
 import static org.jetbrains.concurrency.Promises.resolvedPromise;
 
-/**
- * @author nik
- */
 public class XDebuggerUtilImpl extends XDebuggerUtil {
   private static final Ref<Boolean> SHOW_BREAKPOINT_AD = new Ref<>(true);
-  private XLineBreakpointType<?>[] myLineBreakpointTypes;
-  private Map<Class<? extends XBreakpointType>, XBreakpointType> myBreakpointTypeByClass;
 
   @Override
   public XLineBreakpointType<?>[] getLineBreakpointTypes() {
-    if (myLineBreakpointTypes == null) {
-      myLineBreakpointTypes = XBreakpointUtil.breakpointTypes().select(XLineBreakpointType.class).toArray(XLineBreakpointType<?>[]::new);
-    }
-    return myLineBreakpointTypes;
+    return XBreakpointUtil.breakpointTypes().select(XLineBreakpointType.class).toArray(XLineBreakpointType<?>[]::new);
   }
 
   @Override
@@ -271,7 +263,7 @@ public class XDebuggerUtilImpl extends XDebuggerUtil {
             final int defaultIndex = defaultVariant != null ? variants.indexOf(defaultVariant) : 0;
 
             final MySelectionListener selectionListener = new MySelectionListener();
-            ListPopupImpl popup = new ListPopupImpl(
+            BaseListPopupStep<XLineBreakpointType.XLineBreakpointVariant> step =
               new BaseListPopupStep<XLineBreakpointType.XLineBreakpointVariant>("Set Breakpoint", variants) {
                 @NotNull
                 @Override
@@ -302,7 +294,8 @@ public class XDebuggerUtilImpl extends XDebuggerUtil {
                 public int getDefaultOptionIndex() {
                   return defaultIndex;
                 }
-              }) {
+              };
+            ListPopupImpl popup = new ListPopupImpl(project, step) {
               @Override
               protected void afterShow() {
                 super.afterShow();
@@ -355,7 +348,7 @@ public class XDebuggerUtilImpl extends XDebuggerUtil {
       if (Messages.showOkCancelDialog(message.toString(),
                                       XDebuggerBundle.message("message.confirm.breakpoint.removal.title"),
                                       CommonBundle.message("button.remove"),
-                                      Messages.CANCEL_BUTTON,
+                                      Messages.getCancelButton(),
                                       Messages.getQuestionIcon(),
                                       new DialogWrapper.DoNotAskOption.Adapter() {
                                         @Override
@@ -381,17 +374,12 @@ public class XDebuggerUtilImpl extends XDebuggerUtil {
 
   @Override
   public <T extends XBreakpointType> T findBreakpointType(@NotNull Class<T> typeClass) {
-    if (myBreakpointTypeByClass == null) {
-      myBreakpointTypeByClass = XBreakpointUtil.breakpointTypes().toMap(XBreakpointType::getClass, t -> t);
-    }
-    XBreakpointType type = myBreakpointTypeByClass.get(typeClass);
-    //noinspection unchecked
-    return (T)type;
+    return XBreakpointType.EXTENSION_POINT_NAME.findExtension(typeClass);
   }
 
   @Override
   public <T extends XDebuggerSettings<?>> T getDebuggerSettings(Class<T> aClass) {
-    return XDebuggerSettingManagerImpl.getInstanceImpl().getSettings(aClass);
+    return XDebuggerSettings.EXTENSION_POINT.findExtension(aClass);
   }
 
   @Override
@@ -493,7 +481,7 @@ public class XDebuggerUtilImpl extends XDebuggerUtil {
   }
 
   @Override
-  public void iterateLine(@NotNull Project project, @NotNull Document document, int line, @NotNull Processor<PsiElement> processor) {
+  public void iterateLine(@NotNull Project project, @NotNull Document document, int line, @NotNull Processor<? super PsiElement> processor) {
     PsiFile file = PsiDocumentManager.getInstance(project).getPsiFile(document);
     if (file == null) {
       return;

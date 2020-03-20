@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package git4idea.actions;
 
 import com.intellij.dvcs.DvcsUtil;
@@ -10,14 +10,16 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.util.containers.ContainerUtil;
+import git4idea.i18n.GitBundle;
 import git4idea.rebase.GitRebaseDialog;
 import git4idea.rebase.GitRebaseUtils;
 import git4idea.repo.GitRepository;
+import git4idea.repo.GitRepositoryManager;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import static com.intellij.dvcs.DvcsUtil.sortRepositories;
 import static git4idea.GitUtil.*;
@@ -42,16 +44,18 @@ public class GitRebase extends DumbAwareAction {
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
     final Project project = e.getRequiredData(CommonDataKeys.PROJECT);
-    ArrayList<GitRepository> repositories = ContainerUtil.newArrayList(getRepositories(project));
+    ArrayList<GitRepository> repositories = new ArrayList<>(getRepositories(project));
     repositories.removeAll(getRebasingRepositories(project));
-    List<VirtualFile> roots = ContainerUtil.newArrayList(getRootsFromRepositories(sortRepositories(repositories)));
+    List<VirtualFile> roots = new ArrayList<>(getRootsFromRepositories(sortRepositories(repositories)));
     VirtualFile defaultRoot = DvcsUtil.guessVcsRoot(project, e.getData(CommonDataKeys.VIRTUAL_FILE));
     final GitRebaseDialog dialog = new GitRebaseDialog(project, roots, defaultRoot);
     if (dialog.showAndGet()) {
-      ProgressManager.getInstance().run(new Task.Backgroundable(project, "Rebasing...") {
+      ProgressManager.getInstance().run(new Task.Backgroundable(project, GitBundle.getString("rebase.progress.indicator.title")) {
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
-          GitRebaseUtils.rebase(project, singletonList(dialog.getSelectedRepository()), dialog.getSelectedParams(), indicator);
+          GitRepository selectedRepository =
+            Objects.requireNonNull(GitRepositoryManager.getInstance(project).getRepositoryForRoot(dialog.gitRoot()));
+          GitRebaseUtils.rebase(project, singletonList(selectedRepository), dialog.getSelectedParams(), indicator);
         }
       });
     }

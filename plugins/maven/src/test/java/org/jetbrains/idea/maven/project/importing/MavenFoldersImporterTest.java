@@ -20,13 +20,14 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.externalSystem.service.project.IdeModifiableModelsProviderImpl;
 import com.intellij.openapi.roots.*;
 import com.intellij.openapi.util.registry.Registry;
-import com.intellij.openapi.vcs.changes.ChangeListManager;
+import com.intellij.openapi.vcs.changes.VcsIgnoreManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.pom.java.LanguageLevel;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.idea.maven.MavenImportingTestCase;
 import org.jetbrains.idea.maven.importing.MavenFoldersImporter;
 import org.jetbrains.idea.maven.importing.MavenRootModelAdapter;
+import org.jetbrains.idea.maven.importing.MavenRootModelAdapterLegacyImpl;
 import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes;
 import org.jetbrains.jps.model.java.JavaSourceRootProperties;
 import org.jetbrains.jps.model.java.JavaSourceRootType;
@@ -64,7 +65,7 @@ public class MavenFoldersImporterTest extends MavenImportingTestCase {
     VirtualFile target = myProjectRoot.findChild("target");
     assertNotNull(target);
     if (!Registry.is("ide.hide.excluded.files")) {
-      assertTrue(ChangeListManager.getInstance(myProject).isIgnoredFile(target));
+      assertTrue(VcsIgnoreManager.getInstance(myProject).isPotentiallyIgnoredFile(target));
     }
   }
 
@@ -137,9 +138,9 @@ public class MavenFoldersImporterTest extends MavenImportingTestCase {
     sourceDir.mkdirs();
 
     ApplicationManager.getApplication().runWriteAction(() -> {
-      MavenRootModelAdapter adapter = new MavenRootModelAdapter(myProjectsTree.findProject(myProjectPom),
-                                                                getModule("project"),
-                                                                new IdeModifiableModelsProviderImpl(myProject));
+      MavenRootModelAdapter adapter = new MavenRootModelAdapter(new MavenRootModelAdapterLegacyImpl(myProjectsTree.findProject(myProjectPom),
+                                                                                                    getModule("project"),
+                                                                                                    new IdeModifiableModelsProviderImpl(myProject)));
       adapter.addSourceFolder(sourceDir.getPath(), JavaSourceRootType.SOURCE);
       adapter.getRootModel().commit();
     });
@@ -166,9 +167,9 @@ public class MavenFoldersImporterTest extends MavenImportingTestCase {
                   "<version>1</version>");
 
     ApplicationManager.getApplication().runWriteAction(() -> {
-      MavenRootModelAdapter adapter = new MavenRootModelAdapter(myProjectsTree.findProject(myProjectPom),
+      MavenRootModelAdapter adapter = new MavenRootModelAdapter(new MavenRootModelAdapterLegacyImpl(myProjectsTree.findProject(myProjectPom),
                                                                 getModule("project"),
-                                                                new IdeModifiableModelsProviderImpl(myProject));
+                                                                new IdeModifiableModelsProviderImpl(myProject)));
       adapter.useModuleOutput(new File(myProjectRoot.getPath(), "target/my-classes").getPath(),
                               new File(myProjectRoot.getPath(), "target/my-test-classes").getPath());
       adapter.getRootModel().commit();

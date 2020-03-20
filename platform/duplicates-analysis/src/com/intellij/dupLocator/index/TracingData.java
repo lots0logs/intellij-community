@@ -10,7 +10,6 @@ import gnu.trove.TIntIntHashMap;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -46,7 +45,7 @@ public class TracingData {
   }
 
   private static PersistentHashMap<Integer, Integer> createOrOpenMap() throws IOException {
-    return new PersistentHashMap<>(new File(tracingDataLocation), EnumeratorIntegerDescriptor.INSTANCE,
+    return new PersistentHashMap<>(new File(tracingDataLocation).toPath(), EnumeratorIntegerDescriptor.INSTANCE,
                                    EnumeratorIntegerDescriptor.INSTANCE);
   }
 

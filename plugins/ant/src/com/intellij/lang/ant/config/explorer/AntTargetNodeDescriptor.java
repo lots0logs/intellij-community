@@ -1,21 +1,8 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.lang.ant.config.explorer;
 
 import com.intellij.execution.RunManagerEx;
+import com.intellij.icons.AllIcons;
 import com.intellij.ide.util.treeView.NodeDescriptor;
 import com.intellij.lang.ant.config.*;
 import com.intellij.lang.ant.config.impl.AntBeforeRunTask;
@@ -33,7 +20,6 @@ import com.intellij.openapi.roots.ui.CellAppearanceEx;
 import com.intellij.openapi.roots.ui.util.CompositeAppearance;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.ui.HtmlListCellRenderer;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.SimpleColoredComponent;
 import com.intellij.ui.SimpleTextAttributes;
@@ -70,7 +56,7 @@ final class AntTargetNodeDescriptor extends AntNodeDescriptor {
     final CompositeAppearance oldText = myHighlightedText;
     final boolean isMeta = myTarget instanceof MetaTarget;
 
-    setIcon(isMeta ? AntIcons.MetaTarget : AntIcons.Target);
+    setIcon(isMeta ? AntIcons.MetaTarget : AllIcons.Nodes.Target);
 
     myHighlightedText = new CompositeAppearance();
 
@@ -124,10 +110,9 @@ final class AntTargetNodeDescriptor extends AntNodeDescriptor {
   }
 
   public static boolean addShortcutText(String actionId, CompositeAppearance appearance) {
-    Keymap activeKeymap = KeymapManager.getInstance().getActiveKeymap();
-    Shortcut[] shortcuts = activeKeymap.getShortcuts(actionId);
-    if (shortcuts != null && shortcuts.length > 0) {
-      appearance.getEnding().addText(" (" + KeymapUtil.getShortcutText(shortcuts[0]) + ")", SimpleTextAttributes.GRAY_ATTRIBUTES);
+    Shortcut shortcut = KeymapUtil.getPrimaryShortcut(actionId);
+    if (shortcut != null) {
+      appearance.getEnding().addText(" (" + KeymapUtil.getShortcutText(shortcut) + ")", SimpleTextAttributes.GRAY_ATTRIBUTES);
       return true;
     } else return false;
   }
@@ -137,23 +122,10 @@ final class AntTargetNodeDescriptor extends AntNodeDescriptor {
   }
 
   @Override
-  public boolean isAutoExpand() {
-    return false;
-  }
-
-  @Override
   public void customize(@NotNull SimpleColoredComponent component) {
     getHighlightedText().customize(component);
     component.setIcon(getIcon());
     String toolTipText = getTarget().getNotEmptyDescription();
     component.setToolTipText(toolTipText);
-  }
-
-  @Override
-  public void customize(@NotNull final HtmlListCellRenderer renderer) {
-    getHighlightedText().customize(renderer);
-    renderer.setIcon(getIcon());
-    String toolTipText = getTarget().getNotEmptyDescription();
-    renderer.setToolTipText(toolTipText);
   }
 }

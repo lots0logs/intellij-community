@@ -16,6 +16,7 @@
 
 package com.intellij.openapi.vcs.impl;
 
+import com.intellij.diagnostic.PluginException;
 import com.intellij.openapi.components.BaseComponent;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.extensions.AbstractExtensionPointBean;
@@ -31,7 +32,7 @@ import org.jetbrains.annotations.Nullable;
  * @author yole
  */
 public class VcsEP extends AbstractExtensionPointBean {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.openapi.vcs.impl.VcsEP");
+  private static final Logger LOG = Logger.getInstance(VcsEP.class);
 
   public static final ExtensionPointName<VcsEP> EP_NAME = ExtensionPointName.create("com.intellij.vcs");
 
@@ -46,6 +47,8 @@ public class VcsEP extends AbstractExtensionPointBean {
   public String administrativeAreaName;
   @Attribute("crawlUpToCheckUnderVcs")
   public boolean crawlUpToCheckUnderVcs;
+  @Attribute("areChildrenValidMappings")
+  public boolean areChildrenValidMappings;
 
   private AbstractVcs myVcs;
   private final Object LOCK = new Object();
@@ -70,26 +73,26 @@ public class VcsEP extends AbstractExtensionPointBean {
   @Nullable
   private AbstractVcs getInstance(@NotNull Project project, @NotNull String vcsClass) {
     try {
-      final Class<? extends AbstractVcs> foundClass = findClass(vcsClass);
+      final Class<? extends AbstractVcs> foundClass = findExtensionClass(vcsClass);
       final Class<?>[] interfaces = foundClass.getInterfaces();
       for (Class<?> anInterface : interfaces) {
         if (BaseComponent.class.isAssignableFrom(anInterface)) {
           return project.getComponent(foundClass);
         }
       }
-      return instantiate(vcsClass, project.getPicoContainer());
+      return instantiateClass(vcsClass, project.getPicoContainer());
     }
     catch (ProcessCanceledException pce) {
       throw pce;
     }
     catch(Exception e) {
-      LOG.error(e);
+      LOG.error(new PluginException(e, getPluginId()));
       return null;
     }
   }
 
   @NotNull
   public VcsDescriptor createDescriptor() {
-    return new VcsDescriptor(administrativeAreaName, displayName, name, crawlUpToCheckUnderVcs);
+    return new VcsDescriptor(administrativeAreaName, displayName, name, crawlUpToCheckUnderVcs, areChildrenValidMappings);
   }
 }

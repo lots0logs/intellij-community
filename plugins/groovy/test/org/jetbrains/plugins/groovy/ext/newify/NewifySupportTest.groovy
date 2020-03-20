@@ -1,9 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.plugins.groovy.ext.newify
 
 import com.intellij.testFramework.LightProjectDescriptor
 import groovy.transform.CompileStatic
-import org.jetbrains.plugins.groovy.GroovyLightProjectDescriptor
+import org.jetbrains.plugins.groovy.GroovyProjectDescriptors
 import org.jetbrains.plugins.groovy.codeInspection.assignment.GroovyAssignabilityCheckInspection
 import org.jetbrains.plugins.groovy.codeInspection.untypedUnresolvedAccess.GrUnresolvedAccessInspection
 import org.jetbrains.plugins.groovy.lang.highlighting.GrHighlightingTestBase
@@ -11,7 +11,7 @@ import org.jetbrains.plugins.groovy.lang.highlighting.GrHighlightingTestBase
 @CompileStatic
 class NewifySupportTest extends GrHighlightingTestBase {
 
-  final LightProjectDescriptor projectDescriptor = GroovyLightProjectDescriptor.GROOVY_LATEST
+  final LightProjectDescriptor projectDescriptor = GroovyProjectDescriptors.GROOVY_2_5
 
   @Override
   void setUp() throws Exception {
@@ -222,5 +222,45 @@ class B {
       assert contains("name")
       assert contains("age")
     }
+  }
+
+  void 'test newify supports regex patterns'() {
+    testHighlighting """
+@Newify(pattern = /[A-Z].*/)
+class B {
+  def a = A()
+  def b = new A()
+  def c = Integer(1)
+}
+"""
+
+
+    testHighlighting """
+@Newify(pattern = "A")
+class B {
+  def a = A("B")
+}
+"""
+  }
+
+  void 'test newify should not throw on incorrect regex'() {
+    testHighlighting """
+@Newify(pattern = "*")
+class B {
+  def a = <warning descr="Cannot resolve symbol 'A'">A</warning>()
+}"""
+  }
+
+  void 'test non-static classes are not available in static context'() {
+    testHighlighting """
+class Z {
+    class Inner {
+    }
+
+    @Newify(<error descr="Cannot reference non-static symbol 'Inner' from static context">Inner</error>)
+    public static void main(String[] args) {
+        def aaa = <warning descr="Cannot resolve symbol 'Inner'">Inner</warning>()
+    }
+}"""
   }
 }

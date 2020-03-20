@@ -1,4 +1,4 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -22,6 +23,8 @@ public class CommandLineUtil {
   private static final Pattern WIN_CARET_SPECIAL = Pattern.compile("[&<>()@^|!%]");
   private static final Pattern WIN_QUOTE_SPECIAL = Pattern.compile("[ \t\"*?\\[{}~()\']");  // + glob [*?] + Cygwin glob [*?\[{}~] + [()']
   private static final Pattern WIN_QUIET_COMMAND = Pattern.compile("((?:@\\s*)++)(.*)", Pattern.CASE_INSENSITIVE);
+
+  private static final String SHELL_WHITELIST_CHARACTERS = "-._/@=";
 
   private static final char Q = '\"';
   private static final String QQ = "\"\"";
@@ -45,7 +48,7 @@ public class CommandLineUtil {
   // please keep an implementation in sync with [junit-rt] ProcessBuilder.createProcess()
   @NotNull
   public static List<String> toCommandLine(@NotNull String command, @NotNull List<String> parameters, @NotNull Platform platform) {
-    List<String> commandLine = ContainerUtil.newArrayListWithCapacity(parameters.size() + 1);
+    List<String> commandLine = new ArrayList<>(parameters.size() + 1);
 
     commandLine.add(FileUtilRt.toSystemDependentName(command, platform.fileSeparator));
 
@@ -489,5 +492,28 @@ public class CommandLineUtil {
 
   public static boolean hasWinShellSpecialChars(@NotNull String parameter) {
     return WIN_CARET_SPECIAL.matcher(parameter).find();
+  }
+
+  /**
+   * When necessary, quotes the specified argument with single quotes, according to the POSIX shell rules,
+   * replacing single quotes with hardly readable but recursion-safe {@code '"'"'}.
+   */
+  public static @NotNull String posixQuote(@NotNull String argument) {
+    return shouldWrapWithQuotes(argument) ? "'" + replace(argument, "'", "'\"'\"'") + "'" : argument;
+  }
+
+  private static boolean shouldWrapWithQuotes(@NotNull CharSequence argument) {
+    if (argument.length() == 0) {
+      return true;
+    }
+    for (int i = 0; i < argument.length(); i++) {
+      char c = argument.charAt(i);
+      if (!Character.isAlphabetic(c) &&
+          !Character.isDigit(c) &&
+          !containsChar(SHELL_WHITELIST_CHARACTERS, c)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

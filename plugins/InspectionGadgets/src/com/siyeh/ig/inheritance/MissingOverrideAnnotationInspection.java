@@ -7,27 +7,31 @@ import com.intellij.codeInspection.ui.MultipleCheckboxOptionsPanel;
 import com.intellij.openapi.module.EffectiveLanguageLevelUtil;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
+import com.intellij.openapi.module.impl.scopes.ModulesScope;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.roots.ProjectRootModificationTracker;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.pom.java.LanguageLevel;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.CachedValueProvider;
+import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.InheritanceUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.ThreeState;
+import com.intellij.util.containers.ConcurrentFactoryMap;
 import com.siyeh.InspectionGadgetsBundle;
 import com.siyeh.ig.BaseInspectionVisitor;
 import com.siyeh.ig.InspectionGadgetsFix;
 import com.siyeh.ig.JavaOverridingMethodUtil;
 import com.siyeh.ig.psiutils.MethodUtils;
-import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import one.util.streamex.StreamEx;
+import org.jetbrains.annotations.*;
 
 import javax.swing.*;
-import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -46,17 +50,12 @@ public class MissingOverrideAnnotationInspection extends AbstractBaseJavaLocalIn
     return "override";
   }
 
-  @Override
-  @NotNull
-  public String getDisplayName() {
-    return InspectionGadgetsBundle.message("missing.override.annotation.display.name");
-  }
-
   /**
    * @deprecated
-   * Use {@link AnnotateMethodFix}. To be removed in 2019.1.
+   * Use {@link AnnotateMethodFix}. To be removed in 2021.1.
    */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   @SuppressWarnings("unused")
   protected InspectionGadgetsFix buildFix(Object... infos) {
     return new InspectionGadgetsFix() {
@@ -77,18 +76,20 @@ public class MissingOverrideAnnotationInspection extends AbstractBaseJavaLocalIn
   }
 
   /**
-   * @deprecated To be removed in 2019.1.
+   * @deprecated To be removed in 2021.1.
    */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   @SuppressWarnings("unused")
   protected String buildErrorString(Object... infos) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * @deprecated  To be removed in 2019.1.
+   * @deprecated  To be removed in 2021.1.
    */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
   protected BaseInspectionVisitor buildVisitor() {
     throw new UnsupportedOperationException();
   }
@@ -149,12 +150,16 @@ public class MissingOverrideAnnotationInspection extends AbstractBaseJavaLocalIn
       // 3) only one annotation with short name 'Override' exists: it's 'java.lang.Override'
       private void checkMissingOverrideInOverriders(@NotNull PsiMethod method,
                                                     @NotNull InspectionResult result) {
+        if (!PsiUtil.canBeOverridden(method)) return;
+
         Project project = method.getProject();
         LanguageLevel minimal = Objects.requireNonNull(method.getContainingClass()).isInterface() ? LanguageLevel.JDK_1_6 : LanguageLevel.JDK_1_5;
 
         GlobalSearchScope scope = getLanguageLevelScope(minimal, project);
         if (scope == null) return;
-        Predicate<PsiMethod> preFilter = m -> !JavaOverridingMethodUtil.containsAnnotationWithName(m, OVERRIDE_SHORT_NAME);
+        int paramCount = method.getParameterList().getParametersCount();
+        Predicate<PsiMethod> preFilter = m -> m.getParameterList().getParametersCount() == paramCount &&
+                                              !JavaOverridingMethodUtil.containsAnnotationWithName(m, OVERRIDE_SHORT_NAME);
         Stream<PsiMethod> overridingMethods = JavaOverridingMethodUtil.getOverridingMethodsIfCheapEnough(method, scope, preFilter);
         if (overridingMethods == null) return;
         result.hierarchyAnnotated = ThreeState.fromBoolean(!overridingMethods.findAny().isPresent());
@@ -255,12 +260,17 @@ public class MissingOverrideAnnotationInspection extends AbstractBaseJavaLocalIn
   }
 
   @Nullable
-  private static GlobalSearchScope getLanguageLevelScope(@NotNull LanguageLevel minimal, @NotNull Project project) {
-    GlobalSearchScope[] scopes = Arrays
-      .stream(ModuleManager.getInstance(project).getModules())
-      .filter(m -> EffectiveLanguageLevelUtil.getEffectiveLanguageLevel(m).isAtLeast(minimal))
-      .map(Module::getModuleScope)
-      .toArray(GlobalSearchScope[]::new);
-    return scopes.length == 0 ? null : GlobalSearchScope.union(scopes);
+  private static GlobalSearchScope getLanguageLevelScope(@NotNull LanguageLevel _minimal, @NotNull Project project) {
+    Map<LanguageLevel, GlobalSearchScope> map = CachedValuesManager.getManager(project).getCachedValue(project, () -> {
+      Map<LanguageLevel, GlobalSearchScope> result = ConcurrentFactoryMap.createMap(minimal -> {
+        Set<Module> modules = StreamEx
+          .of(ModuleManager.getInstance(project).getModules())
+          .filter(m -> EffectiveLanguageLevelUtil.getEffectiveLanguageLevel(m).isAtLeast(minimal))
+          .toSet();
+        return modules == null ? null : new ModulesScope(modules, project);
+      });
+      return CachedValueProvider.Result.create(result, ProjectRootModificationTracker.getInstance(project));
+    });
+    return map.get(_minimal);
   }
 }

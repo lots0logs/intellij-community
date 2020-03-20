@@ -15,6 +15,7 @@
  */
 package com.intellij.openapi.wm.impl.welcomeScreen;
 
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.ProjectGroup;
 import com.intellij.ide.ProjectGroupActionGroup;
 import com.intellij.ide.RecentProjectsManager;
@@ -39,7 +40,8 @@ public class EditProjectGroupAction extends RecentProjectsWelcomeScreenActionBas
     JList list = getList(e);
     assert list != null;
     DefaultListModel model = getDataModel(e);
-    String name = Messages.showInputDialog(list, "Enter group name: ", "Change Group Name", null, group.getName(),
+    String name = Messages.showInputDialog(list, IdeBundle.message("label.enter.group.name"),
+                                           IdeBundle.message("dialog.title.change.group.name"), null, group.getName(),
                                            new InputValidatorEx() {
                                              @Nullable
                                              @Override
@@ -89,7 +91,7 @@ public class EditProjectGroupAction extends RecentProjectsWelcomeScreenActionBas
   @Override
   public void update(@NotNull AnActionEvent e) {
     final List<AnAction> selected = getSelectedElements(e);
-    boolean enabled = !selected.isEmpty() && selected.get(0) instanceof ProjectGroupActionGroup;
+    boolean enabled = !selected.isEmpty() && selected.get(0) instanceof ProjectGroupActionGroup && !((ProjectGroupActionGroup)selected.get(0)).getGroup().isTutorials();
     e.getPresentation().setEnabledAndVisible(enabled);
   }
 }

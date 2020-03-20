@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.testGuiFramework.fixtures;
 
 import com.intellij.codeInspection.ui.InspectionTree;
@@ -41,6 +27,7 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.impl.IdeFrameImpl;
+import com.intellij.openapi.wm.impl.ProjectFrameHelper;
 import com.intellij.openapi.wm.impl.welcomeScreen.FlatWelcomeFrame;
 import com.intellij.testGuiFramework.framework.GuiTestUtil;
 import com.intellij.testGuiFramework.framework.Timeouts;
@@ -70,6 +57,7 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -98,16 +86,17 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
 
   @NotNull
   public static IdeFrameFixture find(@NotNull final Robot robot,
-                                     @Nullable final File projectPath,
+                                     @Nullable final Path projectPath,
                                      @Nullable final String projectName,
                                      @NotNull final Timeout timeout) {
     final GenericTypeMatcher<IdeFrameImpl> matcher = new GenericTypeMatcher<IdeFrameImpl>(IdeFrameImpl.class) {
       @Override
       protected boolean isMatching(@NotNull IdeFrameImpl frame) {
-        Project project = frame.getProject();
+        ProjectFrameHelper helper = ProjectFrameHelper.getFrameHelper(frame);
+        Project project = helper != null ? helper.getProject() : null;
         if (projectPath == null && project != null) return true;
         if (project != null &&
-            PathManager.getAbsolutePath(projectPath.getPath()).equals(PathManager.getAbsolutePath(project.getBasePath()))) {
+            PathManager.getAbsolutePath(projectPath.toString()).equals(PathManager.getAbsolutePath(project.getBasePath()))) {
           return projectName == null || projectName.equals(project.getName());
         }
         return false;
@@ -115,23 +104,22 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
     };
 
     try {
-      pause(new Condition("IdeFrame " + (projectPath != null ? quote(projectPath.getPath()) : "") + " to show up") {
+      pause(new Condition("IdeFrame " + (projectPath != null ? quote(projectPath.toString()) : "") + " to show up") {
         @Override
         public boolean test() {
-          Collection<IdeFrameImpl> frames = robot.finder().findAll(matcher);
-          return !frames.isEmpty();
+          return !robot.finder().findAll(matcher).isEmpty();
         }
       }, timeout);
 
       IdeFrameImpl ideFrame = robot.finder().find(matcher);
-      return new IdeFrameFixture(robot, ideFrame, new File(ideFrame.getProject().getBasePath()));
+      return new IdeFrameFixture(robot, ideFrame, new File(ProjectFrameHelper.getFrameHelper(ideFrame).getProject().getBasePath()));
     }
     catch (WaitTimedOutError timedOutError) {
       throw new ComponentLookupException("Unable to find IdeFrame in " + TimeoutsKt.toPrintable(timeout));
     }
   }
 
-  public static IdeFrameFixture find(@NotNull final Robot robot, @Nullable final File projectPath, @Nullable final String projectName) {
+  public static IdeFrameFixture find(@NotNull final Robot robot, @Nullable final Path projectPath, @Nullable final String projectName) {
     return find(robot, projectPath, projectName, Timeouts.INSTANCE.getDefaultTimeout());
   }
 
@@ -353,7 +341,7 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
    *
    * @param path the series of menu names, e.g. {@code invokeActionByMenuPath("Build", "Make Project")}
    */
-  public void invokeMenuPath(@NotNull String... path) {
+  public void invokeMenuPath(String @NotNull ... path) {
     getMenuFixture().invokeMenuPath(path);
   }
 
@@ -362,7 +350,7 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
    *
    * @param path the series of menu names, e.g. {@code invokeActionByMenuPath("Build", "Make Project")}
    */
-  public MenuFixture.MenuItemFixture getMenuPath(@NotNull String... path) {
+  public MenuFixture.MenuItemFixture getMenuPath(String @NotNull ... path) {
     return getMenuFixture().getMenuItemFixture(path);
   }
 
@@ -389,13 +377,15 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
    *
    * @param path the series of menu name regular expressions, e.g. {@code invokeActionByMenuPath("Build", "Make( Project)?")}
    */
-  public void invokeMenuPathRegex(@NotNull String... path) {
+  public void invokeMenuPathRegex(String @NotNull ... path) {
     getMenuFixture().invokeMenuPathRegex(path);
   }
 
   @NotNull
   private MenuFixture getMenuFixture() {
-    return new MenuFixture(robot(), target());
+    //noinspection ResultOfMethodCallIgnored
+    target();
+    return new MenuFixture(robot());
   }
 
   //@NotNull
@@ -600,7 +590,7 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
 
   @NotNull
   public EditorNotificationPanelFixture requireEditorNotification(@NotNull final String message) {
-    final Ref<EditorNotificationPanel> notificationPanelRef = new Ref<EditorNotificationPanel>();
+    final Ref<EditorNotificationPanel> notificationPanelRef = new Ref<>();
 
     pause(new Condition("Notification with message '" + message + "' shows up") {
       @Override
@@ -729,7 +719,7 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
 
   @NotNull
   public Project getProject() {
-    Project project = target().getProject();
+    Project project = Objects.requireNonNull(ProjectFrameHelper.getFrameHelper(target())).getProject();
     assertNotNull(project);
     return project;
   }
@@ -738,7 +728,7 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
     closeProjectAndWaitWelcomeFrame(true);
   }
 
-  public void closeProjectAndWaitWelcomeFrame(Boolean waitWelcomeFrame) {
+  public void closeProjectAndWaitWelcomeFrame(boolean waitWelcomeFrame) {
     closeProject();
     if (!waitWelcomeFrame) return;
     pause(new Condition("Waiting for 'Welcome' page to show up") {
@@ -751,26 +741,19 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
         }
         return false;
       }
-    });
+    }, Timeouts.INSTANCE.getMinutes01());
   }
 
   public void closeProject() {
     CloseProjectAction closeAction = new CloseProjectAction();
     AnActionEvent actionEvent =
-      AnActionEvent.createFromAnAction(closeAction, null, "", DataManager.getInstance().getDataContext(target().getComponent()));
+      AnActionEvent.createFromAnAction(closeAction, null, "", DataManager.getInstance().getDataContext(target().getRootPane()));
     DumbService.getInstance(getProject()).smartInvokeLater(() -> closeAction.actionPerformed(actionEvent));
   }
 
   @NotNull
   public MessagesFixture findMessageDialog(@NotNull String title) {
     return MessagesFixture.findByTitle(robot(), target(), title);
-  }
-
-
-  @NotNull
-  public FindDialogFixture invokeFindInPathDialog() {
-    invokeMenuPath("Edit", "Find", "Find in Path...");
-    return FindDialogFixture.find(robot());
   }
 
   @NotNull
@@ -892,8 +875,7 @@ public class IdeFrameFixture extends ComponentFixture<IdeFrameFixture, IdeFrameI
     return builder.toString();
   }
 
-  @NotNull
-  private static String[] debuggerTreeRootToChildrenTexts(XDebuggerTreeNode treeRoot) {
+  private static String @NotNull [] debuggerTreeRootToChildrenTexts(XDebuggerTreeNode treeRoot) {
     List<? extends TreeNode> children = treeRoot.getChildren();
     String[] childrenTexts = new String[children.size()];
     int i = 0;

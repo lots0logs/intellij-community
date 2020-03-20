@@ -24,13 +24,13 @@ import com.intellij.psi.search.searches.FunctionalExpressionSearch;
 import com.intellij.psi.search.searches.ReferencesSearch;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.testFramework.LightProjectDescriptor;
-import com.intellij.testFramework.fixtures.LightCodeInsightFixtureTestCase;
+import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
 import java.util.function.Predicate;
 
-public class FindFunctionalInterfaceTest extends LightCodeInsightFixtureTestCase {
+public class FindFunctionalInterfaceTest extends LightJavaCodeInsightFixtureTestCase {
   public void testMethodArgument() {
     doTestOneExpression();
   }
@@ -222,6 +222,17 @@ public class FindFunctionalInterfaceTest extends LightCodeInsightFixtureTestCase
                        "}");
 
     assertSize(5, FunctionalExpressionSearch.search(findClassAtCaret()).findAll());
+  }
+
+  public void testFindLambdaForAllEquivalentSams() {
+    configure();
+
+    PsiFile file = myFixture.addFileToProject("a.java",
+                                              "interface Foo { void foo(); }" +
+                                              "interface Foo { void bar(); } ");
+    PsiClass[] fooClasses = ((PsiJavaFile)file).getClasses();
+    assertOneElement(FunctionalExpressionSearch.search(fooClasses[0]).findAll());
+    assertOneElement(FunctionalExpressionSearch.search(fooClasses[1]).findAll());
   }
 
   @Override

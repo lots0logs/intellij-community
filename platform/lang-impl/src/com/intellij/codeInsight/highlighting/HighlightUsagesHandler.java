@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package com.intellij.codeInsight.highlighting;
 
@@ -11,6 +11,7 @@ import com.intellij.find.EditorSearchSession;
 import com.intellij.find.findUsages.PsiElement2UsageTargetAdapter;
 import com.intellij.injected.editor.EditorWindow;
 import com.intellij.lang.injection.InjectedLanguageManager;
+import com.intellij.model.psi.PsiSymbolReference;
 import com.intellij.navigation.NavigationItem;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.IdeActions;
@@ -57,7 +58,7 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
       return;
     }
 
-    final HighlightUsagesHandlerBase handler = createCustomHandler(editor, file);
+    final HighlightUsagesHandlerBase<?> handler = createCustomHandler(editor, file);
     if (handler != null) {
       final String featureId = handler.getFeatureId();
 
@@ -71,7 +72,7 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
 
     DumbService.getInstance(project).withAlternativeResolveEnabled(() -> {
       UsageTarget[] usageTargets = getUsageTargets(editor, file);
-      if (usageTargets == null) {
+      if (usageTargets.length == 0) {
         handleNoUsageTargets(file, editor, selectionModel, project);
         return;
       }
@@ -83,11 +84,10 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
     });
   }
 
-  @Nullable
-  private static UsageTarget[] getUsageTargets(@NotNull Editor editor, @NotNull PsiFile file) {
+  private static UsageTarget @NotNull[] getUsageTargets(@NotNull Editor editor, @NotNull PsiFile file) {
     UsageTarget[] usageTargets = UsageTargetUtil.findUsageTargets(editor, file);
 
-    if (usageTargets == null) {
+    if (usageTargets.length == 0) {
       PsiElement targetElement = getTargetElement(editor, file);
       if (targetElement != null && targetElement != file) {
         if (!(targetElement instanceof NavigationItem)) {
@@ -99,7 +99,7 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
       }
     }
 
-    if (usageTargets == null) {
+    if (usageTargets.length == 0) {
       PsiReference ref = TargetElementUtil.findReference(editor);
 
       if (ref instanceof PsiPolyVariantReference) {
@@ -149,9 +149,8 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
   public static <T extends PsiElement> HighlightUsagesHandlerBase<T> createCustomHandler(@NotNull Editor editor, @NotNull PsiFile file,
                                                                                          @NotNull ProperTextRange visibleRange) {
     for (HighlightUsagesHandlerFactory factory : HighlightUsagesHandlerFactory.EP_NAME.getExtensionList()) {
-      final HighlightUsagesHandlerBase handler = factory.createHighlightUsagesHandler(editor, file, visibleRange);
+      HighlightUsagesHandlerBase<T> handler = factory.createHighlightUsagesHandler(editor, file, visibleRange);
       if (handler != null) {
-        //noinspection unchecked
         return handler;
       }
     }
@@ -230,7 +229,7 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
                                          @NotNull PsiElement element,
                                          @NotNull List<? extends PsiReference> refs,
                                          @NotNull Editor editor,
-                                         PsiFile file,
+                                         @NotNull PsiFile file,
                                          boolean clearHighlights) {
 
     HighlightManager highlightManager = HighlightManager.getInstance(project);
@@ -305,7 +304,7 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
     return null;
   }
 
-  public static void doHighlightElements(@NotNull Editor editor, @NotNull PsiElement[] elements, @NotNull TextAttributes attributes, boolean clearHighlights) {
+  public static void doHighlightElements(@NotNull Editor editor, PsiElement @NotNull [] elements, @NotNull TextAttributes attributes, boolean clearHighlights) {
     HighlightManager highlightManager = HighlightManager.getInstance(editor.getProject());
     List<TextRange> textRanges = new ArrayList<>(elements.length);
     for (PsiElement element : elements) {
@@ -383,21 +382,31 @@ public class HighlightUsagesHandler extends HighlightHandlerBase {
                                       @NotNull TextAttributes attributes, boolean clearHighlights) {
     List<TextRange> textRanges = new ArrayList<>(refs.size());
     for (PsiReference ref : refs) {
-      collectRangesToHighlight(ref, textRanges);
+      collectHighlightRanges(ref, textRanges);
     }
     highlightRanges(highlightManager, editor, attributes, clearHighlights, textRanges);
   }
 
+  @SuppressWarnings("unused") // NB don't deprecate this method while PsiSymbolReference is @Experimental
   @NotNull
   public static List<TextRange> collectRangesToHighlight(@NotNull PsiReference ref, @NotNull List<TextRange> result) {
-    for (TextRange relativeRange : ReferenceRange.getRanges(ref)) {
-      PsiElement element = ref.getElement();
-      TextRange range = safeCut(element.getTextRange(), relativeRange);
-      if (range.isEmpty()) continue;
-      // injection occurs
-      result.add(InjectedLanguageManager.getInstance(element.getProject()).injectedToHost(element, range));
-    }
+    collectHighlightRanges(ref, result);
     return result;
+  }
+
+  public static void collectHighlightRanges(@NotNull PsiSymbolReference ref, @NotNull List<? super TextRange> result) {
+    for (TextRange relativeRange : ReferenceRange.getRanges(ref)) {
+      collectHighlightRanges(ref.getElement(), relativeRange, result);
+    }
+  }
+
+  public static void collectHighlightRanges(@NotNull PsiElement element,
+                                            @NotNull TextRange rangeInElement,
+                                            @NotNull List<? super TextRange> result) {
+    TextRange range = safeCut(element.getTextRange(), rangeInElement);
+    if (range.isEmpty()) return;
+    // injection occurs
+    result.add(InjectedLanguageManager.getInstance(element.getProject()).injectedToHost(element, range));
   }
 
   @NotNull

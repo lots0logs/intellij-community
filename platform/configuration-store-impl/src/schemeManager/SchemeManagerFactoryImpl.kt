@@ -1,22 +1,17 @@
 // Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.configurationStore.schemeManager
 
-import com.intellij.configurationStore.LOG
-import com.intellij.configurationStore.SchemeNameToFileName
-import com.intellij.configurationStore.StateStorageManagerImpl
-import com.intellij.configurationStore.StreamProvider
+import com.intellij.configurationStore.*
 import com.intellij.ide.startup.StartupManagerEx
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.ComponentManager
 import com.intellij.openapi.components.RoamingType
-import com.intellij.openapi.components.SettingsSavingComponent
 import com.intellij.openapi.components.impl.stores.IProjectStore
 import com.intellij.openapi.components.stateStore
 import com.intellij.openapi.options.Scheme
 import com.intellij.openapi.options.SchemeManager
 import com.intellij.openapi.options.SchemeManagerFactory
 import com.intellij.openapi.options.SchemeProcessor
-import com.intellij.openapi.project.DumbAwareRunnable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.SmartList
@@ -28,12 +23,16 @@ import java.nio.file.Paths
 
 const val ROOT_CONFIG = "\$ROOT_CONFIG$"
 
-sealed class SchemeManagerFactoryBase : SchemeManagerFactory(), SettingsSavingComponent {
+internal typealias FileChangeSubscriber = (schemeManager: SchemeManagerImpl<*, *>) -> Unit
+
+sealed class SchemeManagerFactoryBase : SchemeManagerFactory(), com.intellij.openapi.components.SettingsSavingComponent {
   private val managers = ContainerUtil.createLockFreeCopyOnWriteList<SchemeManagerImpl<Scheme, Scheme>>()
 
   protected open val componentManager: ComponentManager? = null
 
-  protected open fun createFileChangeSubscriber(): ((schemeManager: SchemeManagerImpl<*, *>) -> Unit)? = null
+  protected open fun createFileChangeSubscriber(): FileChangeSubscriber? = null
+
+  protected open fun getVirtualFileResolver(): VirtualFileResolver? = null
 
   final override fun <T : Any, MutableT : T> create(directoryName: String,
                                                     processor: SchemeProcessor<T, MutableT>,
@@ -50,13 +49,13 @@ sealed class SchemeManagerFactoryBase : SchemeManagerFactory(), SettingsSavingCo
     }
     val manager = SchemeManagerImpl(path,
                                     processor,
-                                    streamProvider
-                                    ?: (componentManager?.stateStore?.storageManager as? StateStorageManagerImpl)?.compoundStreamProvider,
-                                    directoryPath ?: pathToFile(path),
-                                    roamingType,
-                                    presentableName,
-                                    schemeNameToFileName,
-                                    fileChangeSubscriber)
+                                    streamProvider ?: (componentManager?.stateStore?.storageManager as? StateStorageManagerImpl)?.compoundStreamProvider,
+                                    ioDirectory = directoryPath ?: pathToFile(path),
+                                    roamingType = roamingType,
+                                    presentableName = presentableName,
+                                    schemeNameToFileName = schemeNameToFileName,
+                                    fileChangeSubscriber = fileChangeSubscriber,
+                                    virtualFileResolver = getVirtualFileResolver())
     if (isAutoSave) {
       @Suppress("UNCHECKED_CAST")
       managers.add(manager as SchemeManagerImpl<Scheme, Scheme>)
@@ -118,7 +117,7 @@ sealed class SchemeManagerFactoryBase : SchemeManagerFactory(), SettingsSavingCo
     }
 
     override fun pathToFile(path: String): Path {
-      return Paths.get(ApplicationManager.getApplication().stateStore.storageManager.expandMacros(ROOT_CONFIG), path)!!
+      return Paths.get(ApplicationManager.getApplication().stateStore.storageManager.expandMacros(ROOT_CONFIG), path)
     }
   }
 
@@ -126,27 +125,32 @@ sealed class SchemeManagerFactoryBase : SchemeManagerFactory(), SettingsSavingCo
   private class ProjectSchemeManagerFactory(private val project: Project) : SchemeManagerFactoryBase() {
     override val componentManager = project
 
+    override fun getVirtualFileResolver() = project as? VirtualFileResolver?
+
     private fun addVfsListener(schemeManager: SchemeManagerImpl<*, *>) {
       @Suppress("UNCHECKED_CAST")
       project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, SchemeFileTracker(schemeManager as SchemeManagerImpl<Any, Any>, project))
     }
 
-    override fun createFileChangeSubscriber(): ((schemeManager: SchemeManagerImpl<*, *>) -> Unit)? {
+    override fun createFileChangeSubscriber(): FileChangeSubscriber? {
       return { schemeManager ->
-        val startupManager = StartupManagerEx.getInstanceEx(project)
-        if (startupManager.postStartupActivityPassed()) {
-          addVfsListener(schemeManager)
-        }
-        else {
-          startupManager.registerPostStartupActivity(DumbAwareRunnable { addVfsListener(schemeManager) })
+        if (!ApplicationManager.getApplication().isUnitTestMode || project.getUserData(LISTEN_SCHEME_VFS_CHANGES_IN_TEST_MODE) == true) {
+          StartupManagerEx.getInstanceEx(project).runAfterOpened {
+            addVfsListener(schemeManager)
+          }
         }
       }
     }
 
     override fun pathToFile(path: String): Path {
+      if (project.isDefault) {
+        // not idea how to solve this issue (run SingleInspectionProfilePanelTest) in a quick and safe way
+        return Paths.get("__not_existent_path__")
+      }
+
       val projectFileDir = (project.stateStore as? IProjectStore)?.projectConfigDir
       if (projectFileDir == null) {
-        return Paths.get(project.basePath, ".$path")
+        return Paths.get(project.basePath!!, ".$path")
       }
       else {
         return Paths.get(projectFileDir, path)
@@ -156,6 +160,6 @@ sealed class SchemeManagerFactoryBase : SchemeManagerFactory(), SettingsSavingCo
 
   @TestOnly
   class TestSchemeManagerFactory(private val basePath: Path) : SchemeManagerFactoryBase() {
-    override fun pathToFile(path: String) = basePath.resolve(path)!!
+    override fun pathToFile(path: String): Path = basePath.resolve(path)
   }
 }

@@ -7,15 +7,16 @@ import com.intellij.openapi.application.runWriteAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vcs.Executor.child
-import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.ChangesUtil
 import com.intellij.openapi.vcs.changes.LocalChangeList
 import com.intellij.openapi.vcs.ex.PartialLocalLineStatusTracker
 import com.intellij.openapi.vcs.impl.LineStatusTrackerManager
-import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.util.ui.UIUtil
-import git4idea.test.*
+import git4idea.test.GitSingleRepoTest
+import git4idea.test.assertCommitted
+import git4idea.test.gitAsBytes
+import git4idea.test.tac
 
 class GitPartialCommitTest : GitSingleRepoTest() {
   fun `test partial commit with changelists`() {
@@ -28,14 +29,14 @@ class GitPartialCommitTest : GitSingleRepoTest() {
       tracker.moveToChangelist(ranges[1], testChangeList)
     }
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
 
     val changes = changeListManager.findChangeList("Test")!!.changes
     commit(changes)
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
     repo.assertCommitted {
@@ -53,14 +54,14 @@ class GitPartialCommitTest : GitSingleRepoTest() {
       tracker.setExcludedFromCommit(ranges[1], true)
     }
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
 
-    val changes = changeListManager.findChangeList(LocalChangeList.DEFAULT_NAME)!!.changes
+    val changes = changeListManager.findChangeList(LocalChangeList.getDefaultName())!!.changes
     commit(changes)
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
     repo.assertCommitted {
@@ -80,7 +81,7 @@ class GitPartialCommitTest : GitSingleRepoTest() {
       tracker.moveToChangelist(ranges[1], testChangeList)
     }
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
 
@@ -111,7 +112,7 @@ class GitPartialCommitTest : GitSingleRepoTest() {
       tracker.moveToChangelist(ranges[1], testChangeList)
     }
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
       modified("b.java")
     }
@@ -120,7 +121,7 @@ class GitPartialCommitTest : GitSingleRepoTest() {
       .filter { ChangesUtil.getFilePath(it).name == "a.java" }
     commit(changes)
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
       modified("b.java")
     }
@@ -143,14 +144,14 @@ class GitPartialCommitTest : GitSingleRepoTest() {
       tracker.moveToChangelist(ranges[1], testChangeList)
     }
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
 
     val changes = changeListManager.findChangeList("Test")!!.changes
     commit(changes)
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
     repo.assertCommitted {
@@ -172,14 +173,14 @@ class GitPartialCommitTest : GitSingleRepoTest() {
       tracker.moveToChangelist(ranges[1], testChangeList)
     }
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
 
     val changes = changeListManager.findChangeList("Test")!!.changes
     commit(changes)
 
-    assertChanges {
+    assertChangesWithRefresh {
       modified("a.java")
     }
     repo.assertCommitted {
@@ -191,19 +192,11 @@ class GitPartialCommitTest : GitSingleRepoTest() {
   }
 
 
-  private fun assertNoChanges() {
-    changeListManager.assertNoChanges()
-  }
-
-  private fun assertChanges(changes: ChangesBuilder.() -> Unit): List<Change> {
-    return changeListManager.assertChanges(changes)
-  }
-
   private fun assertCommittedContent(fileName: String, expectedContent: String, useFilters: Boolean = false) {
     val actualContent = repo.gitAsBytes("cat-file" +
                                         (if (useFilters) " --filters" else " -p") +
                                         " :$fileName")
-    assertEquals(expectedContent, String(actualContent, CharsetToolkit.UTF8_CHARSET))
+    assertEquals(expectedContent, String(actualContent, Charsets.UTF_8))
   }
 
   private fun withTrackedDocument(fileName: String, newContent: String, task: (Document, PartialLocalLineStatusTracker) -> Unit) {

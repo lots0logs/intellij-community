@@ -1,6 +1,4 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.idea.maven;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -14,16 +12,20 @@ import com.intellij.openapi.module.StdModuleTypes;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.ThrowableComputable;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.rt.execution.junit.FileComparisonFailure;
 import com.intellij.testFramework.EdtTestUtil;
 import com.intellij.testFramework.PsiTestUtil;
+import com.intellij.testFramework.RunAll;
 import com.intellij.testFramework.UsefulTestCase;
 import com.intellij.testFramework.fixtures.IdeaProjectTestFixture;
 import com.intellij.testFramework.fixtures.IdeaTestFixtureFactory;
 import com.intellij.util.ExceptionUtil;
+import com.intellij.util.ThrowableRunnable;
 import gnu.trove.THashSet;
 import org.intellij.lang.annotations.Language;
 import org.jetbrains.annotations.NonNls;
@@ -39,15 +41,20 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public abstract class MavenTestCase extends UsefulTestCase {
+  protected static final String MAVEN_COMPILER_PROPERTIES = "<properties>\n" +
+                                                            "        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n" +
+                                                            "        <maven.compiler.source>1.7</maven.compiler.source>\n" +
+                                                            "        <maven.compiler.target>1.7</maven.compiler.target>\n" +
+                                                            "</properties>\n";
   protected static final MavenConsole NULL_MAVEN_CONSOLE = new NullMavenConsole();
   // should not be static
   protected static MavenProgressIndicator EMPTY_MAVEN_PROCESS =
-    new MavenProgressIndicator(new EmptyProgressIndicator(ModalityState.NON_MODAL));
+    new MavenProgressIndicator(new EmptyProgressIndicator(ModalityState.NON_MODAL), null);
 
   private File ourTempDir;
 
@@ -103,26 +110,25 @@ public abstract class MavenTestCase extends UsefulTestCase {
 
   @Override
   protected void tearDown() throws Exception {
-    try {
-      MavenServerManager.getInstance().shutdown(true);
-      MavenArtifactDownloader.awaitQuiescence(100, TimeUnit.SECONDS);
-      myProject = null;
-      EdtTestUtil.runInEdtAndWait(() -> tearDownFixtures());
-
-      MavenIndicesManager.getInstance().clear();
-    }
-    finally {
-      super.tearDown();
-      FileUtil.delete(myDir);
-      // cannot use reliably the result of the com.intellij.openapi.util.io.FileUtil.delete() method
-      // because com.intellij.openapi.util.io.FileUtilRt.deleteRecursivelyNIO() does not honor this contract
-      if (myDir.exists()) {
-        System.err.println("Cannot delete " + myDir);
-        //printDirectoryContent(myDir);
-        myDir.deleteOnExit();
-      }
-      resetClassFields(getClass());
-    }
+    new RunAll(
+      () -> MavenServerManager.getInstance().shutdown(true),
+      () -> MavenArtifactDownloader.awaitQuiescence(100, TimeUnit.SECONDS),
+      () -> myProject = null,
+      () -> EdtTestUtil.runInEdtAndWait(() -> tearDownFixtures()),
+      () -> MavenIndicesManager.getInstance().clear(),
+      () -> super.tearDown(),
+      () -> {
+        FileUtil.delete(myDir);
+        // cannot use reliably the result of the com.intellij.openapi.util.io.FileUtil.delete() method
+        // because com.intellij.openapi.util.io.FileUtilRt.deleteRecursivelyNIO() does not honor this contract
+        if (myDir.exists()) {
+          System.err.println("Cannot delete " + myDir);
+          //printDirectoryContent(myDir);
+          myDir.deleteOnExit();
+        }
+      },
+      () -> resetClassFields(getClass())
+    ).run();
   }
 
   private void ensureTempDirCreated() throws IOException {
@@ -300,7 +306,7 @@ public abstract class MavenTestCase extends UsefulTestCase {
     String mirror = System.getProperty("idea.maven.test.mirror",
                                        // use JB maven proxy server for internal use by default, see details at
                                        // https://confluence.jetbrains.com/display/JBINT/Maven+proxy+server
-                                       "http://maven.labs.intellij.net/repo1");
+                                       "https://repo.labs.intellij.net/repo1");
     return "<settings>" +
            content +
            "<mirrors>" +
@@ -564,6 +570,14 @@ public abstract class MavenTestCase extends UsefulTestCase {
     }
     toPrint += ": " + getClass().getSimpleName() + "." + getName();
     System.out.println(toPrint);
+  }
+
+  protected <R, E extends Throwable> R runWriteAction(@NotNull ThrowableComputable<R, E> computable) throws E {
+    return WriteCommandAction.writeCommandAction(myProject).compute(computable);
+  }
+
+  protected <E extends Throwable> void runWriteAction(@NotNull ThrowableRunnable<E> runnable) throws E {
+    WriteCommandAction.writeCommandAction(myProject).run(runnable);
   }
 
   private static String getTestMavenHome() {

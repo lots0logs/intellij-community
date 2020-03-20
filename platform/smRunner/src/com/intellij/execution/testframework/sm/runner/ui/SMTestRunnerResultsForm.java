@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.execution.testframework.sm.runner.ui;
 
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
@@ -25,6 +11,7 @@ import com.intellij.execution.process.ProcessOutputTypes;
 import com.intellij.execution.testframework.*;
 import com.intellij.execution.testframework.actions.ScrollToTestSourceAction;
 import com.intellij.execution.testframework.export.TestResultsXmlFormatter;
+import com.intellij.execution.testframework.sm.SmRunnerBundle;
 import com.intellij.execution.testframework.sm.TestHistoryConfiguration;
 import com.intellij.execution.testframework.sm.runner.*;
 import com.intellij.execution.testframework.sm.runner.history.ImportedTestConsoleProperties;
@@ -48,7 +35,6 @@ import com.intellij.openapi.project.DumbService;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
 import com.intellij.openapi.util.Disposer;
-import com.intellij.openapi.util.Pass;
 import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.pom.Navigatable;
@@ -84,6 +70,8 @@ import java.io.FileWriter;
 import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.*;
+
+import static com.intellij.rt.execution.TestListenerProtocol.CLASS_CONFIGURATION;
 
 /**
  * @author: Roman Chernyatchik
@@ -123,7 +111,7 @@ public class SMTestRunnerResultsForm extends TestResultsPanel
   private volatile boolean myDisposed = false;
   private SMTestProxy myLastFailed;
   private final Set<Update> myRequests = Collections.synchronizedSet(new HashSet<>());
-  private final Alarm myUpdateTreeRequests = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, this); 
+  private final Alarm myUpdateTreeRequests = new Alarm(Alarm.ThreadToUse.POOLED_THREAD, this);
 
   public SMTestRunnerResultsForm(@NotNull final JComponent console,
                                  final TestConsoleProperties consoleProperties) {
@@ -167,7 +155,7 @@ public class SMTestRunnerResultsForm extends TestResultsPanel
     myTreeView.setTestResultsViewer(this);
     final SMTRunnerTreeStructure structure = new SMTRunnerTreeStructure(myProject, myTestsRootNode);
     myTreeBuilder = new SMTRunnerTreeBuilder(myTreeView, structure);
-    StructureTreeModel structureTreeModel = new StructureTreeModel(structure, IndexComparator.INSTANCE);
+    StructureTreeModel structureTreeModel = new StructureTreeModel<>(structure, IndexComparator.INSTANCE, myProject);
     AsyncTreeModel asyncTreeModel = new AsyncTreeModel(structureTreeModel, true, myProject);
     myTreeView.setModel(asyncTreeModel);
     myTreeBuilder.setModel(structureTreeModel);
@@ -175,34 +163,31 @@ public class SMTestRunnerResultsForm extends TestResultsPanel
     Disposer.register(this, myTreeBuilder);
     Disposer.register(this, asyncTreeModel);
 
-    TrackRunningTestUtil.installStopListeners(myTreeView, myProperties, new Pass<AbstractTestProxy>() {
-      @Override
-      public void pass(AbstractTestProxy testProxy) {
-        if (testProxy == null) return;
-        final AbstractTestProxy selectedProxy = testProxy;
-        //drill to the first leaf
-        while (!testProxy.isLeaf()) {
-          final List<? extends AbstractTestProxy> children = testProxy.getChildren();
-          if (!children.isEmpty()) {
-            final AbstractTestProxy firstChild = children.get(0);
-            if (firstChild != null) {
-              testProxy = firstChild;
-              continue;
-            }
+    TrackRunningTestUtil.installStopListeners(myTreeView, myProperties, testProxy -> {
+      if (testProxy == null) return;
+      final AbstractTestProxy selectedProxy = testProxy;
+      //drill to the first leaf
+      while (!testProxy.isLeaf()) {
+        final List<? extends AbstractTestProxy> children = testProxy.getChildren();
+        if (!children.isEmpty()) {
+          final AbstractTestProxy firstChild = children.get(0);
+          if (firstChild != null) {
+            testProxy = firstChild;
+            continue;
           }
-          break;
         }
+        break;
+      }
 
-        //pretend the selection on the first leaf
-        //so if test would be run, tracking would be restarted
-        myLastSelected = testProxy;
+      //pretend the selection on the first leaf
+      //so if test would be run, tracking would be restarted
+      myLastSelected = testProxy;
 
-        //ensure scroll to source on explicit selection only
-        if (ScrollToTestSourceAction.isScrollEnabled(SMTestRunnerResultsForm.this)) {
-          final Navigatable descriptor = TestsUIUtil.getOpenFileDescriptor(selectedProxy, SMTestRunnerResultsForm.this);
-          if (descriptor != null) {
-            OpenSourceUtil.navigate(false, descriptor);
-          }
+      //ensure scroll to source on explicit selection only
+      if (ScrollToTestSourceAction.isScrollEnabled(SMTestRunnerResultsForm.this)) {
+        final Navigatable descriptor = TestsUIUtil.getOpenFileDescriptor(selectedProxy, SMTestRunnerResultsForm.this);
+        if (descriptor != null) {
+          OpenSourceUtil.navigate(false, descriptor);
         }
       }
     });
@@ -328,7 +313,7 @@ public class SMTestRunnerResultsForm extends TestResultsPanel
       TestsUIUtil.notifyByBalloon(myProperties.getProject(), testsRoot, myProperties, presentation);
       addToHistory(testsRoot, myProperties, this);
     });
-    
+
   }
 
   private void addToHistory(final SMTestProxy.SMRootTestProxy root,
@@ -362,7 +347,7 @@ public class SMTestRunnerResultsForm extends TestResultsPanel
    */
   @Override
   public void onTestStarted(@NotNull final SMTestProxy testProxy) {
-    if (!testProxy.isConfig()) {
+    if (!testProxy.isConfig() && !CLASS_CONFIGURATION.equals(testProxy.getName())) {
       updateOnTestStarted(false);
     }
     _addTestOrSuite(testProxy);
@@ -779,7 +764,7 @@ public class SMTestRunnerResultsForm extends TestResultsPanel
     private File myOutputFile;
 
     MySaveHistoryTask(TestConsoleProperties consoleProperties, SMTestProxy.SMRootTestProxy root, RunConfiguration configuration) {
-      super(consoleProperties.getProject(), "Save Test Results", true);
+      super(consoleProperties.getProject(), SmRunnerBundle.message("sm.test.runner.results.form.save.test.results.title"), true);
       myConsoleProperties = consoleProperties;
       myRoot = root;
       myConfiguration = configuration;

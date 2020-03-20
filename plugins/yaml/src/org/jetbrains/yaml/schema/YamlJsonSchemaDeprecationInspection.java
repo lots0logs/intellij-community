@@ -16,24 +16,21 @@ import org.jetbrains.yaml.YAMLBundle;
 import org.jetbrains.yaml.psi.YAMLKeyValue;
 import org.jetbrains.yaml.psi.YamlPsiElementVisitor;
 
+import java.util.Collection;
+
 public class YamlJsonSchemaDeprecationInspection extends YamlJsonSchemaInspectionBase {
-  @Nls
-  @NotNull
-  @Override
-  public String getDisplayName() {
-    return YAMLBundle.message("inspections.schema.deprecation.name");
-  }
 
   @Override
   protected PsiElementVisitor doBuildVisitor(@NotNull ProblemsHolder holder,
                                              @NotNull LocalInspectionToolSession session,
-                                             PsiElement root,
+                                             Collection<PsiElement> roots,
                                              JsonSchemaObject schema) {
-    final JsonLikePsiWalker walker = JsonLikePsiWalker.getWalker(root, schema);
+    PsiElement sampleElement = roots.iterator().next();
+    final JsonLikePsiWalker walker = JsonLikePsiWalker.getWalker(sampleElement, schema);
     if (walker == null || schema == null) {
       return PsiElementVisitor.EMPTY_VISITOR;
     }
-    Project project = root.getProject();
+    Project project = sampleElement.getProject();
     return new YamlPsiElementVisitor() {
       @Override
       public void visitKeyValue(@NotNull YAMLKeyValue keyValue) {

@@ -1,9 +1,12 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
+import com.intellij.CommonBundle;
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.AboutPopupDescriptionProvider;
 import com.intellij.ide.BrowserUtil;
 import com.intellij.ide.IdeBundle;
+import com.intellij.ide.plugins.PluginManagerCore;
 import com.intellij.ide.ui.UISettings;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.actionSystem.CustomShortcutSet;
@@ -13,6 +16,7 @@ import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.application.ex.ApplicationInfoEx;
 import com.intellij.openapi.application.impl.ApplicationInfoImpl;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.ui.DialogWrapper;
@@ -23,12 +27,16 @@ import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.IconLoader;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.io.FileUtilRt;
+import com.intellij.openapi.util.registry.Registry;
+import com.intellij.openapi.util.registry.RegistryValue;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.ui.BrowserHyperlinkListener;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.LicensingFacade;
 import com.intellij.ui.awt.RelativePoint;
 import com.intellij.ui.components.JBScrollPane;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.Alarm;
 import com.intellij.util.text.DateFormatUtil;
 import com.intellij.util.ui.*;
@@ -46,13 +54,15 @@ import java.awt.datatransfer.StringSelection;
 import java.awt.event.*;
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
 import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.intellij.util.ui.UIUtil.isUnderDarcula;
+import static com.intellij.util.ObjectUtils.notNull;
 import static javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER;
 import static javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED;
 
@@ -123,6 +133,8 @@ public class AboutPopup {
   }
 
   private static class InfoSurface extends JPanel {
+    private static final ExtensionPointName<AboutPopupDescriptionProvider> EP_NAME = new ExtensionPointName<>("com.intellij.aboutPopupDescriptionProvider");
+
     private final Color myColor;
     private final Color myLinkColor;
     private final Icon myImage;
@@ -171,8 +183,11 @@ public class AboutPopup {
 
       LicensingFacade la = LicensingFacade.getInstance();
       if (la != null) {
-        myLines.add(new AboutBoxLine(la.getLicensedToMessage(), true));
-        appendLast();
+        final String licensedTo = la.getLicensedToMessage();
+        if (licensedTo != null) {
+          myLines.add(new AboutBoxLine(licensedTo, true));
+          appendLast();
+        }
         for (String message : la.getLicenseRestrictionsMessages()) {
           myLines.add(new AboutBoxLine(message));
           appendLast();
@@ -191,6 +206,22 @@ public class AboutPopup {
       String vmVendor = properties.getProperty("java.vendor", "unknown");
       myLines.add(new AboutBoxLine(IdeBundle.message("about.box.vm", vmVersion, vmVendor)));
       appendLast();
+
+      for (AboutPopupDescriptionProvider aboutInfoProvider : EP_NAME.getExtensions()) {
+        String description = aboutInfoProvider.getDescription();
+        if (description == null) continue;
+
+        String[] lines = description.split("[\n]+");
+
+        if (lines.length == 0) continue;
+
+        myLines.add(new AboutBoxLine(""));
+
+        for (String line : lines) {
+          myLines.add(new AboutBoxLine(line));
+          appendLast();
+        }
+      }
 
       myLines.add(new AboutBoxLine(""));
       myLines.add(new AboutBoxLine(""));
@@ -321,13 +352,13 @@ public class AboutPopup {
       GraphicsConfig config = new GraphicsConfig(g);
       UISettings.setupAntialiasing(g);
 
-      Font labelFont = JBUI.Fonts.label();
+      Font labelFont = JBFont.label();
       if (SystemInfo.isWindows) {
         labelFont = JBUI.Fonts.create(SystemInfo.isWinVistaOrNewer ? "Segoe UI" : "Tahoma", 14);
       }
 
       int startFontSize = 14;
-      for (int labelSize = JBUI.scale(startFontSize); labelSize != JBUI.scale(6); labelSize -= 1) {
+      for (int labelSize = JBUIScale.scale(startFontSize); labelSize != JBUIScale.scale(6); labelSize -= 1) {
         myLinks.clear();
         g2.setPaint(myColor);
         myImage.paintIcon(this, g2, 0, 0);
@@ -413,7 +444,7 @@ public class AboutPopup {
     }
 
     public String getText() {
-      return myInfo.toString() + SystemInfo.getOsNameAndVersion();
+      return myInfo.toString() + getExtraInfo();
     }
 
     private class TextRenderer {
@@ -444,7 +475,7 @@ public class AboutPopup {
         }
       }
 
-      public void render(int indentX, int indentY, List<AboutBoxLine> lines) throws OverflowException {
+      public void render(int indentX, int indentY, List<? extends AboutBoxLine> lines) throws OverflowException {
         x = indentX;
         y = indentY;
         ApplicationInfoEx appInfo = (ApplicationInfoEx)ApplicationInfo.getInstance();
@@ -615,6 +646,35 @@ public class AboutPopup {
     }
   }
 
+  @NotNull
+  private static String getExtraInfo() {
+    String extraInfo = SystemInfo.getOsNameAndVersion() + "\n";
+
+    extraInfo += "GC: " + ManagementFactory.getGarbageCollectorMXBeans().stream()
+             .map(GarbageCollectorMXBean::getName).collect(StringUtil.joining()) + "\n";
+
+    extraInfo += "Memory: " + (Runtime.getRuntime().maxMemory() / FileUtilRt.MEGABYTE) + "M" + "\n";
+
+    extraInfo += "Cores: " + Runtime.getRuntime().availableProcessors() + "\n";
+
+    String registryKeys = Registry.getAll().stream().filter(RegistryValue::isChangedFromDefault)
+      .map(v -> v.getKey() + "=" + v.asString()).collect(StringUtil.joining());
+    if (!StringUtil.isEmpty(registryKeys)) {
+      extraInfo += "Registry: " + registryKeys + "\n";
+    }
+
+    String nonBundledPlugins = Arrays.stream(PluginManagerCore.getPlugins()).filter(p -> !p.isBundled() && p.isEnabled())
+      .map(p -> p.getPluginId().getIdString()).collect(StringUtil.joining());
+    if (!StringUtil.isEmpty(nonBundledPlugins)) {
+      extraInfo += "Non-Bundled Plugins: " + nonBundledPlugins;
+    }
+
+    if (SystemInfo.isUnix && !SystemInfo.isMac) {
+      extraInfo += "\nCurrent Desktop: " + notNull(System.getenv("XDG_CURRENT_DESKTOP"), "Undefined");
+    }
+    return extraInfo;
+  }
+
   public static class PopupPanel extends JPanel {
 
     private InfoSurface myInfoSurface;
@@ -688,19 +748,19 @@ public class AboutPopup {
       {
         init();
         setAutoAdjustable(false);
-        setOKButtonText("Close");
+        setOKButtonText(CommonBundle.message("close.action.name"));
       }
 
       @Override
       protected JComponent createCenterPanel() {
-        JPanel centerPanel = new JPanel(new BorderLayout(JBUI.scale(5), JBUI.scale(5)));
+        JPanel centerPanel = new JPanel(new BorderLayout(JBUIScale.scale(5), JBUIScale.scale(5)));
 
         JEditorPane viewer = SwingHelper.createHtmlViewer(true, null, JBColor.WHITE, JBColor.BLACK);
         viewer.setFocusable(true);
         viewer.addHyperlinkListener(new BrowserHyperlinkListener());
 
         String resultHtmlText = getScaledHtmlText();
-        if (isUnderDarcula()) {
+        if (StartupUiUtil.isUnderDarcula()) {
           resultHtmlText = resultHtmlText.replaceAll("779dbd", "5676a0");
         }
         viewer.setText(resultHtmlText);
@@ -708,7 +768,7 @@ public class AboutPopup {
         StyleSheet styleSheet = ((HTMLDocument)viewer.getDocument()).getStyleSheet();
         styleSheet.addRule("body {font-family: \"Segoe UI\", Tahoma, sans-serif;}");
         styleSheet.addRule("body {margin-top:0;padding-top:0;}");
-        styleSheet.addRule("body {font-size:" + JBUI.scaleFontSize(14) + "pt;}");
+        styleSheet.addRule("body {font-size:" + JBUIScale.scaleFontSize((float)14) + "pt;}");
 
         viewer.setCaretPosition(0);
         viewer.setBorder(JBUI.Borders.empty(0, 5, 5, 5));
@@ -720,8 +780,7 @@ public class AboutPopup {
       }
 
       @Override
-      @NotNull
-      protected Action[] createActions() {
+      protected Action @NotNull [] createActions() {
         return new Action[]{getOKAction()};
       }
 
@@ -732,7 +791,7 @@ public class AboutPopup {
 
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
-          matcher.appendReplacement(sb, JBUI.scale(Integer.parseInt(matcher.group(1))) + "px");
+          matcher.appendReplacement(sb, JBUIScale.scale(Integer.parseInt(matcher.group(1))) + "px");
         }
         matcher.appendTail(sb);
 
@@ -744,7 +803,7 @@ public class AboutPopup {
     dialog.setTitle(String.format("Third-Party Software Used by %s %s",
                                   ApplicationNamesInfo.getInstance().getFullProductName(),
                                   ApplicationInfo.getInstance().getFullVersion()));
-    dialog.setSize(JBUI.scale(750), JBUI.scale(650));
+    dialog.setSize(JBUIScale.scale(750), JBUIScale.scale(650));
     dialog.show();
   }
 }

@@ -2,13 +2,20 @@
 package org.jetbrains.idea.maven.tasks;
 
 import com.google.common.collect.Sets;
+import com.intellij.execution.Executor;
 import com.intellij.execution.RunManagerEx;
+import com.intellij.execution.RunnerAndConfigurationSettings;
+import com.intellij.execution.executors.DefaultRunExecutor;
+import com.intellij.execution.impl.DefaultJavaProgramRunner;
+import com.intellij.execution.impl.RunConfigurationBeforeRunProvider;
+import com.intellij.execution.runners.ExecutionEnvironment;
+import com.intellij.execution.runners.ProgramRunner;
 import com.intellij.openapi.compiler.CompileContext;
 import com.intellij.openapi.compiler.CompileTask;
 import com.intellij.openapi.compiler.CompilerManager;
 import com.intellij.openapi.components.PersistentStateComponent;
-import com.intellij.openapi.components.ProjectComponent;
 import com.intellij.openapi.components.State;
+import com.intellij.openapi.progress.ProcessCanceledException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -16,11 +23,13 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
 import gnu.trove.THashSet;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.idea.maven.execution.MavenRunner;
+import org.jetbrains.annotations.PropertyKey;
+import org.jetbrains.idea.maven.execution.MavenRunConfigurationType;
 import org.jetbrains.idea.maven.execution.MavenRunnerParameters;
 import org.jetbrains.idea.maven.model.MavenExplicitProfiles;
 import org.jetbrains.idea.maven.project.MavenProject;
 import org.jetbrains.idea.maven.project.MavenProjectsManager;
+import org.jetbrains.idea.maven.utils.MavenLog;
 import org.jetbrains.idea.maven.utils.MavenSimpleProjectComponent;
 
 import java.util.ArrayList;
@@ -30,14 +39,12 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @State(name = "MavenCompilerTasksManager")
-public class MavenTasksManager extends MavenSimpleProjectComponent implements PersistentStateComponent<MavenTasksManagerState>,
-                                                                              ProjectComponent {
+public final class MavenTasksManager extends MavenSimpleProjectComponent implements PersistentStateComponent<MavenTasksManagerState> {
   private final AtomicBoolean isInitialized = new AtomicBoolean();
 
   private MavenTasksManagerState myState = new MavenTasksManagerState();
 
   private final MavenProjectsManager myProjectsManager;
-  private final MavenRunner myRunner;
 
   private final List<Listener> myListeners = ContainerUtil.createLockFreeCopyOnWriteList();
 
@@ -46,22 +53,22 @@ public class MavenTasksManager extends MavenSimpleProjectComponent implements Pe
     AFTER_COMPILE("maven.tasks.goal.after.compile"),
     BEFORE_REBUILD("maven.tasks.goal.before.rebuild"),
     AFTER_REBUILD("maven.tasks.goal.after.rebuild");
-
+    @PropertyKey(resourceBundle = TasksBundle.BUNDLE)
     public final String myMessageKey;
 
-    Phase(String messageKey) {
+    Phase(@PropertyKey(resourceBundle = TasksBundle.BUNDLE) String messageKey) {
       myMessageKey = messageKey;
     }
   }
 
-  public static MavenTasksManager getInstance(Project project) {
+  public static MavenTasksManager getInstance(@NotNull Project project) {
     return project.getComponent(MavenTasksManager.class);
   }
 
-  public MavenTasksManager(Project project, MavenProjectsManager projectsManager, MavenRunner runner) {
+  public MavenTasksManager(@NotNull Project project) {
     super(project);
-    myProjectsManager = projectsManager;
-    myRunner = runner;
+
+    myProjectsManager = MavenProjectsManager.getInstance(project);
   }
 
   @Override
@@ -85,11 +92,9 @@ public class MavenTasksManager extends MavenSimpleProjectComponent implements Pe
   }
 
   @Override
-  public void initComponent() {
+  public void initializeComponent() {
     if (!isNormalProject()) return;
     if (isInitialized.getAndSet(true)) return;
-
-    CompilerManager compilerManager = CompilerManager.getInstance(myProject);
 
     class MyCompileTask implements CompileTask {
 
@@ -105,6 +110,7 @@ public class MavenTasksManager extends MavenSimpleProjectComponent implements Pe
       }
     }
 
+    CompilerManager compilerManager = CompilerManager.getInstance(myProject);
     compilerManager.addBeforeTask(new MyCompileTask(true));
     compilerManager.addAfterTask(new MyCompileTask(false));
   }
@@ -131,7 +137,34 @@ public class MavenTasksManager extends MavenSimpleProjectComponent implements Pe
                                                      explicitProfiles.getDisabledProfiles()));
       }
     }
-    return myRunner.runBatch(parametersList, null, null, TasksBundle.message("maven.tasks.executing"), context.getProgressIndicator());
+
+    return doRunTask(context, parametersList);
+  }
+
+  private boolean doRunTask(CompileContext context, List<MavenRunnerParameters> parametersList) {
+    try {
+      ProgramRunner runner = DefaultJavaProgramRunner.getInstance();
+      Executor executor = DefaultRunExecutor.getRunExecutorInstance();
+
+      long executionId = ExecutionEnvironment.getNextUnusedExecutionId();
+      for (MavenRunnerParameters params : parametersList) {
+        RunnerAndConfigurationSettings configuration =
+          MavenRunConfigurationType.createRunnerAndConfigurationSettings(null, null, params, context.getProject());
+        ExecutionEnvironment environment = new ExecutionEnvironment(executor, runner, configuration, context.getProject());
+        environment.setExecutionId(executionId);
+        boolean result = RunConfigurationBeforeRunProvider.doRunTask(executor.getId(), environment, runner);
+        if (!result) return false;
+      }
+
+      return true;
+    }
+    catch (ProcessCanceledException e) {
+      throw e;
+    }
+    catch (Exception e) {
+      MavenLog.LOG.error("Cannot execute:", e);
+      return false;
+    }
   }
 
   public synchronized boolean isCompileTaskOfPhase(@NotNull MavenCompilerTask task, @NotNull Phase phase) {

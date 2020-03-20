@@ -70,13 +70,6 @@ public class GppClosureParameterTypeProvider extends AbstractClosureParameterEnh
         return null;
       }
     }
-
-    for (PsiType constraint : GroovyExpectedTypesProvider.getDefaultExpectedTypes(expression)) {
-      final PsiType suggestion = getSingleMethodParameterType(constraint, index, expression);
-      if (suggestion != null) {
-        return suggestion;
-      }
-    }
     return null;
   }
 
@@ -124,8 +117,7 @@ public class GppClosureParameterTypeProvider extends AbstractClosureParameterEnh
     return null;
   }
 
-  @Nullable
-  public static PsiType[] findSingleAbstractMethodSignature(@Nullable PsiType type) {
+  public static PsiType @Nullable [] findSingleAbstractMethodSignature(@Nullable PsiType type) {
     if (type instanceof PsiClassType && !(TypesUtil.isClassType(type, GroovyCommonClassNames.GROOVY_LANG_CLOSURE))) {
       List<Pair<PsiMethod, PsiSubstitutor>> result = getMethodsToOverrideImplementInInheritor((PsiClassType)type, true);
       if (result.size() == 1) {

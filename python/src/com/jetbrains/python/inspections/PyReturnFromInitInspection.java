@@ -6,11 +6,11 @@ import com.intellij.codeInspection.ProblemsHolder;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiElementVisitor;
 import com.jetbrains.python.PyBundle;
-import com.jetbrains.python.PyNames;
 import com.jetbrains.python.inspections.quickfix.PyRemoveStatementQuickFix;
 import com.jetbrains.python.psi.PyClass;
 import com.jetbrains.python.psi.PyFunction;
 import com.jetbrains.python.psi.PyReturnStatement;
+import com.jetbrains.python.psi.PyUtil;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -23,12 +23,6 @@ import java.util.Collection;
  * User: dcheryasov
  */
 public class PyReturnFromInitInspection extends PyInspection {
-  @Override
-  @Nls
-  @NotNull
-  public String getDisplayName() {
-    return PyBundle.message("INSP.NAME.init.return");
-  }
 
   @NotNull
   @Override
@@ -45,7 +39,7 @@ public class PyReturnFromInitInspection extends PyInspection {
 
     @Override
     public void visitPyFunction(PyFunction function) {
-      if (function.getContainingClass() != null && PyNames.INIT.equals(function.getName())) {
+      if (PyUtil.isInitMethod(function)) {
         Collection<PsiElement> offenders = new ArrayList<>();
         findReturnValueInside(function, offenders);
         for (PsiElement offender : offenders) {

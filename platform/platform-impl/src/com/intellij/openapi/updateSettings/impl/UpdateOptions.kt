@@ -1,7 +1,8 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.updateSettings.impl
 
 import com.intellij.openapi.components.BaseState
+import com.intellij.openapi.components.ReportValue
 import com.intellij.util.xmlb.annotations.CollectionBean
 import com.intellij.util.xmlb.annotations.OptionTag
 
@@ -24,6 +25,7 @@ class UpdateOptions : BaseState() {
   @get:OptionTag("CHECK_NEEDED")
   var isCheckNeeded by property(true)
 
+  @get:ReportValue
   @get:OptionTag("LAST_TIME_CHECKED")
   var lastTimeChecked by property(0L)
 
@@ -32,9 +34,6 @@ class UpdateOptions : BaseState() {
 
   @get:OptionTag("UPDATE_CHANNEL_TYPE")
   var updateChannelType by string(ChannelStatus.RELEASE.code)
-
-  @get:OptionTag("SECURE_CONNECTION")
-  var isUseSecureConnection by property(true)
 
   @get:OptionTag("THIRD_PARTY_PLUGINS_ALLOWED")
   var isThirdPartyPluginsAllowed by property(false)

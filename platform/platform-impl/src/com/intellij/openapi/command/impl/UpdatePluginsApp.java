@@ -1,39 +1,47 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.command.impl;
 
-import com.intellij.openapi.application.ApplicationStarterEx;
+import com.intellij.idea.Main;
+import com.intellij.openapi.application.ApplicationStarter;
 import com.intellij.openapi.progress.EmptyProgressIndicator;
 import com.intellij.openapi.updateSettings.impl.PluginDownloader;
 import com.intellij.openapi.updateSettings.impl.UpdateChecker;
 import com.intellij.openapi.updateSettings.impl.UpdateInstaller;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
+ * Works in two stages. On the first run, it collects available updates and writes an update script. The second run needs
+ * {@code idea.force.plugin.updates = "true"} system property to apply the updates.
+ *
  * @author Konstantin Bulenkov
+ * @see Main#FORCE_PLUGIN_UPDATES
+ * @see Main#installPluginUpdates()
  */
-public class UpdatePluginsApp extends ApplicationStarterEx {
-  @Override
-  public boolean isHeadless() {
-    return true;
-  }
-
+public class UpdatePluginsApp implements ApplicationStarter {
   @Override
   public String getCommandName() {
     return "update";
   }
 
   @Override
-  public void premain(String[] args) {
+  public void premain(@NotNull List<String> args) {
     System.setProperty("idea.skip.indices.initialization", "true");
   }
 
   @Override
-  public void main(String[] args) {
+  public void main(String @NotNull [] args) {
+    if (Boolean.getBoolean(Main.FORCE_PLUGIN_UPDATES)) {
+      log("Updates applied.");
+      System.exit(0);
+    }
+
     Collection<PluginDownloader> availableUpdates = UpdateChecker.getPluginUpdates();
     if (availableUpdates == null) {
       log("All plugins up to date.");
@@ -43,7 +51,7 @@ public class UpdatePluginsApp extends ApplicationStarterEx {
 
     Set<String> filter = Stream.of(args).skip(1).collect(Collectors.toSet());
     if (!filter.isEmpty()) {
-      availableUpdates = ContainerUtil.filter(availableUpdates, downloader -> filter.contains(downloader.getPluginId()));
+      availableUpdates = ContainerUtil.filter(availableUpdates, downloader -> filter.contains(downloader.getId().getIdString()));
     }
 
     log("Plugins to update:");

@@ -157,6 +157,25 @@ public abstract class CompatibilityVisitor extends PyAnnotator {
       registerForAllMatchingVersions(level -> level.isOlderThan(LanguageLevel.PYTHON35) && registerForLanguageLevel(level),
                                      " not support starred expressions in tuples, lists, and sets",
                                      node);
+      final PsiElement container = PsiTreeUtil.skipParentsOfType(node, PyParenthesizedExpression.class);
+      if (container instanceof PyTupleExpression) {
+        final PsiElement tupleParent = container.getParent();
+        if (tupleParent instanceof PyReturnStatement) {
+          registerForAllMatchingVersions(level -> level.isAtLeast(LanguageLevel.PYTHON35) &&
+                                                  level.isOlderThan(LanguageLevel.PYTHON38) &&
+                                                  registerForLanguageLevel(level),
+                                         " not support unpacking without parentheses in return statements",
+                                         node);
+        }
+
+        if (tupleParent instanceof PyYieldExpression && !((PyYieldExpression)tupleParent).isDelegating()) {
+          registerForAllMatchingVersions(level -> level.isAtLeast(LanguageLevel.PYTHON35) &&
+                                                  level.isOlderThan(LanguageLevel.PYTHON38) &&
+                                                  registerForLanguageLevel(level),
+                                         " not support unpacking without parentheses in yield statements",
+                                         node);
+        }
+      }
     }
   }
 
@@ -197,11 +216,12 @@ public abstract class CompatibilityVisitor extends PyAnnotator {
     final String text = node.getText();
 
     if (node.isIntegerLiteral()) {
-      if (text.endsWith("l") || text.endsWith("L")) {
+      String suffix = node.getIntegerLiteralSuffix();
+      if ("l".equalsIgnoreCase(suffix)) {
         registerForAllMatchingVersions(level -> level.isPy3K() && registerForLanguageLevel(level),
-                                       " not support a trailing \'l\' or \'L\'.",
+                                       " not support a trailing '" + suffix + "'.",
                                        node,
-                                       new RemoveTrailingLQuickFix());
+                                       new RemoveTrailingSuffixQuickFix());
       }
 
       if (text.length() > 1 && text.charAt(0) == '0') {
@@ -230,7 +250,7 @@ public abstract class CompatibilityVisitor extends PyAnnotator {
     boolean seenBytes = false;
     boolean seenNonBytes = false;
     for (PyStringElement element : node.getStringElements()) {
-      final String prefix = element.getPrefix().toUpperCase();
+      final String prefix = StringUtil.toUpperCase(element.getPrefix());
       if (prefix.isEmpty()) continue;
 
       final boolean bytes = element.isBytes();
@@ -680,6 +700,44 @@ public abstract class CompatibilityVisitor extends PyAnnotator {
         .filter(Objects::nonNull)
         .map(ASTNode::getPsi)
         .forEach(element -> registerProblem(element, "Python version 3.5 does not support 'await' inside comprehensions"));
+    }
+  }
+
+  @Override
+  public void visitPySlashParameter(PySlashParameter node) {
+    super.visitPySlashParameter(node);
+
+    registerForAllMatchingVersions(level -> level.isOlderThan(LanguageLevel.PYTHON38) && registerForLanguageLevel(level),
+                                   " not support positional-only parameters",
+                                   node);
+  }
+
+  @Override
+  public void visitPyFStringFragment(PyFStringFragment node) {
+    super.visitPyFStringFragment(node);
+
+    final ASTNode equalitySignInFStringFragment = node.getNode().findChildByType(PyTokenTypes.EQ);
+    if (equalitySignInFStringFragment != null) {
+      registerForAllMatchingVersions(level -> level.isOlderThan(LanguageLevel.PYTHON38) && registerForLanguageLevel(level),
+                                     " not support equality signs in f-strings", equalitySignInFStringFragment.getPsi());
+    }
+  }
+
+  @Override
+  public void visitPyAssignmentExpression(PyAssignmentExpression node) {
+    super.visitPyAssignmentExpression(node);
+    registerForAllMatchingVersions(level -> level.isOlderThan(LanguageLevel.PYTHON38) && registerForLanguageLevel(level),
+                                   " not support assignment expressions", node);
+  }
+
+  @Override
+  public void visitPyContinueStatement(PyContinueStatement node) {
+    super.visitPyContinueStatement(node);
+
+    if (PsiTreeUtil.getParentOfType(node, PyFinallyPart.class, false, PyLoopStatement.class) != null) {
+      registerForAllMatchingVersions(level -> level.isOlderThan(LanguageLevel.PYTHON38) && registerForLanguageLevel(level),
+                                     " not support 'continue' inside 'finally' clause",
+                                     node);
     }
   }
 }

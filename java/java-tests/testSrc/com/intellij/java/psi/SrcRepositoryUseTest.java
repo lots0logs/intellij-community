@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.java.psi;
 
 import com.intellij.openapi.application.ApplicationManager;
@@ -11,7 +11,6 @@ import com.intellij.openapi.roots.*;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.TextRange;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.vfs.CharsetToolkit;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileFilter;
@@ -26,17 +25,18 @@ import com.intellij.psi.text.BlockSupport;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.refactoring.rename.RenameProcessor;
 import com.intellij.testFramework.IdeaTestUtil;
-import com.intellij.testFramework.PlatformTestCase;
-import com.intellij.testFramework.PsiTestCase;
+import com.intellij.testFramework.HeavyPlatformTestCase;
+import com.intellij.testFramework.JavaPsiTestCase;
 import com.intellij.testFramework.PsiTestUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 @SuppressWarnings("ConstantConditions")
-@PlatformTestCase.WrapInCommand
-public class SrcRepositoryUseTest extends PsiTestCase{
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.SrcRepositoryUseTest");
+@HeavyPlatformTestCase.WrapInCommand
+public class SrcRepositoryUseTest extends JavaPsiTestCase {
+  private static final Logger LOG = Logger.getInstance(SrcRepositoryUseTest.class);
   private static final Key<String> TEST_KEY = Key.create("TEST");
 
   @Override
@@ -797,7 +797,7 @@ public class SrcRepositoryUseTest extends PsiTestCase{
   }
 
   private static void rewriteFileExternally(VirtualFile vFile, String text) throws IOException {
-    FileUtil.writeToFile(new File(vFile.getPath()), text.getBytes(CharsetToolkit.UTF8_CHARSET));
+    FileUtil.writeToFile(new File(vFile.getPath()), text.getBytes(StandardCharsets.UTF_8));
     vFile.refresh(false, false);
   }
 

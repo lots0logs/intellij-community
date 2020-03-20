@@ -1,6 +1,7 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util;
 
+import com.intellij.CommonBundle;
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.*;
@@ -14,6 +15,7 @@ import com.intellij.ide.structureView.newStructureView.StructureViewComponent;
 import com.intellij.ide.structureView.newStructureView.TreeActionWrapper;
 import com.intellij.ide.structureView.newStructureView.TreeActionsOwner;
 import com.intellij.ide.structureView.newStructureView.TreeModelWrapper;
+import com.intellij.ide.ui.UISettingsListener;
 import com.intellij.ide.util.treeView.AbstractTreeNode;
 import com.intellij.ide.util.treeView.NodeRenderer;
 import com.intellij.ide.util.treeView.smartTree.*;
@@ -31,6 +33,7 @@ import com.intellij.openapi.fileEditor.TextEditor;
 import com.intellij.openapi.fileEditor.ex.IdeDocumentHistory;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.keymap.KeymapUtil;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.popup.*;
@@ -38,7 +41,10 @@ import com.intellij.openapi.util.*;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.pom.Navigatable;
-import com.intellij.psi.*;
+import com.intellij.psi.PsiDocumentManager;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.StubBasedPsiElement;
 import com.intellij.psi.codeStyle.MinusculeMatcher;
 import com.intellij.psi.codeStyle.NameUtil;
 import com.intellij.psi.util.PsiTreeUtil;
@@ -48,6 +54,7 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.popup.AbstractPopup;
 import com.intellij.ui.popup.HintUpdateSupply;
 import com.intellij.ui.popup.PopupUpdateProcessor;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.ui.speedSearch.ElementFilter;
 import com.intellij.ui.tree.AsyncTreeModel;
 import com.intellij.ui.tree.StructureTreeModel;
@@ -78,15 +85,15 @@ import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.*;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.function.BiPredicate;
 
 /**
  * @author Konstantin Bulenkov
  */
 public class FileStructurePopup implements Disposable, TreeActionsOwner {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.util.FileStructurePopup");
+  private static final Logger LOG = Logger.getInstance(FileStructurePopup.class);
   private static final String NARROW_DOWN_PROPERTY_KEY = "FileStructurePopup.narrowDown";
 
   private final Project myProject;
@@ -118,7 +125,10 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
   private boolean myCanClose = true;
   private boolean myDisposed;
 
-  /** @noinspection unused*/
+  /**
+   * @noinspection unused
+   * @deprecated use {@link #FileStructurePopup(Project, FileEditor, StructureViewModel)}
+   */
   @Deprecated
   public FileStructurePopup(@NotNull Project project,
                             @NotNull FileEditor fileEditor,
@@ -142,6 +152,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
     myTreeActionsOwner = new TreeStructureActionsOwner(myTreeModel);
     myTreeActionsOwner.setActionIncluded(Sorter.ALPHA_SORTER, true);
     myTreeModelWrapper = new TreeModelWrapper(myTreeModel, myTreeActionsOwner);
+    Disposer.register(this, myTreeModelWrapper);
 
     myTreeStructure = new SmartTreeStructure(project, myTreeModelWrapper) {
       @Override
@@ -149,8 +160,11 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
         if (!ApplicationManager.getApplication().isUnitTestMode() && myPopup.isDisposed()) {
           return;
         }
-        super.rebuildTree();
-        myFilteringStructure.rebuild();
+        ProgressManager.getInstance().computePrioritized(() -> {
+          super.rebuildTree();
+          myFilteringStructure.rebuild();
+          return null;
+        });
       }
 
       @Override
@@ -174,17 +188,17 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
     FileStructurePopupFilter filter = new FileStructurePopupFilter();
     myFilteringStructure = new FilteringTreeStructure(filter, myTreeStructure, false);
 
-    myStructureTreeModel = new StructureTreeModel<>(myFilteringStructure);
+    myStructureTreeModel = new StructureTreeModel<>(myFilteringStructure, this);
     myAsyncTreeModel = new AsyncTreeModel(myStructureTreeModel, this);
     myAsyncTreeModel.setRootImmediately(myStructureTreeModel.getRootImmediately());
     myTree = new MyTree(myAsyncTreeModel);
     StructureViewComponent.registerAutoExpandListener(myTree, myTreeModel);
-    Disposer.register(this, myTreeModelWrapper);
 
     ModelListener modelListener = () -> rebuild(false);
     myTreeModel.addModelListener(modelListener);
     Disposer.register(this, () -> myTreeModel.removeModelListener(modelListener));
     myTree.setCellRenderer(new NodeRenderer());
+    myProject.getMessageBus().connect(this).subscribe(UISettingsListener.TOPIC, o -> rebuild(false));
 
     myTree.setTransferHandler(new TransferHandler() {
       @Override
@@ -266,8 +280,9 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
       .setMovable(true)
       .setBelongsToGlobalPopupStack(true)
       //.setCancelOnClickOutside(false) //for debug and snapshots
+      .setCancelOnOtherWindowOpen(true)
       .setCancelKeyEnabled(false)
-      .setDimensionServiceKey(null, getDimensionServiceKey(), true)
+      .setDimensionServiceKey(myProject, getDimensionServiceKey(), true)
       .setCancelCallback(() -> myCanClose)
       .setNormalWindowLevel(true)
       .createPopup();
@@ -278,7 +293,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
         myTreeHasBuilt.setRejected();
       }
     });
-    myTree.getEmptyText().setText("Loading...");
+    myTree.getEmptyText().setText(CommonBundle.getLoadingTreeNodeText());
     myPopup.showCenteredInCurrentWindow(myProject);
 
     ((AbstractPopup)myPopup).setShowHints(true);
@@ -479,7 +494,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
     JPanel panel = new JPanel(new BorderLayout());
     panel.setPreferredSize(JBUI.size(540, 500));
     JPanel chkPanel = new JPanel(new GridLayout(0, checkBoxCount > 0 && checkBoxCount % 4 == 0 ? checkBoxCount / 2 : 3,
-      JBUI.scale(UIUtil.DEFAULT_HGAP), 0));
+                                                JBUIScale.scale(UIUtil.DEFAULT_HGAP), 0));
     chkPanel.setOpaque(false);
 
     Shortcut[] F4 = ActionManager.getInstance().getAction(IdeActions.ACTION_EDIT_SOURCE).getShortcutSet().getShortcuts();
@@ -779,7 +794,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
       DumbAwareAction.create(e -> checkBox.doClick())
         .registerCustomShortcutSet(new CustomShortcutSet(shortcuts), myTree);
     }
-    checkBox.setText(StringUtil.capitalize(StringUtil.trimStart(text.trim(), "Show ")));
+    checkBox.setText(text);
     panel.add(checkBox);
 
     myCheckBoxes.put(action.getClass(), checkBox);
@@ -795,7 +810,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
   @NotNull
   private Promise<TreePath> rebuildAndSelect(boolean refilterOnly, Object selection) {
     AsyncPromise<TreePath> result = new AsyncPromise<>();
-    myStructureTreeModel.getInvoker().runOrInvokeLater(() -> {
+    myStructureTreeModel.getInvoker().invoke(() -> {
       if (refilterOnly) {
         myFilteringStructure.refilter();
         myStructureTreeModel.invalidate().onSuccess(
@@ -818,8 +833,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
     return result;
   }
 
-  @NotNull
-  static Shortcut[] extractShortcutFor(@NotNull TreeAction action) {
+  static Shortcut @NotNull [] extractShortcutFor(@NotNull TreeAction action) {
     if (action instanceof ActionShortcutProvider) {
       String actionId = ((ActionShortcutProvider)action).getActionIdForShortcut();
       return KeymapUtil.getActiveKeymapShortcuts(actionId).getShortcuts();
@@ -835,7 +849,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
 
   private static void saveState(TreeAction action, boolean state) {
     String propertyName = action instanceof PropertyOwner ? ((PropertyOwner)action).getPropertyName() : action.getName();
-    PropertiesComponent.getInstance().setValue(TreeStructureUtil.getPropertyName(propertyName), state);
+    PropertiesComponent.getInstance().setValue(TreeStructureUtil.getPropertyName(propertyName), state, Sorter.ALPHA_SORTER.equals(action));
   }
 
   public void setTitle(String title) {
@@ -977,7 +991,7 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
     }
 
     @Override
-    public Object findElement(String s) {
+    public Object findElement(@NotNull String s) {
       List<SpeedSearchObjectWithWeight> elements = SpeedSearchObjectWithWeight.findElement(s, this);
       SpeedSearchObjectWithWeight best = ContainerUtil.getFirstItem(elements);
       if (best == null) return null;
@@ -1002,8 +1016,8 @@ public class FileStructurePopup implements Disposable, TreeActionsOwner {
 
   @Nullable
   private static SpeedSearchObjectWithWeight find(@NotNull PsiElement element,
-                                                  @NotNull List<SpeedSearchObjectWithWeight> objects,
-                                                  @NotNull BiPredicate<PsiElement, TreePath> predicate) {
+                                                  @NotNull List<? extends SpeedSearchObjectWithWeight> objects,
+                                                  @NotNull BiPredicate<? super PsiElement, ? super TreePath> predicate) {
     return ContainerUtil.find(objects, object -> predicate.test(element, ObjectUtils.tryCast(object.node, TreePath.class)));
   }
 

@@ -1,9 +1,10 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.actions;
 
 import com.intellij.featureStatistics.FeatureUsageTracker;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.actions.searcheverywhere.ActionSearchEverywhereContributor;
+import com.intellij.ide.ui.UISettings;
 import com.intellij.ide.ui.search.BooleanOptionDescription;
 import com.intellij.ide.ui.search.OptionDescription;
 import com.intellij.ide.util.gotoByName.ChooseByNamePopup;
@@ -16,7 +17,6 @@ import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.actionSystem.impl.ActionMenu;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.ModalityState;
-import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.keymap.Keymap;
 import com.intellij.openapi.keymap.KeymapManager;
@@ -34,7 +34,6 @@ import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.registry.Registry;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
-import com.intellij.ui.HeldDownKeyListener;
 import com.intellij.util.ui.UIUtil;
 import org.intellij.lang.annotations.JdkConstants;
 import org.jetbrains.annotations.NotNull;
@@ -102,8 +101,6 @@ public class GotoActionAction extends GotoActionBase implements DumbAware {
     KeymapManager km = KeymapManager.getInstance();
     Keymap activeKeymap = km != null ? km.getActiveKeymap() : null;
     ChooseByNamePopup popup = new ChooseByNamePopup(project, model, new GotoActionItemProvider(model), oldPopup, initialText, false, initialIndex) {
-      private boolean myPaintInternalInfo;
-
       @Override
       protected void initUI(Callback callback, ModalityState modalityState, boolean allowMultipleSelection) {
         super.initUI(callback, modalityState, allowMultipleSelection);
@@ -125,7 +122,7 @@ public class GotoActionAction extends GotoActionBase implements DumbAware {
             if (o instanceof GotoActionModel.MatchedValue) {
               GotoActionModel.MatchedValue mv = (GotoActionModel.MatchedValue)o;
 
-              if (myPaintInternalInfo) {
+              if (UISettings.getInstance().getShowInplaceCommentsInternal()) {
                 if (mv.value instanceof GotoActionModel.ActionWrapper) {
                   AnAction action = ((GotoActionModel.ActionWrapper)mv.value).getAction();
                   String actionId = ActionManager.getInstance().getId(action);
@@ -163,20 +160,6 @@ public class GotoActionAction extends GotoActionBase implements DumbAware {
             ActionMenu.showDescriptionInStatusBar(true, myList, description);
           }
         });
-
-        if (Registry.is("show.configurables.ids.in.settings")) {
-          new HeldDownKeyListener() {
-            @Override
-            protected void heldKeyTriggered(JComponent component, boolean pressed) {
-              myPaintInternalInfo = pressed;
-              // an easy way to repaint the AdText
-              ListSelectionEvent event = new ListSelectionEvent(this, -1, -1, false);
-              for (ListSelectionListener listener : myList.getListSelectionListeners()) {
-                listener.valueChanged(event);
-              }
-            }
-          }.installOn(myTextField);
-        }
       }
 
       @Nullable
@@ -284,32 +267,33 @@ public class GotoActionAction extends GotoActionBase implements DumbAware {
     }
   }
 
-  public static void openOptionOrPerformAction(@NotNull Object element, String enteredText, @Nullable Project project, Component component) {
+  public static void openOptionOrPerformAction(@NotNull Object element, String enteredText, @Nullable Project project, @Nullable Component component) {
     openOptionOrPerformAction(element, enteredText, project, component, 0);
   }
 
   private static void openOptionOrPerformAction(Object element,
                                                 String enteredText,
                                                 @Nullable Project project,
-                                                Component component,
+                                                @Nullable Component component,
                                                 @JdkConstants.InputEventMask int modifiers) {
-    if (element instanceof OptionDescription) {
-      OptionDescription optionDescription = (OptionDescription)element;
-      String configurableId = optionDescription.getConfigurableId();
-      Disposable disposable = project != null ? project : ApplicationManager.getApplication();
-      TransactionGuard guard = TransactionGuard.getInstance();
-      if (optionDescription.hasExternalEditor()) {
-        guard.submitTransactionLater(disposable, () -> optionDescription.invokeInternalEditor());
+    // invoke later to let the Goto Action popup close completely before the action is performed
+    // and avoid focus issues if the action shows complicated popups itself
+    ApplicationManager.getApplication().invokeLater(() -> {
+      if (project != null && project.isDisposed()) return;
+
+      if (element instanceof OptionDescription) {
+        OptionDescription optionDescription = (OptionDescription)element;
+        if (optionDescription.hasExternalEditor()) {
+          optionDescription.invokeInternalEditor();
+        } else {
+          ShowSettingsUtilImpl.showSettingsDialog(project, optionDescription.getConfigurableId(), enteredText);
+        }
       }
       else {
-        guard.submitTransactionLater(disposable, () -> ShowSettingsUtilImpl.showSettingsDialog(project, configurableId, enteredText));
+        IdeFocusManager.getInstance(project).doWhenFocusSettlesDown(
+          () -> performAction(element, component, null, modifiers, null));
       }
-    }
-    else {
-      ApplicationManager.getApplication().invokeLater(
-        () -> IdeFocusManager.getInstance(project).doWhenFocusSettlesDown(
-          () -> performAction(element, component, null, modifiers, null)));
-    }
+    });
   }
 
   public static void performAction(@NotNull Object element, @Nullable Component component, @Nullable AnActionEvent e) {
@@ -324,7 +308,7 @@ public class GotoActionAction extends GotoActionBase implements DumbAware {
     // element could be AnAction (SearchEverywhere)
     if (component == null) return;
     AnAction action = element instanceof AnAction ? (AnAction)element : ((GotoActionModel.ActionWrapper)element).getAction();
-    TransactionGuard.getInstance().submitTransactionLater(ApplicationManager.getApplication(), () -> {
+    ApplicationManager.getApplication().invokeLater(() -> {
         DataManager instance = DataManager.getInstance();
         DataContext context = instance != null ? instance.getDataContext(component) : DataContext.EMPTY_CONTEXT;
         InputEvent inputEvent = e != null ? e.getInputEvent() : null;

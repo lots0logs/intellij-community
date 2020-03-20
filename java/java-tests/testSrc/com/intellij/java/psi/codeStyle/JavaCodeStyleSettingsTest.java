@@ -44,15 +44,11 @@ public class JavaCodeStyleSettingsTest extends CodeStyleTestCase {
     List<String> annotations = Arrays.asList("anno1", "anno2");
     original.setRepeatAnnotations(annotations);
     original.getPackagesToUseImportOnDemand().addEntry(new PackageEntry(false, "test2", true));
-    original.FIELD_TYPE_TO_NAME.addPair("foo", "bar");
-    original.STATIC_FIELD_TYPE_TO_NAME.addPair("one", "two");
 
     JavaCodeStyleSettings copy = (JavaCodeStyleSettings)original.clone();
     assertEquals(annotations, copy.getRepeatAnnotations());
     assertEquals("Import tables do not match", original.getImportLayoutTable(), copy.getImportLayoutTable());
     assertEquals("On demand packages do not match", original.getPackagesToUseImportOnDemand(), copy.getPackagesToUseImportOnDemand());
-    assertEquals("Field type-to-name maps do not match", original.FIELD_TYPE_TO_NAME, copy.FIELD_TYPE_TO_NAME);
-    assertEquals("Static field type-to-name maps do not match", original.STATIC_FIELD_TYPE_TO_NAME, copy.STATIC_FIELD_TYPE_TO_NAME);
 
     copy.setRepeatAnnotations(Collections.singletonList("anno1"));
     assertNotSame("Changed repeated annotations should reflect the equality relation", original, copy);
@@ -97,17 +93,7 @@ public class JavaCodeStyleSettingsTest extends CodeStyleTestCase {
     CodeStyleSchemeJsonExporter exporter = new CodeStyleSchemeJsonExporter();
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     exporter.exportScheme(testScheme, outputStream, Collections.singletonList("java"));
-    compareWithExpected(outputStream.toString(), j2eeProviderExists() ? "j2ee.json" : "json");
-  }
-
-  private static boolean j2eeProviderExists() {
-    List<CodeStyleSettingsProvider> providers = CodeStyleSettingsProvider.EXTENSION_POINT_NAME.getExtensionList();
-    for (CodeStyleSettingsProvider provider : providers) {
-      if (provider.getClass().getName().equals("com.intellij.javaee.JavaeeCodeStyleSettingsProvider")) {
-        return true;
-      }
-    }
-    return false;
+    compareWithExpected(outputStream.toString(), "json");
   }
 
   public void testSetProperties() {
@@ -116,11 +102,11 @@ public class JavaCodeStyleSettingsTest extends CodeStyleTestCase {
       LanguageCodeStyleSettingsProvider.forLanguage(JavaLanguage.INSTANCE).getPropertyMapper(settings);
     setSimple(mapper, "align_group_field_declarations", "true");
     setSimple(mapper, "blank_lines_after_class_header", "1");
-    setSimple(mapper, "brace_style", "next_line");
+    setSimple(mapper, "block_brace_style", "next_line");
     setSimple(mapper, "indent_size", "2");
     setSimple(mapper, "doc_align_param_comments", "true");
     setList(mapper, "imports_layout",
-            Arrays.asList("com.jetbrains.*", "blank_line", "org.eclipse.bar", "static  **", "static org.eclipse.foo.**"));
+            Arrays.asList("com.jetbrains.*", "|", "org.eclipse.bar", "$**", "$org.eclipse.foo.**"));
     mapper.getAccessor("repeat_annotations").setFromString(" com.jetbrains.First,  com.jetbrains.Second");
     final CommonCodeStyleSettings commonJavaSettings = settings.getCommonSettings(JavaLanguage.INSTANCE);
     final JavaCodeStyleSettings javaSettings = settings.getCustomSettings(JavaCodeStyleSettings.class);

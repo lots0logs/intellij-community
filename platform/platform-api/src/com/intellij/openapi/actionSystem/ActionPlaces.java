@@ -1,52 +1,45 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.actionSystem;
 
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.util.containers.ContainerUtil;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
 
 /**
- * Possible places in the IDEA user interface where an action can appear.
+ * Possible places in the IDE user interface where an action can appear.
  */
-
 @SuppressWarnings("HardCodedStringLiteral")
 public abstract class ActionPlaces {
   public static final String UNKNOWN = "unknown";
   public static final String TOOLBAR = "toolbar";
   public static final String POPUP = "popup";
 
-  /**
-   * consider to use {@link #isMainMenuOrActionSearch(String)} instead
-   */
+  // prefer isMainMenuOrActionSearch(String) for the following places
+  public static final String KEYBOARD_SHORTCUT = "keyboard shortcut";
+  public static final String MOUSE_SHORTCUT = "mouse shortcut";
+  public static final String FORCE_TOUCH = "force touch";
   public static final String MAIN_MENU = "MainMenu";
+
   public static final String MAIN_TOOLBAR = "MainToolbar";
   public static final String EDITOR_POPUP = "EditorPopup";
   public static final String EDITOR_TOOLBAR = "EditorToolbar";
   public static final String EDITOR_TAB_POPUP = "EditorTabPopup";
   public static final String EDITOR_TAB = "EditorTab";
+  public static final String TABS_MORE_TOOLBAR = "TabsMoreToolbar";
   public static final String EDITOR_GUTTER = "ICON_NAVIGATION";
   public static final String EDITOR_GUTTER_POPUP = "ICON_NAVIGATION_SECONDARY_BUTTON";
+  public static final String RIGHT_EDITOR_GUTTER_POPUP = "RightEditorGutterPopup";
   public static final String COMMANDER_POPUP = "CommanderPopup";
   public static final String COMMANDER_TOOLBAR = "CommanderToolbar";
   public static final String CONTEXT_TOOLBAR = "ContextToolbar";
+  public static final String TOOLWINDOW_POPUP = "ToolwindowPopup";
   public static final String TOOLWINDOW_TITLE = "ToolwindowTitle";
   public static final String TOOLWINDOW_CONTENT = "ToolwindowContent";
+  public static final String EDITOR_INSPECTIONS_TOOLBAR = "EditorInspectionsToolbar";
 
   public static final String PROJECT_VIEW_POPUP = "ProjectViewPopup";
   public static final String PROJECT_VIEW_TOOLBAR = "ProjectViewToolbar";
@@ -71,6 +64,7 @@ public abstract class ActionPlaces {
   public static final String J2EE_ATTRIBUTES_VIEW_POPUP = "J2EEAttributesViewPopup";
   public static final String J2EE_VIEW_POPUP = "J2EEViewPopup";
   public static final String RUNNER_TOOLBAR = "RunnerToolbar";
+  public static final String RUNNER_LAYOUT_BUTTON_TOOLBAR = "RunnerLayoutButtonToolbar";
   public static final String DEBUGGER_TOOLBAR = "DebuggerToolbar";
   public static final String USAGE_VIEW_POPUP = "UsageViewPopup";
   public static final String USAGE_VIEW_TOOLBAR = "UsageViewToolbar";
@@ -143,12 +137,30 @@ public abstract class ActionPlaces {
 
   public static final String TOUCHBAR_GENERAL = "TouchBarGeneral";
 
+  public static final String REFACTORING_QUICKLIST = "RefactoringQuickList";
+
+  public static final String INTENTION_MENU = "IntentionMenu";
+
+  public static final String TEXT_EDITOR_WITH_PREVIEW = "TextEditorWithPreview";
+
+  public static final String NOTIFICATION = "Notification";
+
+  /* Rider */
+  public static final String RIDER_UNIT_TESTS_LEFT_TOOLBAR = "UnitTests.LeftToolbar";
+  public static final String RIDER_UNIT_TESTS_TOP_TOOLBAR = "UnitTests.TopToolbar";
+  public static final String RIDER_UNIT_TESTS_SESSION_POPUP = "UnitTests.SessionPopup";
+  public static final String RIDER_UNIT_TESTS_EXPLORER_POPUP = "UnitTests.ExplorerPopup";
+  public static final String RIDER_UNIT_TESTS_PROGRESSBAR_POPUP = "UnitTests.ProgressBarPopup";
+  public static final String RIDER_UNIT_TESTS_QUICKLIST = "UnitTests.QuickList";
+
   public static boolean isMainMenuOrActionSearch(String place) {
-    return MAIN_MENU.equals(place) || ACTION_SEARCH.equals(place);
+    return MAIN_MENU.equals(place) || ACTION_SEARCH.equals(place) ||
+           KEYBOARD_SHORTCUT.equals(place) || MOUSE_SHORTCUT.equals(place) || FORCE_TOUCH.equals(place);
   }
 
   private static final Set<String> ourCommonPlaces = ContainerUtil.newHashSet(
-    UNKNOWN, MAIN_MENU, MAIN_TOOLBAR, EDITOR_TOOLBAR, EDITOR_TAB, COMMANDER_TOOLBAR, CONTEXT_TOOLBAR, TOOLWINDOW_TITLE,
+    UNKNOWN, KEYBOARD_SHORTCUT, MOUSE_SHORTCUT, FORCE_TOUCH,
+    TOOLBAR, MAIN_MENU, MAIN_TOOLBAR, EDITOR_TOOLBAR, TABS_MORE_TOOLBAR, EDITOR_TAB, COMMANDER_TOOLBAR, CONTEXT_TOOLBAR, TOOLWINDOW_TITLE,
     PROJECT_VIEW_TOOLBAR, STATUS_BAR_PLACE, ACTION_SEARCH, TESTTREE_VIEW_TOOLBAR, TYPE_HIERARCHY_VIEW_TOOLBAR,
     METHOD_HIERARCHY_VIEW_TOOLBAR, CALL_HIERARCHY_VIEW_TOOLBAR, RUNNER_TOOLBAR, DEBUGGER_TOOLBAR, USAGE_VIEW_TOOLBAR,
     STRUCTURE_VIEW_TOOLBAR, NAVIGATION_BAR_TOOLBAR, TODO_VIEW_TOOLBAR, COMPILER_MESSAGES_TOOLBAR,
@@ -156,7 +168,10 @@ public abstract class ActionPlaces {
     FILEHISTORY_VIEW_TOOLBAR, RUN_CONFIGURATIONS_COMBOBOX, WELCOME_SCREEN, CHANGES_VIEW_TOOLBAR, DATABASE_VIEW_TOOLBAR,
     ACTION_PLACE_QUICK_LIST_POPUP_ACTION, PHING_EXPLORER_TOOLBAR, DOCK_MENU, PHING_MESSAGES_TOOLBAR, DIFF_TOOLBAR,
     ANALYZE_STACKTRACE_PANEL_TOOLBAR, TOUCHBAR_GENERAL, COMPOSER_EDITOR_NOTIFICATION_PANEL, COMPOSER_EDITOR_NOTIFICATION_PANEL_EXTRA,
-    COMPOSER_LOG_RERUN, EDITOR_GUTTER, TOOLWINDOW_CONTENT
+    COMPOSER_LOG_RERUN, EDITOR_GUTTER, TOOLWINDOW_CONTENT, SERVICES_TOOLBAR, REFACTORING_QUICKLIST, INTENTION_MENU,
+    TEXT_EDITOR_WITH_PREVIEW, NOTIFICATION,
+    RIDER_UNIT_TESTS_LEFT_TOOLBAR, RIDER_UNIT_TESTS_TOP_TOOLBAR, RIDER_UNIT_TESTS_SESSION_POPUP, RIDER_UNIT_TESTS_EXPLORER_POPUP,
+    RIDER_UNIT_TESTS_PROGRESSBAR_POPUP, RIDER_UNIT_TESTS_QUICKLIST
   );
 
   private static final Set<String> ourPopupPlaces = ContainerUtil.newHashSet(
@@ -165,7 +180,7 @@ public abstract class ActionPlaces {
     METHOD_HIERARCHY_VIEW_POPUP, CALL_HIERARCHY_VIEW_POPUP, J2EE_ATTRIBUTES_VIEW_POPUP, J2EE_VIEW_POPUP, USAGE_VIEW_POPUP,
     STRUCTURE_VIEW_POPUP, TODO_VIEW_POPUP, COMPILER_MESSAGES_POPUP, ANT_MESSAGES_POPUP, ANT_EXPLORER_POPUP, UPDATE_POPUP,
     FILEVIEW_POPUP, CHECKOUT_POPUP, LVCS_DIRECTORY_HISTORY_POPUP, GUI_DESIGNER_EDITOR_POPUP, GUI_DESIGNER_COMPONENT_TREE_POPUP,
-    GUI_DESIGNER_PROPERTY_INSPECTOR_POPUP,
+    GUI_DESIGNER_PROPERTY_INSPECTOR_POPUP, TOOLWINDOW_POPUP,
     CREATE_EJB_POPUP, CHANGES_VIEW_POPUP, DATABASE_VIEW_POPUP, REMOTE_HOST_VIEW_POPUP, REMOTE_HOST_DIALOG_POPUP, TFS_TREE_POPUP,
     ACTION_PLACE_VCS_QUICK_LIST_POPUP_ACTION, PHING_EXPLORER_POPUP, NAVIGATION_BAR_POPUP, JS_BUILD_TOOL_POPUP,
     V8_CPU_PROFILING_POPUP, V8_HEAP_PROFILING_POPUP, V8_HEAP_PROFILING_POPUP, RUN_DASHBOARD_POPUP, SERVICES_POPUP, EDITOR_GUTTER_POPUP
@@ -181,8 +196,21 @@ public abstract class ActionPlaces {
     return ourPopupPlaces.contains(place) || ourCommonPlaces.contains(place);
   }
 
+  public static boolean isMainMenuOrShortcut(@NotNull String place) {
+    return MAIN_MENU.equals(place) || KEYBOARD_SHORTCUT.equals(place);
+  }
+
   @NotNull
   public static String getActionGroupPopupPlace(@Nullable String actionId) {
     return actionId == null ? POPUP : POPUP_PREFIX + actionId;
+  }
+
+  /**
+   * Returns {@code true} if the Mac system menu is enabled and the action is invoked from the regular menu or via a keyboard shortcut.
+   * (Used to avoid duplicate processing of the same action.)
+   */
+  @ApiStatus.Internal
+  public static boolean isMacSystemMenuAction(@NotNull AnActionEvent e) {
+    return SystemInfo.isMacSystemMenu && isMainMenuOrShortcut(e.getPlace());
   }
 }

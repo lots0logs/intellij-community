@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.codeStyle.arrangement.match;
 
 import com.intellij.application.options.codeStyle.arrangement.color.ArrangementColorsProvider;
@@ -32,10 +18,10 @@ import com.intellij.psi.codeStyle.arrangement.std.ArrangementSettingsToken;
 import com.intellij.psi.codeStyle.arrangement.std.ArrangementStandardSettingsManager;
 import com.intellij.psi.codeStyle.arrangement.std.CompositeArrangementSettingsToken;
 import com.intellij.util.containers.ContainerUtil;
-import com.intellij.util.containers.ContainerUtilRt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -49,7 +35,7 @@ import static com.intellij.psi.codeStyle.arrangement.std.StdArrangementTokens.Se
  */
 public class ArrangementSectionRuleManager {
   private static final Set<ArrangementSettingsToken> MUTEXES = ContainerUtil.newHashSet(START_SECTION, END_SECTION);
-  private static final Set<ArrangementSettingsToken> TOKENS = ContainerUtilRt.newHashSet(START_SECTION, END_SECTION, TEXT);
+  private static final Set<ArrangementSettingsToken> TOKENS = ContainerUtil.newHashSet(START_SECTION, END_SECTION, TEXT);
 
   private final Commenter myCommenter;
 
@@ -73,7 +59,7 @@ public class ArrangementSectionRuleManager {
                                         @NotNull ArrangementSectionRulesControl control) {
     myCommenter = LanguageCommenters.INSTANCE.forLanguage(language);
     myControl = control;
-    final List<CompositeArrangementSettingsToken> tokens = ContainerUtil.newArrayList();
+    final List<CompositeArrangementSettingsToken> tokens = new ArrayList<>();
     tokens.add(new CompositeArrangementSettingsToken(TYPE, ContainerUtil.newArrayList(START_SECTION, END_SECTION)));
     tokens.add(new CompositeArrangementSettingsToken(TEXT));
     myEditor = new ArrangementMatchingRuleEditor(settingsManager, tokens, colorsProvider, control);

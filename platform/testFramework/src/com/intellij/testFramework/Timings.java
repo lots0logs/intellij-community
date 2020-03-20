@@ -16,17 +16,13 @@
 package com.intellij.testFramework;
 
 import com.intellij.concurrency.JobSchedulerImpl;
-import com.intellij.openapi.util.io.FileUtil;
-
-import java.io.*;
+import com.intellij.openapi.util.SystemInfo;
 
 /**
  * @author peter
  */
 @SuppressWarnings("UtilityClassWithoutPrivateConstructor")
 public class Timings {
-  private static final int IO_PROBES = 42;
-
   public static final long CPU_TIMING;
   public static final long IO_TIMING;
 
@@ -37,40 +33,14 @@ public class Timings {
   public static final long REFERENCE_IO_TIMING = 100;
 
   static {
-    CPU_TIMING = CpuTimings.calcStableCpuTiming();
-
-    long start = System.currentTimeMillis();
-    for (int i = 0; i < IO_PROBES; i++) {
-      try {
-        final File tempFile = FileUtil.createTempFile("test", "test" + i);
-
-        try (FileWriter writer = new FileWriter(tempFile)) {
-          for (int j = 0; j < 15; j++) {
-            writer.write("test" + j);
-            writer.flush();
-          }
-        }
-
-        try (FileReader reader = new FileReader(tempFile)) {
-          while (reader.read() >= 0) {
-          }
-        }
-
-        if (i == IO_PROBES - 1) {
-          try (FileOutputStream stream = new FileOutputStream(tempFile)) {
-            stream.getFD().sync();
-          }
-        }
-
-        if (!tempFile.delete()) {
-          throw new IOException("Unable to delete: " + tempFile);
-        }
-      }
-      catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+    long cpuTiming = CpuTimings.calcStableCpuTiming();
+    if (SystemInfo.isJavaVersionAtLeast(11, 0, 0)) {
+      // on JBR 11, the code for CPU timings executes much faster, while most tests take roughly the same time
+      // so we correct for the difference until we have a more robust timing calculation
+      cpuTiming = cpuTiming * 54 / 31;
     }
-    IO_TIMING = System.currentTimeMillis() - start;
+    CPU_TIMING = cpuTiming;
+    IO_TIMING = IoTimings.calcIoTiming();
   }
 
   /**

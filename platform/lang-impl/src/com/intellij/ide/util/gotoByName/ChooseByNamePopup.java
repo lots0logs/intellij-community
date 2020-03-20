@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.util.gotoByName;
 
 import com.google.common.util.concurrent.UncheckedTimeoutException;
@@ -39,12 +39,14 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static com.intellij.ide.actions.searcheverywhere.ClassSearchEverywhereContributor.pathToAnonymousClass;
+
 public class ChooseByNamePopup extends ChooseByNameBase implements ChooseByNamePopupComponent, Disposable {
   public static final Key<ChooseByNamePopup> CHOOSE_BY_NAME_POPUP_IN_PROJECT_KEY = new Key<>("ChooseByNamePopup");
   public static final Key<String> CURRENT_SEARCH_PATTERN = new Key<>("ChooseByNamePattern");
 
-  private Component myOldFocusOwner = null;
-  private boolean myShowListForEmptyPattern = false;
+  private Component myOldFocusOwner;
+  private boolean myShowListForEmptyPattern;
   private final boolean myMayRequestCurrentWindow;
   private final ChooseByNamePopup myOldPopup;
   private ActionMap myActionMap;
@@ -326,20 +328,22 @@ public class ChooseByNamePopup extends ChooseByNameBase implements ChooseByNameP
                                                                                 "(\\d+)?(?:\\W(\\d+)?)?" + // line + column
                                                                                 "[)\\]]?" // possible closing paren/brace
   );
-  public static final Pattern patternToDetectAnonymousClasses = Pattern.compile("([\\.\\w]+)((\\$[\\d]+)*(\\$)?)");
+  public static final Pattern patternToDetectAnonymousClasses = Pattern.compile("([.\\w]+)((\\$[\\d]+)*(\\$)?)");
   private static final Pattern patternToDetectMembers = Pattern.compile("(.+)(#)(.*)");
   private static final Pattern patternToDetectSignatures = Pattern.compile("(.+#.*)\\(.*\\)");
 
   //space character in the end of pattern forces full matches search
   private static final String fullMatchSearchSuffix = " ";
 
+  @NotNull
   @Override
-  public String transformPattern(String pattern) {
+  public String transformPattern(@NotNull String pattern) {
     final ChooseByNameModel model = getModel();
     return getTransformedPattern(pattern, model);
   }
 
-  public static String getTransformedPattern(String pattern, ChooseByNameModel model) {
+  @NotNull
+  public static String getTransformedPattern(@NotNull String pattern, @NotNull ChooseByNameModel model) {
     String rawPattern = pattern;
 
     Pattern regex = null;
@@ -395,19 +399,8 @@ public class ChooseByNamePopup extends ChooseByNameBase implements ChooseByNameP
 
   @Nullable
   public String getPathToAnonymous() {
-    final Matcher matcher = patternToDetectAnonymousClasses.matcher(getTrimmedText());
-    if (matcher.matches()) {
-      String path = matcher.group(2);
-      if (path != null) {
-        path = path.trim();
-        if (path.endsWith("$") && path.length() >= 2) {
-          path = path.substring(0, path.length() - 2);
-        }
-        if (!path.isEmpty()) return path;
-      }
-    }
-
-    return null;
+    Matcher matcher = patternToDetectAnonymousClasses.matcher(getTrimmedText());
+    return pathToAnonymousClass(matcher);
   }
 
   public int getColumnPosition() {
@@ -455,7 +448,7 @@ public class ChooseByNamePopup extends ChooseByNameBase implements ChooseByNameP
     myRepaintQueue.queue(new Update(this) {
       @Override
       public void run() {
-        ChooseByNamePopup.this.repaintListImmediate();
+        repaintListImmediate();
       }
     });
   }

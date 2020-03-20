@@ -1,10 +1,13 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.codeStyle.properties;
 
+import com.intellij.psi.codeStyle.CommonCodeStyleSettings.BraceStyleConstant;
+import com.intellij.psi.codeStyle.CommonCodeStyleSettings.WrapConstant;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
 class FieldAccessorFactory {
 
@@ -31,10 +34,12 @@ class FieldAccessorFactory {
     String name = fieldType.getName();
     if (fieldType.isPrimitive()) {
       if ("int".equals(name)) {
-        if (fieldName.endsWith("_WRAP")) {
+        WrapConstant wrapAnnotation = myField.getAnnotation(WrapConstant.class);
+        if (wrapAnnotation != null) {
           return ValueType.WRAP;
         }
-        else if (fieldName.endsWith("BRACE_STYLE")) {
+        BraceStyleConstant braceAnnotation = myField.getAnnotation(BraceStyleConstant.class);
+        if (braceAnnotation != null) {
           return ValueType.BRACE_STYLE;
         }
         else if (fieldName.endsWith("_BRACE_FORCE")) {
@@ -56,7 +61,7 @@ class FieldAccessorFactory {
   }
 
   @Nullable
-  CodeStyleFieldAccessor createAccessor(@NotNull Object codeStyleObject) {
+  CodeStyleFieldAccessor<?,?> createAccessor(@NotNull Object codeStyleObject) {
     if (mayHaveAccessor()) {
       switch (getValueType()) {
         case BOOLEAN:
@@ -91,7 +96,9 @@ class FieldAccessorFactory {
   }
 
   private boolean mayHaveAccessor() {
-    return myField.getType().getCanonicalName() != null &&
+    final int modifiers = myField.getModifiers();
+    return !Modifier.isStatic(modifiers) && !Modifier.isFinal(modifiers) &&
+           myField.getType().getCanonicalName() != null &&
            myField.getAnnotation(Deprecated.class) == null;
   }
 
@@ -105,6 +112,12 @@ class FieldAccessorFactory {
     @Override
     protected String parseString(@NotNull String string) {
       return string;
+    }
+
+    @Nullable
+    @Override
+    protected String valueToString(@NotNull String value) {
+      return value;
     }
 
     @Nullable

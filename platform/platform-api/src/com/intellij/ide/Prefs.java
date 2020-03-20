@@ -1,9 +1,10 @@
 package com.intellij.ide;
 
 import com.intellij.openapi.util.Comparing;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.text.StringTokenizer;
 
-import java.util.Locale;
+import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
 
 /**
@@ -87,9 +88,13 @@ public class Prefs {
     getPreferences(key).remove(getNodeKey(key));
   }
 
+  public static void flush(String key) throws BackingStoreException {
+    getPreferences(key).flush();
+  }
+
   private static String getNodeKey(String key) {
     final int dotIndex = key.lastIndexOf('.');
-    return (dotIndex >= 0 ? key.substring(dotIndex + 1) : key).toLowerCase(Locale.US);
+    return StringUtil.toLowerCase((dotIndex >= 0 ? key.substring(dotIndex + 1) : key));
   }
 
   private static Preferences getPreferences(String key) {
@@ -98,7 +103,7 @@ public class Prefs {
     if (dotIndex > 0) {
       final StringTokenizer tokenizer = new StringTokenizer(key.substring(0, dotIndex), ".", false);
       while (tokenizer.hasMoreElements()) {
-        prefs = prefs.node(tokenizer.nextElement().toLowerCase(Locale.US));
+        prefs = prefs.node(StringUtil.toLowerCase(tokenizer.nextElement()));
       }
     }
     return prefs;

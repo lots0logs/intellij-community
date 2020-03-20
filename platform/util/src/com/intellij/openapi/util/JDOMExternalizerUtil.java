@@ -1,19 +1,20 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.util;
 
-import com.intellij.util.containers.ContainerUtil;
 import com.intellij.util.xmlb.Constants;
 import org.jdom.Element;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
 public class JDOMExternalizerUtil {
   /**
-   * Adds {@code <option name="{fieldName}" value="{value}"/>} element to the parent.
+   * Adds the {@code <option name="{fieldName}" value="{value}"/>} element to the parent.
    */
   public static void writeField(@NotNull Element parent, @NotNull String fieldName, @Nullable String value) {
     Element element = new Element(Constants.OPTION);
@@ -23,7 +24,7 @@ public class JDOMExternalizerUtil {
   }
 
   /**
-   * Adds {@code <option name="{fieldName}" value="{value}"/>} element to the parent when the value differs from the default.
+   * Adds the {@code <option name="{fieldName}" value="{value}"/>} element to the parent when the value differs from the default.
    */
   public static void writeField(@NotNull Element parent, @NotNull String fieldName, @Nullable String value, @NotNull String defaultValue) {
     if (!defaultValue.equals(value)) {
@@ -48,7 +49,7 @@ public class JDOMExternalizerUtil {
   }
 
   /**
-   * Adds {@code <option name="{fieldName}"/>} element to the parent and returns the created element.
+   * Adds the {@code <option name="{fieldName}"/>} element to the parent and returns the created element.
    */
   @NotNull
   public static Element writeOption(@NotNull Element parent, @NotNull String fieldName) {
@@ -69,7 +70,7 @@ public class JDOMExternalizerUtil {
   }
 
   /**
-   * Adds {@code <{tagName} value="{value}"/>} element to the parent (or just {@code <{tagName}"/>} if the value is {@code null}).
+   * Adds the {@code <{tagName} value="{value}"/>} element to the parent (or just {@code <{tagName}"/>} if the value is {@code null}).
    */
   public static void writeCustomField(@NotNull Element parent, @NotNull String tagName, @Nullable String value) {
     Element element = new Element(tagName);
@@ -95,7 +96,7 @@ public class JDOMExternalizerUtil {
       String value = children.iterator().next().getAttributeValue(Constants.VALUE);
       return value == null ? Collections.emptyList() : Collections.singletonList(value);
     }
-    List<String> values = ContainerUtil.newArrayListWithCapacity(children.size());
+    List<String> values = new ArrayList<>(children.size());
     for (Element child : children) {
       String value = child.getAttributeValue(Constants.VALUE);
       if (value != null) {
@@ -131,21 +132,17 @@ public class JDOMExternalizerUtil {
   }
 
   //<editor-fold desc="Deprecated stuff.">
-  /** @deprecated use {@link #readOption(Element, String)} (to be removed in IDEA 2019) */
+  /** @deprecated use {@link #writeCustomField(Element, String, String)} */
   @Deprecated
-  public static Element getOption(@NotNull Element parent, @NotNull String fieldName) {
-    return readOption(parent, fieldName);
-  }
-
-  /** @deprecated use {@link #writeCustomField(Element, String, String)} (to be removed in IDEA 2019) */
-  @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   public static Element addElementWithValueAttribute(@NotNull Element parent, @NotNull String childTagName, @Nullable String attrValue) {
     writeCustomField(parent, childTagName, attrValue);
     return parent.getChild(childTagName);
   }
 
-  /** @deprecated use {@link #readCustomField(Element, String)} (to be removed in IDEA 2019) */
+  /** @deprecated use {@link #readCustomField(Element, String)} */
   @Deprecated
+  @ApiStatus.ScheduledForRemoval(inVersion = "2021.3")
   public static String getFirstChildValueAttribute(@NotNull Element parent, @NotNull String childTagName) {
     return readCustomField(parent, childTagName);
   }

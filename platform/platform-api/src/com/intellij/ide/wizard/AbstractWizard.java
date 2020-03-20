@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2014 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ide.wizard;
 
 import com.intellij.CommonBundle;
@@ -29,7 +15,8 @@ import com.intellij.openapi.wm.IdeFocusManager;
 import com.intellij.ui.JBCardLayout;
 import com.intellij.ui.components.panels.OpaquePanel;
 import com.intellij.ui.mac.TouchbarDataKeys;
-import com.intellij.util.containers.ContainerUtil;
+import com.intellij.util.ui.ImageUtil;
+import com.intellij.util.ui.StartupUiUtil;
 import com.intellij.util.ui.UIUtil;
 import com.intellij.util.ui.update.UiNotifyConnector;
 import org.jetbrains.annotations.NonNls;
@@ -48,7 +35,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
-  private static final Logger LOG = Logger.getInstance("#com.intellij.ide.wizard.AbstractWizard");
+  private static final Logger LOG = Logger.getInstance(AbstractWizard.class);
 
   protected int myCurrentStep;
   protected final ArrayList<T> mySteps;
@@ -128,11 +115,8 @@ public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
       panel.add(buttonPanel, BorderLayout.EAST);
       buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
 
-      if (!UIUtil.isUnderDarcula()) {
+      if (!StartupUiUtil.isUnderDarcula()) {
         myHelpButton.putClientProperty("JButton.buttonType", "help");
-      }
-      if (UIUtil.isUnderAquaLookAndFeel()) {
-        myHelpButton.setText("");
       }
 
       int index = 0;
@@ -162,7 +146,7 @@ public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
 
       final GroupLayout.SequentialGroup hGroup = layout.createSequentialGroup();
       final GroupLayout.ParallelGroup vGroup = layout.createParallelGroup();
-      final Collection<Component> buttons = ContainerUtil.newArrayListWithCapacity(5);
+      final Collection<Component> buttons = new ArrayList<>(5);
       final boolean helpAvailable = ApplicationInfo.contextHelpAvailable();
 
       add(hGroup, vGroup, null, Box.createHorizontalGlue());
@@ -261,7 +245,7 @@ public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
       if (myIcon == null) {
         return;
       }
-      final BufferedImage image = UIUtil.createImage(g, myIcon.getIconWidth(), myIcon.getIconHeight(), BufferedImage.TYPE_INT_ARGB);
+      final BufferedImage image = ImageUtil.createImage(g, myIcon.getIconWidth(), myIcon.getIconHeight(), BufferedImage.TYPE_INT_ARGB);
       final Graphics2D gg = image.createGraphics();
       myIcon.paintIcon(this, gg, 0, 0);
 
@@ -298,9 +282,9 @@ public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
 
   @Override
   protected JComponent createCenterPanel() {
-    final JPanel panel = new JPanel(new BorderLayout());
-    panel.add(myContentPanel, BorderLayout.CENTER);
+    JPanel panel = new JPanel(new BorderLayout());
     panel.add(myIcon, BorderLayout.WEST);
+    panel.add(myContentPanel, BorderLayout.CENTER);
     return panel;
   }
 
@@ -340,7 +324,11 @@ public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
   }
 
 
-  protected String addStepComponent(final Component component) {
+  protected String addStepComponent(@NotNull Component component) {
+    if (component instanceof JPanel) {
+      ((JPanel)component).putClientProperty(DIALOG_CONTENT_PANEL_PROPERTY, true);
+    }
+
     String id = myComponentToIdMap.get(component);
     if (id == null) {
       id = Integer.toString(myComponentToIdMap.size());
@@ -514,13 +502,12 @@ public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
       else {
         myNextButton.setText(IdeBundle.message("button.ok"));
       }
-      myNextButton.setEnabled(canGoNext);
     }
     else {
       myNextButton.setText(UIUtil.removeMnemonic(IdeBundle.message("button.wizard.next")));
       myNextButton.setMnemonic('N');
-      myNextButton.setEnabled(canGoNext);
     }
+    myNextButton.setEnabled(canGoNext);
 
     if (myNextButton.isEnabled() && !ApplicationManager.getApplication().isUnitTestMode() && getRootPane() != null) {
       getRootPane().setDefaultButton(myNextButton);
@@ -553,6 +540,9 @@ public abstract class AbstractWizard<T extends Step> extends DialogWrapper {
     return myCancelButton;
   }
 
+  /**
+   * @deprecated unused
+   */
   @Deprecated
   protected JButton getFinishButton() {
     return new JButton();

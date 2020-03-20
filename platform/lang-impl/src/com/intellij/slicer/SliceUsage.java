@@ -62,7 +62,7 @@ public abstract class SliceUsage extends UsageInfo2UsageAdapter {
     return transformedUsages != null ? transformedUsages : Collections.singletonList(usage);
   }
 
-  public void processChildren(@NotNull Processor<SliceUsage> processor) {
+  public void processChildren(@NotNull Processor<? super SliceUsage> processor) {
     final PsiElement element = ReadAction.compute(this::getElement);
     ProgressIndicator indicator = ProgressManager.getInstance().getProgressIndicator();
     indicator.checkCanceled();
@@ -95,9 +95,9 @@ public abstract class SliceUsage extends UsageInfo2UsageAdapter {
     });
   }
 
-  protected abstract void processUsagesFlownFromThe(PsiElement element, Processor<SliceUsage> uniqueProcessor);
+  protected abstract void processUsagesFlownFromThe(PsiElement element, Processor<? super SliceUsage> uniqueProcessor);
 
-  protected abstract void processUsagesFlownDownTo(PsiElement element, Processor<SliceUsage> uniqueProcessor);
+  protected abstract void processUsagesFlownDownTo(PsiElement element, Processor<? super SliceUsage> uniqueProcessor);
 
   public SliceUsage getParent() {
     return myParent;

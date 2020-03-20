@@ -20,6 +20,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * @author max
@@ -45,13 +46,12 @@ public class PersistentEnumerator<Data> extends PersistentEnumeratorBase<Data> {
   private int valuesCount; // TODO: valuesCount should be persistent
 
   static final int VERSION = 6;
-  private static final Version ourVersion = new Version(VERSION);
 
-  public PersistentEnumerator(@NotNull File file, @NotNull KeyDescriptor<Data> dataDescriptor, int initialSize) throws IOException {
+  public PersistentEnumerator(@NotNull Path file, @NotNull KeyDescriptor<Data> dataDescriptor, int initialSize) throws IOException {
     this(file, dataDescriptor, initialSize, null, 0);
   }
 
-  public PersistentEnumerator(@NotNull File file,
+  public PersistentEnumerator(@NotNull Path file,
                               @NotNull KeyDescriptor<Data> dataDescriptor,
                               int initialSize,
                               @Nullable PagedFileStorage.StorageLockContext storageLockContext,
@@ -205,7 +205,7 @@ public class PersistentEnumerator<Data> extends PersistentEnumeratorBase<Data> {
     return (hashcode >>> (byteN * BITS_PER_LEVEL)) & LEVEL_MASK;
   }
 
-  private int allocVector(@NotNull final byte[] empty) throws IOException {
+  private int allocVector(final byte @NotNull [] empty) throws IOException {
     final int pos = (int)myStorage.length();
     myStorage.put(pos, empty, 0, empty.length);
     return pos;
@@ -232,9 +232,8 @@ public class PersistentEnumerator<Data> extends PersistentEnumeratorBase<Data> {
       return (int)enumerator.myStorage.length();
     }
 
-    @NotNull
     @Override
-    byte[] getRecordBuffer(PersistentEnumerator t) {
+    byte @NotNull [] getRecordBuffer(PersistentEnumerator t) {
       return myBuffer;
     }
 

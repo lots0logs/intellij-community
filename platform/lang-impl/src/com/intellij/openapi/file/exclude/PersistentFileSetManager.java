@@ -2,6 +2,7 @@
 package com.intellij.openapi.file.exclude;
 
 import com.intellij.openapi.components.PersistentStateComponent;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -25,6 +26,7 @@ class PersistentFileSetManager implements PersistentStateComponent<Element> {
   protected boolean addFile(@NotNull VirtualFile file) {
     if (!(file instanceof VirtualFileWithId) || file.isDirectory()) return false;
     myFiles.add(file);
+    onFileAdded(file);
     return true;
   }
   
@@ -33,9 +35,19 @@ class PersistentFileSetManager implements PersistentStateComponent<Element> {
   }
   
   protected boolean removeFile(@NotNull VirtualFile file) {
-    if (!myFiles.contains(file)) return false;
-    myFiles.remove(file);
-    return true;
+    boolean isRemoved = myFiles.remove(file);
+    if (isRemoved) {
+      onFileRemoved(file);
+    }
+    return isRemoved;
+  }
+
+  protected void onFileAdded(@NotNull VirtualFile file) {
+
+  }
+
+  protected void onFileRemoved(@NotNull VirtualFile file) {
+
   }
 
   @NotNull
@@ -46,7 +58,7 @@ class PersistentFileSetManager implements PersistentStateComponent<Element> {
   @NotNull
   private Collection<VirtualFile> getSortedFiles() {
     List<VirtualFile> sortedFiles = new ArrayList<>(myFiles);
-    Collections.sort(sortedFiles, Comparator.comparing(file -> file.getPath().toLowerCase()));
+    Collections.sort(sortedFiles, Comparator.comparing(file -> StringUtil.toLowerCase(file.getPath())));
     return sortedFiles;
   }
   
@@ -64,6 +76,7 @@ class PersistentFileSetManager implements PersistentStateComponent<Element> {
 
   @Override
   public void loadState(@NotNull Element state) {
+    Set<VirtualFile> oldFiles = new THashSet<>(myFiles);
     myFiles.clear();
     final VirtualFileManager vfManager = VirtualFileManager.getInstance();
     for (Object child : state.getChildren(FILE_ELEMENT)) {
@@ -79,6 +92,17 @@ class PersistentFileSetManager implements PersistentStateComponent<Element> {
         }
       }
     }
+
+    for (VirtualFile file : myFiles) {
+      if (!oldFiles.contains(file)) {
+        onFileAdded(file);
+      }
+    }
+
+    for (VirtualFile file : oldFiles) {
+      if (!myFiles.contains(file)) {
+        onFileRemoved(file);
+      }
+    }
   }
-  
 }

@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 
 package org.jetbrains.idea.svn.history;
 
@@ -12,7 +12,6 @@ import com.intellij.openapi.vcs.*;
 import com.intellij.openapi.vcs.changes.committed.DecoratorManager;
 import com.intellij.openapi.vcs.changes.committed.VcsCommittedListsZipper;
 import com.intellij.openapi.vcs.changes.committed.VcsCommittedViewAuxiliary;
-import com.intellij.openapi.vcs.changes.committed.VcsConfigurationChangeListener;
 import com.intellij.openapi.vcs.history.VcsRevisionNumber;
 import com.intellij.openapi.vcs.versionBrowser.ChangeBrowserSettings;
 import com.intellij.openapi.vcs.versionBrowser.ChangesBrowserSettingsEditor;
@@ -40,16 +39,12 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static com.intellij.openapi.application.ApplicationManager.getApplication;
 import static com.intellij.openapi.progress.ProgressManager.progress;
 import static com.intellij.openapi.progress.ProgressManager.progress2;
-import static com.intellij.util.containers.ContainerUtil.newArrayList;
-import static com.intellij.util.containers.ContainerUtil.newHashSet;
+import static com.intellij.openapi.vcs.changes.committed.VcsConfigurationChangeListener.BRANCHES_CHANGED_RESPONSE;
 import static java.util.Collections.singletonList;
 import static org.jetbrains.idea.svn.SvnBundle.message;
 
@@ -70,7 +65,7 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
     myZipper = new SvnCommittedListsZipper(myVcs);
 
     myConnection = myVcs.getProject().getMessageBus().connect();
-    myConnection.subscribe(VcsConfigurationChangeListener.BRANCHES_CHANGED_RESPONSE,
+    myConnection.subscribe(BRANCHES_CHANGED_RESPONSE,
                            (project, vcsRoot, cachedList) -> getApplication().invokeLater(() -> {
                              cachedList.stream().filter(SvnChangeList.class::isInstance).map(SvnChangeList.class::cast)
                                .filter(list -> vcsRoot == null || vcsRoot.equals(list.getVcsRoot()))
@@ -102,7 +97,7 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
   public void loadCommittedChanges(@NotNull ChangeBrowserSettings settings,
                                    @NotNull RepositoryLocation location,
                                    int maxCount,
-                                   @NotNull AsynchConsumer<CommittedChangeList> consumer) throws VcsException {
+                                   @NotNull AsynchConsumer<? super CommittedChangeList> consumer) throws VcsException {
     try {
       SvnRepositoryLocation svnLocation = (SvnRepositoryLocation)location;
       Url repositoryRoot = getRepositoryRoot(svnLocation);
@@ -128,7 +123,7 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
                                                  @NotNull RepositoryLocation location,
                                                  int maxCount) throws VcsException {
     SvnRepositoryLocation svnLocation = (SvnRepositoryLocation)location;
-    List<SvnChangeList> result = newArrayList();
+    List<SvnChangeList> result = new ArrayList<>();
     Url repositoryRoot = getRepositoryRoot(svnLocation);
     ThrowableConsumer<LogEntry, SvnBindException> resultConsumer =
       logEntry -> result.add(new SvnChangeList(myVcs, svnLocation, logEntry, repositoryRoot));
@@ -235,8 +230,7 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
   }
 
   @Override
-  @NotNull
-  public ChangeListColumn[] getColumns() {
+  public ChangeListColumn @NotNull [] getColumns() {
     return new ChangeListColumn[]{
       new ChangeListColumn.ChangeListNumberColumn(message("revision.title")),
       ChangeListColumn.NAME, ChangeListColumn.DATE, ChangeListColumn.DESCRIPTION
@@ -256,7 +250,7 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
     RootsAndBranches rootsAndBranches = new RootsAndBranches(myVcs, manager, location);
     refreshMergeInfo(rootsAndBranches);
 
-    DefaultActionGroup popup = new DefaultActionGroup(myVcs.getDisplayName(), true);
+    DefaultActionGroup popup = DefaultActionGroup.createPopupGroup(() -> myVcs.getDisplayName());
     popup.add(rootsAndBranches.getIntegrateAction());
     popup.add(rootsAndBranches.getUndoIntegrateAction());
     popup.add(new ConfigureBranchesAction());
@@ -289,11 +283,6 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
   }
 
   @Override
-  public boolean supportsIncomingChanges() {
-    return true;
-  }
-
-  @Override
   public int getFormatVersion() {
     return VERSION_WITH_REPLACED_PATHS;
   }
@@ -309,11 +298,6 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
     int version = getFormatVersion();
     return new SvnChangeList(myVcs, (SvnRepositoryLocation)location, stream, VERSION_WITH_COPY_PATHS_ADDED <= version,
                              VERSION_WITH_REPLACED_PATHS <= version);
-  }
-
-  @Override
-  public boolean isMaxCountSupported() {
-    return true;
   }
 
   @Override
@@ -339,7 +323,7 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
     // TODO: could only be used with url targets - so we could not use "svn diff" here now for all cases (we could not use url with
     // TODO: concrete revision as there could be mixed revision working copy).
 
-    Set<FilePath> result = newHashSet();
+    Set<FilePath> result = new HashSet<>();
     File rootFile = root.getIOFile();
 
     myVcs.getFactory(rootFile).createStatusClient()
@@ -360,21 +344,8 @@ public class SvnCommittedChangesProvider implements CachingCommittedChangesProvi
   }
 
   @Override
-  public boolean refreshCacheByNumber() {
-    return true;
-  }
-
-  @Override
   public String getChangelistTitle() {
     return message("changes.browser.revision.term");
-  }
-
-  @Override
-  public boolean isChangeLocallyAvailable(FilePath filePath,
-                                          @Nullable VcsRevisionNumber localRevision,
-                                          VcsRevisionNumber changeRevision,
-                                          SvnChangeList changeList) {
-    return localRevision != null && localRevision.compareTo(changeRevision) >= 0;
   }
 
   @Override

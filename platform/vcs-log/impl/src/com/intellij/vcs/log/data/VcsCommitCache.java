@@ -15,6 +15,7 @@
  */
 package com.intellij.vcs.log.data;
 
+import com.intellij.openapi.util.Condition;
 import com.intellij.util.containers.SLRUMap;
 import com.intellij.vcs.log.VcsShortCommitDetails;
 import org.jetbrains.annotations.NotNull;
@@ -52,5 +53,10 @@ class VcsCommitCache<CommitId, T extends VcsShortCommitDetails> {
   public void remove(@NotNull CommitId hash) {
     assert EventQueue.isDispatchThread();
     myCache.remove(hash);
+  }
+
+  public void removeByCondition(@NotNull Condition<? super T> condition) {
+    assert EventQueue.isDispatchThread();
+    myCache.clearByCondition(condition);
   }
 }

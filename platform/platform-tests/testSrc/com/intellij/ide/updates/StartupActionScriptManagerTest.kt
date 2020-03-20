@@ -11,6 +11,8 @@ import com.intellij.util.io.delete
 import com.intellij.util.io.exists
 import com.intellij.util.io.outputStream
 import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -97,7 +99,7 @@ class StartupActionScriptManagerTest : BareTestFixtureTestCase() {
       StartupActionScriptManager.CopyCommand(copySource, copyDestinationInOld),
       StartupActionScriptManager.UnzipCommand(unzipSource, oldTarget),
       StartupActionScriptManager.DeleteCommand(deleteInOld)))
-    StartupActionScriptManager.executeActionScript(scriptFile, oldTarget.toPath(), newTarget)
+    StartupActionScriptManager.executeActionScript(scriptFile.toFile(), oldTarget, newTarget)
 
     assertFalse(copyDestinationInOld.exists())
     assertTrue(copyDestinationInNew.exists())

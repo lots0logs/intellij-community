@@ -1,12 +1,14 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.unscramble;
 
+import com.intellij.CommonBundle;
 import com.intellij.codeInsight.highlighting.HighlightManager;
 import com.intellij.execution.ui.ConsoleView;
 import com.intellij.icons.AllIcons;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.ExporterToTextFile;
 import com.intellij.ide.ui.UISettings;
+import com.intellij.java.JavaBundle;
 import com.intellij.notification.NotificationGroup;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.editor.Editor;
@@ -95,7 +97,7 @@ public class ThreadDumpPanel extends JPanel implements DataProvider {
     });
 
     myFilterPanel = new JPanel(new BorderLayout());
-    myFilterPanel.add(new JLabel("Filter:"), BorderLayout.WEST);
+    myFilterPanel.add(new JLabel(CommonBundle.message("label.filter") + ":"), BorderLayout.WEST);
     myFilterPanel.add(myFilterField);
     myFilterPanel.setVisible(false);
 
@@ -245,7 +247,7 @@ public class ThreadDumpPanel extends JPanel implements DataProvider {
     if (threadState.isSleeping()) {
       return SimpleTextAttributes.GRAY_ATTRIBUTES;
     }
-    if (threadState.isEmptyStackTrace() || ThreadDumpParser.isKnownJdkThread(threadState)) {
+    if (threadState.isEmptyStackTrace() || threadState.isKnownJDKThread()) {
       return new SimpleTextAttributes(SimpleTextAttributes.STYLE_PLAIN, Color.GRAY.brighter());
     }
     if (threadState.isEDT()) {
@@ -329,11 +331,11 @@ public class ThreadDumpPanel extends JPanel implements DataProvider {
   }
   private static class CopyToClipboardAction extends DumbAwareAction {
     private static final NotificationGroup GROUP = NotificationGroup.toolWindowGroup("Analyze thread dump", ToolWindowId.RUN, false);
-    private final List<ThreadState> myThreadDump;
+    private final List<? extends ThreadState> myThreadDump;
     private final Project myProject;
 
-    private CopyToClipboardAction(List<ThreadState> threadDump, Project project) {
-      super("Copy to Clipboard", "Copy whole thread dump to clipboard", PlatformIcons.COPY_ICON);
+    private CopyToClipboardAction(List<? extends ThreadState> threadDump, Project project) {
+      super(JavaBundle.message("action.text.copy.to.clipboard"), JavaBundle.message("action.description.copy.whole.thread.dump.to.clipboard"), PlatformIcons.COPY_ICON);
       myThreadDump = threadDump;
       myProject = project;
     }
@@ -347,14 +349,15 @@ public class ThreadDumpPanel extends JPanel implements DataProvider {
       }
       CopyPasteManager.getInstance().setContents(new StringSelection(buf.toString()));
 
-      GROUP.createNotification("Full thread dump was successfully copied to clipboard", MessageType.INFO).notify(myProject);
+      GROUP.createNotification(JavaBundle.message("notification.text.full.thread.dump.was.successfully.copied.to.clipboard"), MessageType.INFO).notify(myProject);
     }
   }
 
   private class FilterAction extends ToggleAction implements DumbAware {
 
     private FilterAction() {
-      super("Filter", "Show only threads containing a specific string", AllIcons.General.Filter);
+      super(CommonBundle.messagePointer("action.text.filter"), JavaBundle.messagePointer(
+        "action.description.show.only.threads.containing.a.specific.string"), AllIcons.General.Filter);
     }
 
     @Override
@@ -375,7 +378,8 @@ public class ThreadDumpPanel extends JPanel implements DataProvider {
 
   private class MergeStacktracesAction extends ToggleAction implements DumbAware {
     private MergeStacktracesAction() {
-      super("Merge Identical Stacktraces", "Group threads with identical stacktraces", AllIcons.General.CollapseAll);
+      super(JavaBundle.messagePointer("action.text.merge.identical.stacktraces"), JavaBundle.messagePointer(
+        "action.description.group.threads.with.identical.stacktraces"), AllIcons.Actions.Collapseall);
     }
 
     @Override
@@ -390,15 +394,15 @@ public class ThreadDumpPanel extends JPanel implements DataProvider {
     }
   }
 
-  public static ExporterToTextFile createToFileExporter(Project project, List<ThreadState> threadStates) {
+  public static ExporterToTextFile createToFileExporter(Project project, List<? extends ThreadState> threadStates) {
     return new MyToFileExporter(project, threadStates);
   }
 
   private static class MyToFileExporter implements ExporterToTextFile {
     private final Project myProject;
-    private final List<ThreadState> myThreadStates;
+    private final List<? extends ThreadState> myThreadStates;
 
-    private MyToFileExporter(Project project, List<ThreadState> threadStates) {
+    private MyToFileExporter(Project project, List<? extends ThreadState> threadStates) {
       myProject = project;
       myThreadStates = threadStates;
     }

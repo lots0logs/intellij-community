@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package org.jetbrains.jps.backwardRefs;
 
+import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jps.ModuleChunk;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 
 public class JavaBackwardReferenceIndexBuilder extends ModuleLevelBuilder {
+  private static final Logger LOG = Logger.getInstance(JavaBackwardReferenceIndexBuilder.class);
   public static final String BUILDER_ID = "compiler.ref.index";
   private static final String MESSAGE_TYPE = "processed module";
   private final Set<ModuleBuildTarget> myCompiledTargets = ContainerUtil.newConcurrentSet();
@@ -57,9 +59,10 @@ public class JavaBackwardReferenceIndexBuilder extends ModuleLevelBuilder {
       myCompiledTargets.clear();
     }
 
-    JavaBackwardReferenceIndexWriter.closeIfNeed(false);
+    JavaBackwardReferenceIndexWriter.closeIfNeeded(false);
   }
 
+  @NotNull
   @Override
   public List<String> getCompilableFileExtensions() {
     return Collections.emptyList();
@@ -74,7 +77,8 @@ public class JavaBackwardReferenceIndexBuilder extends ModuleLevelBuilder {
     if (writer != null) {
       final Throwable cause = writer.getRebuildRequestCause();
       if (cause != null) {
-        JavaBackwardReferenceIndexWriter.closeIfNeed(true);
+        LOG.error("compiler reference index will be deleted", cause);
+        JavaBackwardReferenceIndexWriter.closeIfNeeded(true);
       }
 
       if (dirtyFilesHolder.hasRemovedFiles()) {

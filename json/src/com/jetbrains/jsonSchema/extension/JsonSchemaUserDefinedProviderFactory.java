@@ -9,16 +9,17 @@ import com.intellij.util.PairProcessor;
 import com.intellij.util.containers.ContainerUtil;
 import com.jetbrains.jsonSchema.JsonSchemaMappingsProjectConfiguration;
 import com.jetbrains.jsonSchema.UserDefinedJsonSchemaConfiguration;
+import com.jetbrains.jsonSchema.impl.JsonSchemaObject;
 import com.jetbrains.jsonSchema.impl.JsonSchemaVersion;
 import com.jetbrains.jsonSchema.remote.JsonFileResolver;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static com.jetbrains.jsonSchema.remote.JsonFileResolver.isAbsoluteUrl;
 import static com.jetbrains.jsonSchema.remote.JsonFileResolver.isHttpPath;
 
 /**
@@ -41,7 +42,7 @@ public class JsonSchemaUserDefinedProviderFactory implements JsonSchemaProviderF
                                    UserDefinedJsonSchemaConfiguration schema) {
     String relPath = schema.getRelativePathToSchema();
     return new MyProvider(project, schema.getSchemaVersion(), schema.getName(),
-                          isHttpPath(relPath) || new File(relPath).isAbsolute()
+                          isHttpPath(relPath) || relPath.startsWith(JsonSchemaObject.TEMP_URL) || new File(relPath).isAbsolute()
                             ? relPath
                             : new File(project.getBasePath(),
                           relPath).getAbsolutePath(),
@@ -78,7 +79,8 @@ public class JsonSchemaUserDefinedProviderFactory implements JsonSchemaProviderF
     public VirtualFile getSchemaFile() {
       if (myVirtualFile != null && myVirtualFile.isValid()) return myVirtualFile;
       String path = myFile;
-      if (isHttpPath(path)) {
+
+      if (isAbsoluteUrl(path)) {
         myVirtualFile = JsonFileResolver.urlToFile(path);
       }
       else {
@@ -106,7 +108,7 @@ public class JsonSchemaUserDefinedProviderFactory implements JsonSchemaProviderF
     @Override
     public boolean isAvailable(@NotNull VirtualFile file) {
       //noinspection SimplifiableIfStatement
-      if (myPatterns.isEmpty() || file.isDirectory() || !file.isValid() || getSchemaFile() == null) return false;
+      if (myPatterns.isEmpty() || file.isDirectory() || !file.isValid()) return false;
       return myPatterns.stream().anyMatch(processor -> processor.process(myProject, file));
     }
 

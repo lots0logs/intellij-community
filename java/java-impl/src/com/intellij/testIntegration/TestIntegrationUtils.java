@@ -40,10 +40,22 @@ public class TestIntegrationUtils {
         return framework.getSetUpMethodFileTemplateDescriptor();
       }
     },
+    BEFORE_CLASS("beforeClass") {
+      @Override
+      public FileTemplateDescriptor getFileTemplateDescriptor(@NotNull TestFramework framework) {
+        return framework.getBeforeClassMethodFileTemplateDescriptor();
+      }
+    },
     TEAR_DOWN("tearDown") {
       @Override
       public FileTemplateDescriptor getFileTemplateDescriptor(@NotNull TestFramework framework) {
         return framework.getTearDownMethodFileTemplateDescriptor();
+      }
+    },
+    AFTER_CLASS("afterClass") {
+      @Override
+      public FileTemplateDescriptor getFileTemplateDescriptor(@NotNull TestFramework framework) {
+        return framework.getAfterClassMethodFileTemplateDescriptor();
       }
     },
     TEST("test") {
@@ -127,7 +139,10 @@ public class TestIntegrationUtils {
         @Override
         public boolean includeMember(PsiMember member) {
           if (!(member instanceof PsiMethod)) return false;
-          if (member.hasModifierProperty(PsiModifier.PRIVATE) || member.hasModifierProperty(PsiModifier.ABSTRACT)) return false;
+          if (member.hasModifierProperty(PsiModifier.PRIVATE) ||
+              (member.hasModifierProperty(PsiModifier.ABSTRACT) && member.getContainingClass() != clazz)) {
+            return false;
+          }
           return true;
         }
       }, false);
@@ -222,7 +237,7 @@ public class TestIntegrationUtils {
 
     String templateText;
     try {
-      Properties properties = new Properties();
+      Properties properties = FileTemplateManager.getInstance(targetClass.getProject()).getDefaultProperties();
       if (sourceClass != null && sourceClass.isValid()) {
         properties.setProperty(FileTemplate.ATTRIBUTE_CLASS_NAME, sourceClass.getQualifiedName());
       }
@@ -239,7 +254,13 @@ public class TestIntegrationUtils {
     if (existingNames != null && !existingNames.add(name)) {
       int idx = 1;
       while (existingNames.contains(name)) {
-        final String newName = name + (idx++);
+        if (!name.startsWith("test")) {
+          name = "test" + StringUtil.capitalize(name);
+          if (existingNames.add(name)) {
+            break;
+          }
+        }
+        String newName = name + (idx++);
         if (existingNames.add(newName)) {
           name = newName;
           break;

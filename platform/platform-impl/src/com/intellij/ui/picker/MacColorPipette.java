@@ -1,18 +1,4 @@
-/*
- * Copyright 2000-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.ui.picker;
 
 import com.intellij.openapi.diagnostic.Logger;
@@ -24,8 +10,9 @@ import com.intellij.ui.mac.foundation.FoundationLibrary;
 import com.intellij.ui.mac.foundation.ID;
 import com.intellij.ui.mac.foundation.MacUtil;
 import com.intellij.util.BitUtil;
+import com.intellij.util.ui.GraphicsUtil;
 import com.intellij.util.ui.UIUtil;
-import com.sun.jna.Native;
+import com.sun.jna.Pointer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -135,7 +122,7 @@ public class MacColorPipette extends ColorPipetteBase {
       pickerDialog.add(label);
       pickerDialog.setSize(DIALOG_SIZE, DIALOG_SIZE);
       pickerDialog.setBackground(myTransparentColor);
-      
+
       BufferedImage emptyImage = UIUtil.createImage(pickerDialog, 1, 1, Transparency.TRANSLUCENT);
       pickerDialog.setCursor(myParent.getToolkit().createCustomCursor(emptyImage, new Point(0, 0), "ColorPicker"));
     }
@@ -143,12 +130,15 @@ public class MacColorPipette extends ColorPipetteBase {
   }
 
   private static void applyRenderingHints(@NotNull Graphics graphics) {
-    UIUtil.applyRenderingHints(graphics);
-    if (graphics instanceof Graphics2D) {
-      ((Graphics2D)graphics).setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-      ((Graphics2D)graphics).setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      ((Graphics2D)graphics).setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+    if (!(graphics instanceof Graphics2D)) {
+      return;
     }
+
+    Graphics2D g2d = (Graphics2D)graphics;
+    GraphicsUtil.applyRenderingHints(g2d);
+    g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
   }
 
   private static void drawCurrentColorRectangle(@NotNull Graphics2D graphics, @NotNull Point offset, @NotNull Color currentColor) {
@@ -158,7 +148,7 @@ public class MacColorPipette extends ColorPipetteBase {
     int width = SIZE / 2;
     int height = SIZE / 8;
     graphics.fillRoundRect(x, y, width, height, 10, 10);
-    
+
     graphics.setColor(Gray._255);
     String colorString = currentColor.getRed() + " " + currentColor.getGreen() + " " + currentColor.getBlue();
     FontMetrics metrics = graphics.getFontMetrics();
@@ -192,8 +182,10 @@ public class MacColorPipette extends ColorPipetteBase {
     return captureScreen(null, new Rectangle(0, 0, 1, 1)) != null;
   }
 
+  // TODO-ank: Screen capturing looks like self-contained feature and should be placed to separate class. Note that it is also used from
+  //  com.android.tools.idea.ui.resourcechooser.colorpicker2.GraphicalColorPipette) to pick a color from any window on the screen
   @Nullable
-  static BufferedImage captureScreen(@Nullable Window belowWindow, @NotNull Rectangle rect) {
+  public static BufferedImage captureScreen(@Nullable Window belowWindow, @NotNull Rectangle rect) {
     ID pool = Foundation.invoke("NSAutoreleasePool", "new");
     try {
       ID windowId = belowWindow != null ? MacUtil.findWindowFromJavaWindow(belowWindow) : null;
@@ -211,7 +203,7 @@ public class MacColorPipette extends ColorPipetteBase {
       ID data = Foundation.invoke(nsImage, "TIFFRepresentation");
       ID bytes = Foundation.invoke(data, "bytes");
       ID length = Foundation.invoke(data, "length");
-      ByteBuffer byteBuffer = Native.getDirectByteBuffer(bytes.longValue(), length.longValue());
+      ByteBuffer byteBuffer = new Pointer(bytes.longValue()).getByteBuffer(0, length.longValue());
       Foundation.invoke(nsImage, "release");
       byte[] b = new byte[byteBuffer.remaining()];
       byteBuffer.get(b);

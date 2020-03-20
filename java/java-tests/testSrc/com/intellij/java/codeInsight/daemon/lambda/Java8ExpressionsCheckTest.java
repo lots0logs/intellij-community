@@ -23,10 +23,10 @@ import com.intellij.psi.impl.source.resolve.DefaultParameterTypeInferencePolicy;
 import com.intellij.psi.infos.CandidateInfo;
 import com.intellij.psi.infos.MethodCandidateInfo;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NonNls;
 
 import java.util.Collection;
-
 public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
   @NonNls static final String BASE_PATH = "/codeInsight/daemonCodeAnalyzer/lambda/expressions";
 
@@ -36,6 +36,62 @@ public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
 
   public void testNestedLambdaAdditionalConstraints() {
     doTestAllMethodCallExpressions();
+  }
+
+  public void testForbidCachingForAllQualifiersWhenDependOnThreadLocalTypes() {
+    configure();
+    PsiMethodCallExpression getKeyCall =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
+
+    PsiLambdaExpression l1 = PsiTreeUtil.getParentOfType(getKeyCall, PsiLambdaExpression.class);
+    PsiLambdaExpression l2 = (PsiLambdaExpression)PsiTreeUtil.skipWhitespacesForward(l1.getNextSibling());
+
+    //ensure chained method calls inside lambda are resolved
+    //including entry.getKey()
+    //these calls depend on ThreadLocalTypes and should not be cached
+    //note that their types should not be cached as well
+    l2.getFunctionalInterfaceType();
+
+    //check that getKey was not cached in the line above
+    PsiType type = getKeyCall.getType();
+    assertEquals(CommonClassNames.JAVA_LANG_STRING, type.getCanonicalText());
+  }
+
+  public void testTypeOfThrowsExpression() {
+    configure();
+    PsiMethodCallExpression fooCall =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
+
+    assertNotNull(fooCall.getType());
+  }
+
+  public void testRecursiveApplicabilityCheck() {
+    configure();
+    PsiMethodCallExpression getDataCall =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
+    assertNotNull(getDataCall);
+
+    //ensure applicability is not called recursively
+    assertNotNull(getDataCall.getType());
+  }
+
+  public void testRecursiveConflictResolution() {
+    configure();
+    PsiMethodCallExpression assertEquals =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
+    assertNotNull(assertEquals);
+
+    //ensure conflict check is not called recursively
+    assertNotNull(assertEquals.getMethodExpression().advancedResolve(true));
+  }
+
+  public void testLambdaParameterTypeDetection() {
+    configure();
+    PsiReferenceExpression referenceExpression =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiReferenceExpression.class);
+
+    PsiType type = referenceExpression.getType();
+    assertTrue(type.getCanonicalText(), type.equalsToText(CommonClassNames.JAVA_LANG_STRING));
   }
 
   public void testAvoidClassRefCachingDuringInference() {
@@ -91,7 +147,7 @@ public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
   }
 
   private void doTestParametersSideEffects() {
-    configureByFile(BASE_PATH + "/" + getTestName(false) + ".java");
+    configure();
     Collection<PsiParameter> parameters = PsiTreeUtil.findChildrenOfType(getFile(), PsiParameter.class);
     for (PsiParameter parameter : parameters) {
       if (parameter.getTypeElement() == null) { //lambda parameter
@@ -101,13 +157,13 @@ public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
           assertNotNull(expression.getText(), expression.resolveMethod());
         }
 
-        getPsiManager().dropResolveCaches();
+        dropCaches();
       }
     }
   }
 
   public void testCachingOfResultsDuringCandidatesIteration() {
-    configureByFile(BASE_PATH + "/" + getTestName(false) + ".java");
+    configure();
     final Collection<PsiMethodCallExpression> methodCallExpressions = PsiTreeUtil.findChildrenOfType(getFile(), PsiMethodCallExpression.class);
 
     final PsiResolveHelper helper = JavaPsiFacade.getInstance(getProject()).getResolveHelper();
@@ -167,7 +223,7 @@ public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
   }
 
   private void doTestCachedUnresolved() {
-    configureByFile(BASE_PATH + "/" + getTestName(false) + ".java");
+    configure();
     PsiMethodCallExpression callExpression =
       PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
 
@@ -180,15 +236,54 @@ public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
     }
   }
 
+  private void configure() {
+    configureByFile(BASE_PATH + "/" + getTestName(false) + ".java");
+  }
+
   public void testIDEA140035() {
     doTestAllMethodCallExpressions();
+    doTestAllParameterTypes();
+  }
+
+  public void testIDEA211775() {
+    doTestAllMethodCallExpressions();
+    doTestAllParameterTypes();
+  }
+
+  private void doTestAllParameterTypes() {
     final Collection<PsiParameter> parameterLists = PsiTreeUtil.findChildrenOfType(getFile(), PsiParameter.class);
     for (PsiParameter parameter : parameterLists) {
       if (parameter.getTypeElement() != null) continue;
-      getPsiManager().dropResolveCaches();
+      dropCaches();
       final PsiType type = parameter.getType();
       assertFalse("Failed inference for: " + parameter.getParent().getText(), type instanceof PsiLambdaParameterType);
     }
+  }
+
+  private void dropCaches() {
+    getPsiManager().dropResolveCaches();
+  }
+
+  public void testOuterCallOverloads() {
+    configure();
+    PsiMethodCallExpression innerCall =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
+
+    PsiMethodCallExpression outerCall = (PsiMethodCallExpression) innerCall.getParent().getParent();
+
+    assertAmbiguous(outerCall);
+    assertAmbiguous(innerCall);
+
+    dropCaches();
+
+    assertAmbiguous(innerCall);
+    assertAmbiguous(outerCall);
+  }
+
+  private static void assertAmbiguous(PsiMethodCallExpression call) {
+    assertNull(call.getText(), call.resolveMethod());
+    assertSize(2, call.getMethodExpression().multiResolve(false));
+    assertNull(call.getText(), call.getType());
   }
 
   public void testAdditionalConstraintsBasedOnLambdaResolution() {
@@ -203,11 +298,38 @@ public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
     doTestAllMethodCallExpressions();
   }
 
+  public void testResolveDiamondBeforeOuterCall() {
+    configure();
+    PsiNewExpression newExpression = ContainerUtil.getOnlyItem(PsiTreeUtil.findChildrenOfType(getFile(), PsiNewExpression.class));
+    assertNotNull(newExpression);
+    PsiType type = newExpression.getType();
+    assertEquals("TreeSet<? super java.lang.String>", type.getCanonicalText());
+  }
+
+  public void testResolveDiamondReplacementBeforeOuterCall() {
+    configure();
+    PsiMethodCallExpression innerCall =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
+
+    assertNotNull(innerCall);
+    PsiType type = innerCall.getType();
+    assertEquals("TreeSet<? super java.lang.String>", type.getCanonicalText());
+  }
+
+  public void testLambdaWithLongChainInReturn() {
+    configure();
+    PsiExpression innerCall =
+      PsiTreeUtil.getParentOfType(getFile().findElementAt(getEditor().getCaretModel().getOffset()), PsiMethodCallExpression.class);
+
+    assertNotNull(innerCall);
+    assertNotNull(innerCall.getType());
+  }
+
   private void doTestAllMethodCallExpressions() {
-    configureByFile(BASE_PATH + "/" + getTestName(false) + ".java");
+    configure();
     final Collection<PsiCallExpression> methodCallExpressions = PsiTreeUtil.findChildrenOfType(getFile(), PsiCallExpression.class);
     for (PsiCallExpression expression : methodCallExpressions) {
-      getPsiManager().dropResolveCaches();
+      dropCaches();
       if (expression instanceof PsiMethodCallExpression) {
         assertNotNull("Failed to resolve: " + expression.getText(), expression.resolveMethod());
       }
@@ -216,7 +338,7 @@ public class Java8ExpressionsCheckTest extends LightDaemonAnalyzerTestCase {
 
     final Collection<PsiNewExpression> parameterLists = PsiTreeUtil.findChildrenOfType(getFile(), PsiNewExpression.class);
     for (PsiNewExpression newExpression : parameterLists) {
-      getPsiManager().dropResolveCaches();
+      dropCaches();
       final PsiType[] arguments = newExpression.getTypeArguments();
       String failMessage = "Failed inference for: " + newExpression.getParent().getText();
       assertNotNull(failMessage, arguments);

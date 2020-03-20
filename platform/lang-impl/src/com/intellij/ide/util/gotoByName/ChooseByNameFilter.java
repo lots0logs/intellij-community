@@ -3,6 +3,7 @@ package com.intellij.ide.util.gotoByName;
 
 import com.intellij.execution.runners.ExecutionUtil;
 import com.intellij.icons.AllIcons;
+import com.intellij.ide.IdeBundle;
 import com.intellij.ide.util.ElementsChooser;
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.project.DumbAware;
@@ -18,8 +19,6 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -66,7 +65,7 @@ public abstract class ChooseByNameFilter<T> {
                             @NotNull ChooseByNameFilterConfiguration<T> filterConfiguration,
                             @NotNull Project project) {
     myParentPopup = popup;
-    DefaultActionGroup actionGroup = new DefaultActionGroup("go.to.file.filter", false);
+    DefaultActionGroup actionGroup = DefaultActionGroup.createFlatGroup(() -> "go.to.file.filter");
     ToggleAction action = new FilterAction() {
       @Override
       protected boolean isActive() {
@@ -94,28 +93,13 @@ public abstract class ChooseByNameFilter<T> {
     panel.add(myChooser);
     JPanel buttons = new JPanel();
     JButton all = new JButton("All");
-    all.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(final ActionEvent e) {
-        myChooser.setAllElementsMarked(true);
-      }
-    });
+    all.addActionListener(__ -> myChooser.setAllElementsMarked(true));
     buttons.add(all);
     JButton none = new JButton("None");
-    none.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(final ActionEvent e) {
-        myChooser.setAllElementsMarked(false);
-      }
-    });
+    none.addActionListener(__ -> myChooser.setAllElementsMarked(false));
     buttons.add(none);
     JButton invert = new JButton("Invert");
-    invert.addActionListener(new ActionListener() {
-      @Override
-      public void actionPerformed(final ActionEvent e) {
-        myChooser.invertSelection();
-      }
-    });
+    invert.addActionListener(__ -> myChooser.invertSelection());
     buttons.add(invert);
     panel.add(buttons);
     return panel;
@@ -126,7 +110,6 @@ public abstract class ChooseByNameFilter<T> {
    *
    *
    * @param model a model to update
-   * @param filterConfiguration
    * @return a created file chooser
    */
   @NotNull
@@ -153,12 +136,9 @@ public abstract class ChooseByNameFilter<T> {
       }
     }
     updateModel(model, chooser, true);
-    chooser.addElementsMarkListener(new ElementsChooser.ElementsMarkListener<T>() {
-      @Override
-      public void elementMarkChanged(final T element, final boolean isMarked) {
-        filterConfiguration.setVisible(element, isMarked);
-        updateModel(model, chooser, false);
-      }
+    chooser.addElementsMarkListener((ElementsChooser.ElementsMarkListener<T>)(element, isMarked) -> {
+      filterConfiguration.setVisible(element, isMarked);
+      updateModel(model, chooser, false);
     });
     return chooser;
   }
@@ -213,7 +193,8 @@ public abstract class ChooseByNameFilter<T> {
 
   private class FilterAction extends ToggleAction implements DumbAware {
     FilterAction() {
-      super("Filter", "Filter files by type", AllIcons.General.Filter);
+      super(IdeBundle.messagePointer("action.ToggleAction.text.filter"),
+            IdeBundle.messagePointer("action.ToggleAction.text.filter.files.by.type"), AllIcons.General.Filter);
     }
 
     @Override

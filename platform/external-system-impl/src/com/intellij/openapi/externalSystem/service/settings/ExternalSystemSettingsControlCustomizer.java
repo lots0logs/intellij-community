@@ -15,9 +15,14 @@
  */
 package com.intellij.openapi.externalSystem.service.settings;
 
+import org.jetbrains.annotations.ApiStatus;
+
 /**
  * @author Vladislav.Soroka
+ * @deprecated Useless class
  */
+@Deprecated
+@ApiStatus.ScheduledForRemoval(inVersion = "2021.1")
 public class ExternalSystemSettingsControlCustomizer {
 
   private boolean hideUseAutoImportBox;
@@ -27,27 +32,33 @@ public class ExternalSystemSettingsControlCustomizer {
   public ExternalSystemSettingsControlCustomizer() {
   }
 
-  public ExternalSystemSettingsControlCustomizer(boolean hideUseAutoImportBox, boolean hideCreateEmptyContentRootDirectoriesBox) {
-    this(hideUseAutoImportBox, hideCreateEmptyContentRootDirectoriesBox, false);
+  public ExternalSystemSettingsControlCustomizer(boolean hideUseAutoImportBox,
+                                                 boolean hideCreateEmptyContentRootDirectoriesBox) {
+    this(hideUseAutoImportBox);
   }
 
   public ExternalSystemSettingsControlCustomizer(boolean hideUseAutoImportBox,
                                                  boolean hideCreateEmptyContentRootDirectoriesBox,
                                                  boolean hideModulesGroupingOptionPanel) {
-    this.hideUseAutoImportBox = hideUseAutoImportBox;
-    this.hideCreateEmptyContentRootDirectoriesBox = hideCreateEmptyContentRootDirectoriesBox;
-    this.hideModulesGroupingOptionPanel = hideModulesGroupingOptionPanel;
+    this(hideUseAutoImportBox);
   }
 
+  public ExternalSystemSettingsControlCustomizer(boolean hideUseAutoImportBox) {
+  }
+
+  /**
+   * @deprecated see {@link com.intellij.openapi.externalSystem.settings.ExternalProjectSettings#setUseAutoImport} for details
+   */
+  @Deprecated
   public boolean isUseAutoImportBoxHidden() {
-    return hideUseAutoImportBox;
+    return true;
   }
 
   public boolean isCreateEmptyContentRootDirectoriesBoxHidden() {
-    return hideCreateEmptyContentRootDirectoriesBox;
+    return false;
   }
 
   public boolean isModulesGroupingOptionPanelHidden() {
-    return hideModulesGroupingOptionPanel;
+    return false;
   }
 }

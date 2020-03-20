@@ -22,14 +22,14 @@ import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.extractMethodObject.ExtractMethodObjectHandler;
 import org.jetbrains.annotations.NotNull;
 
-public class ReplaceMethodWithMethodObjectAction extends BaseRefactoringAction{
+public class ReplaceMethodWithMethodObjectAction extends BaseJavaRefactoringAction{
   @Override
   protected boolean isAvailableInEditorOnly() {
     return true;
   }
 
   @Override
-  protected boolean isEnabledOnElements(@NotNull final PsiElement[] elements) {
+  protected boolean isEnabledOnElements(final PsiElement @NotNull [] elements) {
     return false;
   }
 

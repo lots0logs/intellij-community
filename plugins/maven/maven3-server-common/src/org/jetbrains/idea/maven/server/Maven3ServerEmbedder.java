@@ -19,9 +19,14 @@ import com.intellij.openapi.util.io.FileUtilRt;
 import com.intellij.openapi.util.text.StringUtilRt;
 import com.intellij.util.Function;
 import com.intellij.util.containers.ContainerUtilRt;
+import com.intellij.util.text.VersionComparatorUtil;
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.apache.maven.AbstractMavenLifecycleParticipant;
+import org.apache.maven.DefaultMaven;
+import org.apache.maven.Maven;
+import org.apache.maven.MavenExecutionException;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.DefaultArtifact;
 import org.apache.maven.artifact.handler.DefaultArtifactHandler;
@@ -32,18 +37,26 @@ import org.apache.maven.artifact.resolver.ArtifactResolutionResult;
 import org.apache.maven.artifact.resolver.ArtifactResolver;
 import org.apache.maven.artifact.resolver.ResolutionListener;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
+import org.apache.maven.execution.DefaultMavenExecutionResult;
 import org.apache.maven.execution.MavenExecutionRequest;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.building.ModelBuildingException;
 import org.apache.maven.model.building.ModelBuildingRequest;
 import org.apache.maven.model.building.ModelProblem;
 import org.apache.maven.model.interpolation.ModelInterpolator;
+import org.apache.maven.plugin.LegacySupport;
 import org.apache.maven.project.*;
+import org.apache.maven.session.scope.internal.SessionScope;
+import org.codehaus.plexus.PlexusContainer;
+import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
+import org.eclipse.aether.RepositorySystemSession;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.idea.maven.model.MavenModel;
 import org.jetbrains.idea.maven.model.MavenRemoteRepository;
 import org.jetbrains.idea.maven.server.embedder.CustomMaven3ModelInterpolator2;
 import org.jetbrains.idea.maven.server.embedder.MavenExecutionResult;
+import org.jetbrains.idea.maven.server.security.MavenToken;
 
 import java.io.File;
 import java.io.IOException;
@@ -57,6 +70,10 @@ import java.util.regex.Pattern;
  * @author Vladislav.Soroka
  */
 public abstract class Maven3ServerEmbedder extends MavenRemoteObject implements MavenServerEmbedder {
+
+  public interface RunnableThrownRemote {
+    void run() throws RemoteException;
+  }
 
   public final static boolean USE_MVN2_COMPATIBLE_DEPENDENCY_RESOLVING = System.getProperty("idea.maven3.use.compat.resolver") != null;
   private final static String MAVEN_VERSION = System.getProperty(MAVEN_EMBEDDER_VERSION);
@@ -106,8 +123,9 @@ public abstract class Maven3ServerEmbedder extends MavenRemoteObject implements 
   @Override
   public List<String> retrieveAvailableVersions(@NotNull String groupId,
                                                 @NotNull String artifactId,
-                                                @NotNull List<MavenRemoteRepository> remoteRepositories)
+                                                @NotNull List<MavenRemoteRepository> remoteRepositories, MavenToken token)
     throws RemoteException {
+    MavenServerUtil.checkToken(token);
     try {
       Artifact artifact =
         new DefaultArtifact(groupId, artifactId, "", Artifact.SCOPE_COMPILE, "pom", null, new DefaultArtifactHandler("pom"));
@@ -117,11 +135,11 @@ public abstract class Maven3ServerEmbedder extends MavenRemoteObject implements 
           getLocalRepository(),
           convertRepositories(remoteRepositories));
       return ContainerUtilRt.map2List(versions, new Function<ArtifactVersion, String>() {
-          @Override
-          public String fun(ArtifactVersion version) {
-            return version.toString();
-          }
-        });
+        @Override
+        public String fun(ArtifactVersion version) {
+          return version.toString();
+        }
+      });
     }
     catch (Exception e) {
       Maven3ServerGlobals.getLogger().info(e);
@@ -206,10 +224,10 @@ public abstract class Maven3ServerEmbedder extends MavenRemoteObject implements 
     private final DependencyResolutionResult myDependencyResolutionResult;
 
     MyProjectBuildingResult(String projectId,
-                                   File pomFile,
-                                   MavenProject mavenProject,
-                                   List<ModelProblem> problems,
-                                   DependencyResolutionResult dependencyResolutionResult) {
+                            File pomFile,
+                            MavenProject mavenProject,
+                            List<ModelProblem> problems,
+                            DependencyResolutionResult dependencyResolutionResult) {
       myProjectId = projectId;
       myPomFile = pomFile;
       myMavenProject = mavenProject;
@@ -268,7 +286,8 @@ public abstract class Maven3ServerEmbedder extends MavenRemoteObject implements 
 
   @Override
   @Nullable
-  public MavenModel readModel(File file) throws RemoteException {
+  public MavenModel readModel(File file, MavenToken token) throws RemoteException {
+    MavenServerUtil.checkToken(token);
     return null;
   }
 
@@ -321,11 +340,152 @@ public abstract class Maven3ServerEmbedder extends MavenRemoteObject implements 
 
   public abstract <T> T getComponent(Class<T> clazz);
 
-  public abstract void executeWithMavenSession(MavenExecutionRequest request, Runnable runnable);
+  protected void executeWithMavenSession(MavenExecutionRequest request, final Runnable runnable) throws RemoteException {
+    executeWithMavenSession(request, new RunnableThrownRemote() {
+      @Override
+      public void run() throws RemoteException {
+        runnable.run();
+      }
+    });
+  }
+
+  protected void executeWithMavenSession(MavenExecutionRequest request, RunnableThrownRemote runnable) throws RemoteException {
+
+    if (VersionComparatorUtil.compare(getMavenVersion(), "3.2.5") >= 0) {
+      executeWithSessionScope(request, runnable);
+    }
+    else {
+      executeWithMavenSessionLegacy(request, runnable);
+    }
+  }
+
+  protected void executeWithMavenSessionLegacy(MavenExecutionRequest request, final Runnable runnable) throws RemoteException {
+    executeWithMavenSessionLegacy(request, new RunnableThrownRemote() {
+      @Override
+      public void run() throws RemoteException {
+        runnable.run();
+      }
+    });
+  }
+
+
+  protected void executeWithMavenSessionLegacy(MavenExecutionRequest request, RunnableThrownRemote runnable) throws RemoteException {
+    DefaultMaven maven = (DefaultMaven)getComponent(Maven.class);
+    MavenSession mavenSession = createMavenSession(request, maven);
+    LegacySupport legacySupport = getComponent(LegacySupport.class);
+    MavenSession oldSession = legacySupport.getSession();
+    legacySupport.setSession(mavenSession);
+    // adapted from {@link DefaultMaven#doExecute(MavenExecutionRequest)}
+    notifyAfterSessionStart(mavenSession);
+    try {
+      runnable.run();
+    }
+    finally {
+      legacySupport.setSession(oldSession);
+    }
+  }
+
+  @NotNull
+  private MavenSession createMavenSession(MavenExecutionRequest request, DefaultMaven maven) {
+    RepositorySystemSession repositorySession = maven.newRepositorySession(request);
+    request.getProjectBuildingRequest().setRepositorySession(repositorySession);
+    return new MavenSession(getContainer(), repositorySession, request, new DefaultMavenExecutionResult());
+  }
+
+  private void notifyAfterSessionStart(MavenSession mavenSession) {
+    try {
+      for (AbstractMavenLifecycleParticipant listener : getLifecycleParticipants(Collections.<MavenProject>emptyList())) {
+        listener.afterSessionStart(mavenSession);
+      }
+    }
+    catch (MavenExecutionException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+
+  protected void executeWithSessionScope(MavenExecutionRequest request, RunnableThrownRemote runnable) throws RemoteException {
+    DefaultMaven maven = (DefaultMaven)getComponent(Maven.class);
+    SessionScope sessionScope = getComponent(SessionScope.class);
+    sessionScope.enter();
+
+    try {
+      MavenSession mavenSession = createMavenSession(request, maven);
+      sessionScope.seed(MavenSession.class, mavenSession);
+      LegacySupport legacySupport = getComponent(LegacySupport.class);
+      MavenSession oldSession = legacySupport.getSession();
+      legacySupport.setSession(mavenSession);
+
+      notifyAfterSessionStart(mavenSession);
+      // adapted from {@link DefaultMaven#doExecute(MavenExecutionRequest)}
+      try {
+        runnable.run();
+      }
+      finally {
+        legacySupport.setSession(oldSession);
+      }
+    }
+    finally {
+      sessionScope.exit();
+    }
+  }
+
+  @NotNull
+  protected abstract PlexusContainer getContainer();
 
   public abstract MavenExecutionRequest createRequest(File file,
                                                       List<String> activeProfiles,
                                                       List<String> inactiveProfiles,
                                                       List<String> goals)
     throws RemoteException;
+
+  protected static void warn(String message, Throwable e) {
+    try {
+      Maven3ServerGlobals.getLogger().warn(new RuntimeException(message, e));
+    }
+    catch (RemoteException e1) {
+      throw new RuntimeException(e1);
+    }
+  }
+
+  /**
+   * adapted from {@link DefaultMaven#getLifecycleParticipants(Collection)}
+   */
+  private Collection<AbstractMavenLifecycleParticipant> getLifecycleParticipants(Collection<MavenProject> projects) {
+    Collection<AbstractMavenLifecycleParticipant> lifecycleListeners = new LinkedHashSet<AbstractMavenLifecycleParticipant>();
+
+    ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+    try {
+      try {
+        lifecycleListeners.addAll(getContainer().lookupList(AbstractMavenLifecycleParticipant.class));
+      }
+      catch (ComponentLookupException e) {
+        // this is just silly, lookupList should return an empty list!
+        warn("Failed to lookup lifecycle participants", e);
+      }
+
+      Collection<ClassLoader> scannedRealms = new HashSet<ClassLoader>();
+
+      for (MavenProject project : projects) {
+        ClassLoader projectRealm = project.getClassRealm();
+
+        if (projectRealm != null && scannedRealms.add(projectRealm)) {
+          Thread.currentThread().setContextClassLoader(projectRealm);
+
+          try {
+            lifecycleListeners.addAll(getContainer().lookupList(AbstractMavenLifecycleParticipant.class));
+          }
+          catch (ComponentLookupException e) {
+            // this is just silly, lookupList should return an empty list!
+            warn("Failed to lookup lifecycle participants", e);
+          }
+        }
+      }
+    }
+    finally {
+      Thread.currentThread().setContextClassLoader(originalClassLoader);
+    }
+
+    return lifecycleListeners;
+  }
 }

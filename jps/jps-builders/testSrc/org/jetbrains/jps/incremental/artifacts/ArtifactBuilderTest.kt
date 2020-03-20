@@ -19,6 +19,7 @@ import com.intellij.openapi.application.ex.PathManagerEx
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.util.PathUtil
 import com.intellij.util.io.directoryContent
+import com.intellij.util.io.zipFile
 import org.jetbrains.jps.builders.CompileScopeTestBuilder
 import org.jetbrains.jps.incremental.artifacts.LayoutElementTestUtil.archive
 import org.jetbrains.jps.incremental.artifacts.LayoutElementTestUtil.root
@@ -36,9 +37,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
-/**
- * @author nik
- */
 class ArtifactBuilderTest : ArtifactBuilderTestCase() {
   fun testFileCopy() {
     val a = addArtifact(root().fileCopy(createFile("file.txt", "foo")))
@@ -222,7 +220,7 @@ class ArtifactBuilderTest : ArtifactBuilderTestCase() {
 
   fun testCopyResourcesFromModuleOutput() {
     val file = createFile("src/a.xml", "")
-    JpsJavaExtensionService.getInstance().getOrCreateCompilerConfiguration(myProject).addResourcePattern("*.xml")
+    JpsJavaExtensionService.getInstance().getCompilerConfiguration(myProject).addResourcePattern("*.xml")
     val module = addModule("a", PathUtil.getParentPath(file))
     val artifact = addArtifact(root().module(module))
     buildArtifacts(artifact)
@@ -328,14 +326,12 @@ class ArtifactBuilderTest : ArtifactBuilderTestCase() {
   }
 
   private fun createXJarFile(): String {
-    val zipDir = directoryContent {
-      zip("x.jar") {
-        dir("dir") {
-          file("file.txt", "text")
-        }
+    val zipFile = zipFile {
+      dir("dir") {
+        file("file.txt", "text")
       }
     }.generateInTempDir()
-    return FileUtil.toSystemIndependentName(File(zipDir, "x.jar").absolutePath)
+    return FileUtil.toSystemIndependentName(zipFile.absolutePath)
   }
 
   fun testSelfIncludingArtifact() {

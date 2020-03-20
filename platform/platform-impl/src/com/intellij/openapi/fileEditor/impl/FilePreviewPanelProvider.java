@@ -1,8 +1,10 @@
-// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2020 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.openapi.fileEditor.impl;
 
 import com.intellij.ide.ui.UISettings;
+import com.intellij.openapi.Disposable;
 import com.intellij.openapi.fileEditor.FileEditor;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.FileEditorProvider;
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx;
 import com.intellij.openapi.preview.PreviewManager;
@@ -10,21 +12,18 @@ import com.intellij.openapi.preview.PreviewPanelProvider;
 import com.intellij.openapi.preview.PreviewProviderId;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Comparing;
-import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.newvfs.VfsPresentationUtil;
 import com.intellij.openapi.wm.IdeFocusManager;
-import com.intellij.ui.docking.DockManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 
-public class FilePreviewPanelProvider extends PreviewPanelProvider<VirtualFile, Pair<FileEditor[], FileEditorProvider[]>> {
+public final class FilePreviewPanelProvider extends PreviewPanelProvider<VirtualFile, Pair<FileEditor[], FileEditorProvider[]>> {
   public static final PreviewProviderId<VirtualFile, Pair<FileEditor[], FileEditorProvider[]>> ID = PreviewProviderId.create("Files");
 
-  private final FileEditorManagerImpl myManager;
   private final Project myProject;
 
   private final EditorWindow myWindow;
@@ -32,10 +31,9 @@ public class FilePreviewPanelProvider extends PreviewPanelProvider<VirtualFile, 
 
   public FilePreviewPanelProvider(@NotNull Project project) {
     super(ID);
+
     myProject = project;
-    myManager = (FileEditorManagerImpl)FileEditorManagerEx.getInstanceEx(project);
-    myEditorsSplitters = new MyEditorsSplitters(myManager, DockManager.getInstance(project), false);
-    Disposer.register(this, myEditorsSplitters);
+    myEditorsSplitters = new MyEditorsSplitters((FileEditorManagerImpl)FileEditorManagerEx.getInstanceEx(project), false, this);
     myEditorsSplitters.createCurrentWindow();
     myWindow = myEditorsSplitters.getCurrentWindow();
     myWindow.setTabsPlacement(UISettings.TABS_NONE);
@@ -53,7 +51,7 @@ public class FilePreviewPanelProvider extends PreviewPanelProvider<VirtualFile, 
 
   @Override
   protected Pair<FileEditor[], FileEditorProvider[]> initComponent(VirtualFile file, boolean requestFocus) {
-    Pair<FileEditor[], FileEditorProvider[]> result = myManager.openFileWithProviders(file, requestFocus, myWindow);
+    Pair<FileEditor[], FileEditorProvider[]> result = FileEditorManagerEx.getInstanceEx(myProject).openFileWithProviders(file, requestFocus, myWindow);
     IdeFocusManager.findInstance().doWhenFocusSettlesDown(() -> myWindow.requestFocus(true));
     return result;
   }
@@ -77,17 +75,18 @@ public class FilePreviewPanelProvider extends PreviewPanelProvider<VirtualFile, 
 
   @Override
   public void showInStandardPlace(@NotNull VirtualFile file) {
-    EditorWindow window = myManager.getCurrentWindow();
+    FileEditorManagerImpl fileEditorManager = (FileEditorManagerImpl)FileEditorManager.getInstance(myProject);
+    EditorWindow window = fileEditorManager.getCurrentWindow();
     if (window == null) { //main tab set is still not created, rare situation
-      myManager.getMainSplitters().createCurrentWindow();
-      window = myManager.getCurrentWindow();
+      fileEditorManager.getMainSplitters().createCurrentWindow();
+      window = fileEditorManager.getCurrentWindow();
     }
-    myManager.openFileWithProviders(file, true, window);
+    fileEditorManager.openFileWithProviders(file, true, window);
   }
 
   @Override
   public boolean isModified(VirtualFile content, boolean beforeReuse) {
-    for (EditorWithProviderComposite composite : myEditorsSplitters.getEditorsComposites()) {
+    for (EditorWithProviderComposite composite : myEditorsSplitters.getEditorComposites()) {
       if (composite.isModified() && Comparing.equal(composite.getFile(), content)) return true;
     }
     return false;
@@ -103,9 +102,9 @@ public class FilePreviewPanelProvider extends PreviewPanelProvider<VirtualFile, 
     return Comparing.equal(content1, content2);
   }
 
-  private class MyEditorsSplitters extends EditorsSplitters {
-    private MyEditorsSplitters(final FileEditorManagerImpl manager, DockManager dockManager, boolean createOwnDockableContainer) {
-      super(manager, dockManager, createOwnDockableContainer);
+  private final class MyEditorsSplitters extends EditorsSplitters {
+    private MyEditorsSplitters(@NotNull FileEditorManagerImpl manager, boolean createOwnDockableContainer, @NotNull Disposable parentDisposable) {
+      super(manager, createOwnDockableContainer, parentDisposable);
     }
 
     @Override
@@ -113,12 +112,13 @@ public class FilePreviewPanelProvider extends PreviewPanelProvider<VirtualFile, 
       PreviewManager.SERVICE.close(myProject, getId(), file);
     }
 
+    @NotNull
     @Override
     protected EditorWindow createEditorWindow() {
-      return new EditorWindow(this) {
+      return new EditorWindow(this, parentDisposable) {
         @Override
         protected void onBeforeSetEditor(VirtualFile file) {
-          for (EditorWithProviderComposite composite : getEditorsComposites()) {
+          for (EditorWithProviderComposite composite : getEditorComposites()) {
             if (composite.isModified()) {
               //Estimation: no more than one file is modified at the same time
               PreviewManager.SERVICE.moveToStandardPlaceImpl(myProject, getId(), composite.getFile());

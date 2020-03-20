@@ -1,4 +1,4 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.jetbrains.python.actions;
 
 import com.google.common.collect.Lists;
@@ -8,9 +8,13 @@ import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ExecutionConsole;
 import com.intellij.execution.ui.RunContentDescriptor;
 import com.intellij.ide.DataManager;
-import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.openapi.actionSystem.DataContext;
+import com.intellij.openapi.actionSystem.Presentation;
 import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.ex.util.EditorUtil;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Pair;
 import com.intellij.openapi.util.text.StringUtil;
@@ -23,6 +27,7 @@ import com.intellij.ui.content.ContentManager;
 import com.intellij.util.Consumer;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebuggerManager;
+import com.jetbrains.python.PyBundle;
 import com.jetbrains.python.console.*;
 import com.jetbrains.python.psi.PyFile;
 import com.jetbrains.python.run.PythonRunConfiguration;
@@ -32,17 +37,15 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collection;
 import java.util.List;
 
-public class PyExecuteSelectionAction extends AnAction {
-
-  public static final String EXECUTE_SELECTION_IN_CONSOLE = "Execute Selection in Console";
+public class PyExecuteSelectionAction extends DumbAwareAction {
 
   public PyExecuteSelectionAction() {
-    super(EXECUTE_SELECTION_IN_CONSOLE);
+    super(PyBundle.messagePointer("python.execute.selection.action.execute.selection.in.console"));
   }
 
   @Override
   public void actionPerformed(@NotNull AnActionEvent e) {
-    Editor editor = CommonDataKeys.EDITOR.getData(e.getDataContext());
+    Editor editor = e.getData(CommonDataKeys.EDITOR);
     if (editor != null) {
       final String selectionText = getSelectionText(editor);
       if (selectionText != null) {
@@ -92,7 +95,7 @@ public class PyExecuteSelectionAction extends AnAction {
    * @param selectionText null means that there is no code to execute, only open a console
    */
   public static void showConsoleAndExecuteCode(@NotNull final AnActionEvent e, @Nullable final String selectionText) {
-    final Editor editor = CommonDataKeys.EDITOR.getData(e.getDataContext());
+    final Editor editor = e.getData(CommonDataKeys.EDITOR);
     Project project = e.getProject();
     final boolean requestFocusToConsole = selectionText == null;
 
@@ -143,27 +146,26 @@ public class PyExecuteSelectionAction extends AnAction {
 
   @Override
   public void update(@NotNull AnActionEvent e) {
-    Editor editor = CommonDataKeys.EDITOR.getData(e.getDataContext());
+    Editor editor = e.getData(CommonDataKeys.EDITOR);
     Presentation presentation = e.getPresentation();
 
     boolean enabled = false;
     if (isPython(editor)) {
       String text = getSelectionText(editor);
       if (text != null) {
-        presentation.setText(EXECUTE_SELECTION_IN_CONSOLE);
+        presentation.setText(PyBundle.message("python.execute.selection.action.execute.selection.in.console"));
       }
       else {
         text = getLineUnderCaret(editor);
         if (text != null) {
-          presentation.setText("Execute Line in Console");
+          presentation.setText(PyBundle.message("python.execute.selection.action.execute.line.in.console"));
         }
       }
 
       enabled = !StringUtil.isEmpty(text);
     }
 
-    presentation.setEnabled(enabled);
-    presentation.setVisible(enabled);
+    presentation.setEnabledAndVisible(enabled);
   }
 
   public static boolean isPython(Editor editor) {
@@ -310,10 +312,10 @@ public class PyExecuteSelectionAction extends AnAction {
     runner.run(false);
   }
 
-  public static boolean canFindConsole(@Nullable Project project, @Nullable String sdkHome) {
+  public static boolean canFindConsole(@Nullable Project project, @Nullable String sdkHomePath) {
     if (project != null) {
       Collection<RunContentDescriptor> descriptors = getConsoles(project);
-      if (sdkHome == null) {
+      if (sdkHomePath == null) {
         return descriptors.size() > 0;
       }
       else {
@@ -321,7 +323,7 @@ public class PyExecuteSelectionAction extends AnAction {
           final ExecutionConsole console = descriptor.getExecutionConsole();
           if (console instanceof PythonConsoleView) {
             final PythonConsoleView pythonConsole = (PythonConsoleView)console;
-            if (pythonConsole.getText().startsWith(sdkHome)) {
+            if (sdkHomePath.equals(pythonConsole.getSdkHomePath())) {
               return true;
             }
           }

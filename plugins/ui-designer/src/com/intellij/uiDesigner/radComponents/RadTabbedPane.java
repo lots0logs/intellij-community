@@ -49,7 +49,7 @@ public final class RadTabbedPane extends RadContainer implements ITabbedPane {
     }
   }
 
-  private static final Logger LOG = Logger.getInstance("#com.intellij.uiDesigner.radComponents.RadTabbedPane");
+  private static final Logger LOG = Logger.getInstance(RadTabbedPane.class);
   /**
    * value: HashMap<String, LwTabbedPane.Constraints>
    */
@@ -321,8 +321,8 @@ public final class RadTabbedPane extends RadContainer implements ITabbedPane {
     }
 
 
-    @NotNull @Override
-    public Property[] getChildren(final RadComponent component) {
+    @Override
+    public Property @NotNull [] getChildren(final RadComponent component) {
       return new Property[] {
         new MyTitleProperty(this, myIndex),
         new MyToolTipProperty(this, myIndex),

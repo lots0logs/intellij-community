@@ -34,9 +34,6 @@ import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 
-/**
- * @author nik
- */
 public class MavenManifestGenerationBuildTaskProvider extends ArtifactBuildTaskProvider {
   @NotNull
   @Override
@@ -109,7 +106,7 @@ public class MavenManifestGenerationBuildTaskProvider extends ArtifactBuildTaskP
           final byte[] warManifestData = Base64.getDecoder().decode(warConfiguration.manifest);
           Manifest warManifest = new Manifest(new ByteArrayInputStream(warManifestData));
 
-          List<String> skinnyWarClasspath = ContainerUtil.newArrayList();
+          List<String> skinnyWarClasspath = new ArrayList<>();
           for (String entry : StringUtil.split(warConfiguration.classpath, " ")) {
             final int idx = entry.lastIndexOf("/");
             final String entryName = entry.substring(idx == -1 ? 0 : idx + 1);

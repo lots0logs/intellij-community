@@ -1,21 +1,29 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.util.io;
 
 import com.intellij.openapi.util.Condition;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.ArrayUtil;
 import com.intellij.util.Consumer;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.compressors.CompressorException;
 import org.apache.commons.compress.compressors.CompressorStreamFactory;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+
+import static com.intellij.util.BitUtil.isSet;
 
 public abstract class Decompressor {
   /**
@@ -30,9 +38,15 @@ public abstract class Decompressor {
       mySource = stream;
     }
 
+    public Tar withSymlinks() {
+      symlinks = true;
+      return this;
+    }
+
     //<editor-fold desc="Implementation">
     private final Object mySource;
     private TarArchiveInputStream myStream;
+    private boolean symlinks;
 
     @Override
     protected void openStream() throws IOException {
@@ -48,9 +62,15 @@ public abstract class Decompressor {
     }
 
     @Override
+    @SuppressWarnings("OctalInteger")
     protected Entry nextEntry() throws IOException {
-      TarArchiveEntry tarEntry = myStream.getNextTarEntry();
-      return tarEntry == null ? null : new Entry(tarEntry.getName(), tarEntry.isDirectory());
+      TarArchiveEntry te;
+      while ((te = myStream.getNextTarEntry()) != null && !(te.isFile() || te.isDirectory() || te.isSymbolicLink() && symlinks)) /* skips unsupported */;
+      return te == null ? null : new Entry(te.getName(), type(te), isSet(te.getMode(), 0200), isSet(te.getMode(), 0100), te.getLinkName());
+    }
+
+    private static Type type(TarArchiveEntry te) {
+      return te.isSymbolicLink() ? Type.SYMLINK : te.isDirectory() ? Type.DIR : Type.FILE;
     }
 
     @Override
@@ -71,6 +91,7 @@ public abstract class Decompressor {
     //</editor-fold>
   }
 
+  //NOTE. This class should work without CommonsCompress!
   public static class Zip extends Decompressor {
     public Zip(@NotNull File file) {
       mySource = file;
@@ -81,6 +102,15 @@ public abstract class Decompressor {
     private ZipFile myZip;
     private Enumeration<? extends ZipEntry> myEntries;
     private ZipEntry myEntry;
+
+    /**
+     * Enables Zip Extensions to consider symlinks and unix file permissions.
+     * NOTE. It will require CommonsCompress in the classpath
+     */
+    @NotNull
+    public Decompressor withUnixPermissionsAndSymlinks() {
+      return new CommonsZip(mySource);
+    }
 
     @Override
     protected void openStream() throws IOException {
@@ -106,15 +136,78 @@ public abstract class Decompressor {
 
     @Override
     protected void closeStream() throws IOException {
+      if (myZip != null) {
+        myZip.close();
+        myZip = null;
+      }
+    }
+    //</editor-fold>
+  }
+
+  private static class CommonsZip extends Decompressor {
+    CommonsZip(@NotNull File file) {
+      mySource = file;
+    }
+
+    //<editor-fold desc="Implementation">
+    private final File mySource;
+    private org.apache.commons.compress.archivers.zip.ZipFile myZip;
+    private Enumeration<? extends ZipArchiveEntry> myEntries;
+    private ZipArchiveEntry myEntry;
+
+    @Override
+    protected void openStream() throws IOException {
+      myZip = new org.apache.commons.compress.archivers.zip.ZipFile(mySource);
+      myEntries = myZip.getEntries();
+    }
+
+    @Override
+    protected Entry nextEntry() throws IOException {
+      if (!myEntries.hasMoreElements()) {
+        myEntry = null;
+        return null;
+      }
+
+      myEntry = myEntries.nextElement();
+      if (myEntry == null) {
+        return null;
+      }
+
+      String linkTarget = myEntry.isUnixSymlink() ? myZip.getUnixSymlink(myEntry) : null;
+      //noinspection OctalInteger
+      return new Entry(myEntry.getName(),
+                       type(myEntry),
+                       isSet(myEntry.getUnixMode(), 0200),
+                       isSet(myEntry.getUnixMode(), 0100),
+                       linkTarget);
+    }
+
+    private static Type type(ZipArchiveEntry te) {
+      return te.isUnixSymlink() ? Type.SYMLINK : te.isDirectory() ? Type.DIR : Type.FILE;
+    }
+
+    @Override
+    protected InputStream openEntryStream(Entry entry) throws IOException {
+      return myZip.getInputStream(myEntry);
+    }
+
+    @Override
+    protected void closeEntryStream(InputStream stream) throws IOException {
+      stream.close();
+    }
+
+    @Override
+    protected void closeStream() throws IOException {
       myZip.close();
       myZip = null;
     }
     //</editor-fold>
   }
 
-  private Condition<? super String> myFilter = null;
+  @Nullable private Condition<? super String> myFilter = null;
+  @Nullable private List<String> myPathsPrefix = null;
   private boolean myOverwrite = true;
-  private Consumer<? super File> myConsumer;
+  @Nullable private Consumer<? super File> myConsumer;
 
   public Decompressor filter(@Nullable Condition<? super String> filter) {
     myFilter = filter;
@@ -131,32 +224,75 @@ public abstract class Decompressor {
     return this;
   }
 
+  /**
+   * Extracts only items whose paths starts with the normalized prefix of {@code prefix + '/'} <br/>
+   * Paths are normalized before comparison. <br/>
+   * The prefix test is applied after {@link #filter(Condition)} predicate is tested. <br/>
+   * Some entries may clash, so use {@link #overwrite(boolean)} to control it. <br/>
+   * Some items with path that does not start from the prefix could be ignored
+   *
+   * @param prefix prefix to remove from every archive entry paths
+   * @return self
+   */
+  @NotNull
+  public Decompressor removePrefixPath(@Nullable final String prefix) throws IOException {
+    myPathsPrefix = prefix != null ? normalizePathAndSplit(prefix) : null;
+    return this;
+  }
+
   public final void extract(@NotNull File outputDir) throws IOException {
     openStream();
     try {
       Entry entry;
       while ((entry = nextEntry()) != null) {
-        String name = entry.name;
-        if (myFilter != null && !myFilter.value(name)) {
-          continue;
+        if (myFilter != null) {
+          String entryName = entry.type == Type.DIR && !StringUtil.endsWithChar(entry.name, '/') ? entry.name + '/' : entry.name;
+          if (!myFilter.value(entryName)) {
+            continue;
+          }
         }
 
-        File outputFile = entryFile(outputDir, name);
-
-        if (entry.isDirectory) {
-          FileUtil.createDirectory(outputFile);
+        if (myPathsPrefix != null) {
+          entry = entry.mapPathPrefix(myPathsPrefix);
+          if (entry == null) continue;
         }
-        else if (!outputFile.exists() || myOverwrite) {
-          InputStream inputStream = openEntryStream(entry);
-          try {
-            FileUtil.createParentDirs(outputFile);
-            try (FileOutputStream outputStream = new FileOutputStream(outputFile)) {
-              FileUtil.copy(inputStream, outputStream);
+
+        File outputFile = entryFile(outputDir, entry.name);
+
+        switch (entry.type) {
+          case DIR:
+            FileUtil.createDirectory(outputFile);
+            break;
+
+          case FILE:
+            if (!outputFile.exists() || myOverwrite) {
+              InputStream inputStream = openEntryStream(entry);
+              try {
+                FileUtil.createParentDirs(outputFile);
+                try (FileOutputStream outputStream = new FileOutputStream(outputFile)) {
+                  FileUtil.copy(inputStream, outputStream);
+                }
+                if (!entry.isWritable && !outputFile.setWritable(false, false)) {
+                  throw new IOException("Can't make file read-only: " + outputFile);
+                }
+                if (entry.isExecutable && SystemInfo.isUnix && !outputFile.setExecutable(true, true)) {
+                  throw new IOException("Can't make file executable: " + outputFile);
+                }
+              }
+              finally {
+                closeEntryStream(inputStream);
+              }
             }
-          }
-          finally {
-            closeEntryStream(inputStream);
-          }
+            break;
+
+          case SYMLINK:
+            if (StringUtil.isEmpty(entry.linkTarget) ||
+                !FileUtil.isAncestor(outputDir, new File(FileUtil.toCanonicalPath(outputFile.getParent() + '/' + entry.linkTarget)), true)) {
+              throw new IOException("Invalid symlink entry: " + entry.name + " -> " + entry.linkTarget);
+            }
+            FileUtil.createParentDirs(outputFile);
+            Files.createSymbolicLink(outputFile.toPath(), Paths.get(entry.linkTarget));
+            break;
         }
 
         if (myConsumer != null) {
@@ -172,13 +308,34 @@ public abstract class Decompressor {
   //<editor-fold desc="Internal interface">
   protected Decompressor() { }
 
-  protected static class Entry {
-    private final String name;
-    private final boolean isDirectory;
+  private enum Type {FILE, DIR, SYMLINK}
 
-    Entry(String name, boolean isDirectory) {
+  protected static class Entry {
+    final String name;
+    final Type type;
+    final boolean isWritable;
+    final boolean isExecutable;
+    final String linkTarget;
+
+    protected Entry(String name, boolean isDirectory) {
+      this(name, isDirectory ? Type.DIR : Type.FILE, true, false, null);
+    }
+
+    protected Entry(String name, Type type, boolean isWritable, boolean isExecutable, String linkTarget) {
       this.name = name;
-      this.isDirectory = isDirectory;
+      this.type = type;
+      this.isWritable = isWritable;
+      this.isExecutable = isExecutable;
+      this.linkTarget = linkTarget;
+    }
+
+    @Nullable
+    protected Entry mapPathPrefix(@NotNull List<String> prefix) throws IOException {
+      List<String> ourPathSplit = normalizePathAndSplit(name);
+      if (prefix.size() >= ourPathSplit.size()) return null;
+      if (!ourPathSplit.subList(0,prefix.size()).equals(prefix)) return null;
+      String newName = StringUtil.join(ourPathSplit.subList(prefix.size(), ourPathSplit.size()), "/");
+      return new Entry(newName, this.type, this.isWritable, isExecutable, linkTarget);
     }
   }
 
@@ -189,11 +346,21 @@ public abstract class Decompressor {
   protected abstract void closeStream() throws IOException;
   //</editor-fold>
 
-  @NotNull
-  public static File entryFile(@NotNull File outputDir, @NotNull String entryName) throws IOException {
+  private static List<String> normalizePathAndSplit(@NotNull String path) throws IOException {
+    ensureValidPath(path);
+    String canonicalPath = FileUtil.toCanonicalPath(path, '/');
+    return FileUtil.splitPath(StringUtil.trimLeading(canonicalPath, '/'), '/');
+  }
+
+  private static void ensureValidPath(@NotNull String entryName) throws IOException {
     if (entryName.contains("..") && ArrayUtil.contains("..", entryName.split("[/\\\\]"))) {
       throw new IOException("Invalid entry name: " + entryName);
     }
+  }
+
+  @NotNull
+  public static File entryFile(@NotNull File outputDir, @NotNull String entryName) throws IOException {
+    ensureValidPath(entryName);
     return new File(outputDir, entryName);
   }
 }

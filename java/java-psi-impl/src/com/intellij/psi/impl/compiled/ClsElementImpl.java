@@ -1,21 +1,7 @@
-/*
- * Copyright 2000-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.psi.impl.compiled;
 
-import com.intellij.core.JavaCoreBundle;
+import com.intellij.core.JavaPsiBundle;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.Language;
 import com.intellij.lang.java.JavaLanguage;
@@ -32,19 +18,19 @@ import com.intellij.psi.impl.source.SourceTreeToPsiMap;
 import com.intellij.psi.impl.source.tree.TreeElement;
 import com.intellij.psi.tree.IElementType;
 import com.intellij.psi.util.PsiUtilCore;
-import com.intellij.util.ArrayUtil;
+import com.intellij.util.ArrayUtilRt;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public abstract class ClsElementImpl extends PsiElementBase implements PsiCompiledElement {
   public static final Key<PsiCompiledElement> COMPILED_ELEMENT = Key.create("COMPILED_ELEMENT");
 
-  private static final Logger LOG = Logger.getInstance("#com.intellij.psi.impl.compiled.ClsElementImpl");
+  private static final Logger LOG = Logger.getInstance(ClsElementImpl.class);
 
   private volatile Pair<TextRange, Identikit.ByType> myMirror;
 
@@ -89,13 +75,12 @@ public abstract class ClsElementImpl extends PsiElementBase implements PsiCompil
     return this;
   }
 
-  @NotNull
-  protected PsiElement[] getChildren(@Nullable PsiElement... children) {
+  protected PsiElement @NotNull [] getChildren(PsiElement @Nullable ... children) {
     if (children == null) {
       return PsiElement.EMPTY_ARRAY;
     }
 
-    List<PsiElement> list = ContainerUtil.newArrayListWithCapacity(children.length);
+    List<PsiElement> list = new ArrayList<>(children.length);
     for (PsiElement child : children) {
       if (child != null) {
         list.add(child);
@@ -113,7 +98,7 @@ public abstract class ClsElementImpl extends PsiElementBase implements PsiCompil
   static IncorrectOperationException cannotModifyException(@NotNull PsiCompiledElement element) {
     VirtualFile virtualFile = PsiUtilCore.getVirtualFile(element);
     String path = virtualFile == null ? "?" : virtualFile.getPresentableUrl();
-    return new IncorrectOperationException(JavaCoreBundle.message("psi.error.attempt.to.edit.class.file", path));
+    return new IncorrectOperationException(JavaPsiBundle.message("psi.error.attempt.to.edit.class.file", path));
   }
 
   @Override
@@ -209,10 +194,9 @@ public abstract class ClsElementImpl extends PsiElementBase implements PsiCompil
   }
 
   @Override
-  @NotNull
-  public char[] textToCharArray() {
+  public char @NotNull [] textToCharArray() {
     PsiElement mirror = getMirror();
-    return mirror != null ? mirror.textToCharArray() : ArrayUtil.EMPTY_CHAR_ARRAY;
+    return mirror != null ? mirror.textToCharArray() : ArrayUtilRt.EMPTY_CHAR_ARRAY;
   }
 
   @Override
@@ -287,7 +271,7 @@ public abstract class ClsElementImpl extends PsiElementBase implements PsiCompil
     }
   }
 
-  protected static <T extends  PsiElement> void setMirrors(@NotNull T[] stubs, @NotNull T[] mirrors) throws InvalidMirrorException {
+  protected static <T extends  PsiElement> void setMirrors(T @NotNull [] stubs, T @NotNull [] mirrors) throws InvalidMirrorException {
     setMirrors(Arrays.asList(stubs), Arrays.asList(mirrors));
   }
 

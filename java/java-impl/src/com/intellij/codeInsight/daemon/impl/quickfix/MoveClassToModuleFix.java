@@ -1,31 +1,18 @@
-/*
- * Copyright 2000-2009 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInsight.daemon.impl.quickfix;
 
 import com.intellij.codeInsight.daemon.QuickFixActionRegistrar;
+import com.intellij.codeInsight.daemon.QuickFixBundle;
 import com.intellij.codeInsight.daemon.impl.actions.AddImportAction;
 import com.intellij.codeInsight.hint.QuestionAction;
 import com.intellij.codeInsight.intention.IntentionAction;
 import com.intellij.ide.DataManager;
 import com.intellij.ide.util.PackageUtil;
 import com.intellij.ide.util.PsiElementListCellRenderer;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.LangDataKeys;
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext;
-import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.module.Module;
@@ -42,12 +29,12 @@ import com.intellij.psi.search.PsiShortNamesCache;
 import com.intellij.refactoring.RefactoringActionHandler;
 import com.intellij.refactoring.RefactoringActionHandlerFactory;
 import com.intellij.util.IncorrectOperationException;
-import com.intellij.util.containers.ContainerUtil;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,16 +76,16 @@ public class MoveClassToModuleFix implements IntentionAction {
   public String getText() {
     if (myModules.size() == 1) {
       final PsiClass aClass = myModules.keySet().iterator().next();
-      return "Move '" + aClass.getQualifiedName() + "' from module '" + myModules.get(aClass).getName() +
-             "' to '" + myCurrentModule.getName() + "'";
+      return QuickFixBundle
+        .message("move.0.from.module.1.to.2", aClass.getQualifiedName(), myModules.get(aClass).getName(), myCurrentModule.getName());
     }
-    return "Move '" + myReferenceName + "' in '" + myCurrentModule.getName() + "'...";
+    return QuickFixBundle.message("move.0.in.1", myReferenceName, myCurrentModule.getName());
   }
 
   @Override
   @NotNull
   public String getFamilyName() {
-    return "move it";
+    return JavaBundle.message("intention.family.move.it");
   }
 
   @Override
@@ -114,8 +101,8 @@ public class MoveClassToModuleFix implements IntentionAction {
     else {
       LOG.assertTrue(editor != null);
       JBPopupFactory.getInstance()
-        .createPopupChooserBuilder(ContainerUtil.newArrayList(myModules.keySet()))
-        .setTitle("Choose Class to Move")
+        .createPopupChooserBuilder(new ArrayList<>(myModules.keySet()))
+        .setTitle(QuickFixBundle.message("choose.class.to.move.popup.title"))
         .setRenderer(new PsiElementListCellRenderer<PsiClass>() {
           @Override
           public String getElementText(PsiClass psiClass) {
@@ -136,7 +123,7 @@ public class MoveClassToModuleFix implements IntentionAction {
         .setMovable(false)
         .setResizable(false)
         .setRequestFocus(true)
-        .setItemChosenCallback((value) -> TransactionGuard.getInstance().submitTransactionAndWait(() -> moveClass(project, editor, file, value)))
+        .setItemChosenCallback((value) -> moveClass(project, editor, file, value))
         .createPopup()
         .showInBestPositionFor(editor);
     }

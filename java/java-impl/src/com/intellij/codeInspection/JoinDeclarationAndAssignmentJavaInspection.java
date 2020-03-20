@@ -1,8 +1,9 @@
-// Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
+// Copyright 2000-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.codeInspection;
 
 import com.intellij.codeInsight.FileModificationService;
 import com.intellij.codeInsight.editorActions.DeclarationJoinLinesHandler;
+import com.intellij.java.JavaBundle;
 import com.intellij.openapi.application.WriteAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.profile.codeInspection.InspectionProjectProfileManager;
@@ -11,7 +12,6 @@ import com.intellij.psi.util.PsiExpressionTrimRenderer;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.psi.util.PsiUtil;
 import com.intellij.util.ObjectUtils;
-import com.siyeh.ig.psiutils.CommentTracker;
 import com.siyeh.ig.psiutils.ExpressionUtils;
 import com.siyeh.ig.psiutils.SideEffectChecker;
 import org.jetbrains.annotations.Contract;
@@ -62,7 +62,7 @@ public class JoinDeclarationAndAssignmentJavaInspection extends AbstractBaseJava
           PsiLocalVariable variable = context.myVariable;
           PsiAssignmentExpression assignment = context.myAssignment;
           assert location == variable || location == assignment : "context location";
-          String message = InspectionsBundle.message("inspection.join.declaration.and.assignment.message", context.myName);
+          String message = JavaBundle.message("inspection.join.declaration.and.assignment.message", context.myName);
           JoinDeclarationAndAssignmentFix fix = new JoinDeclarationAndAssignmentFix();
 
           if (isOnTheFly && (context.myIsUpdate || isInformationLevel(location))) {
@@ -106,7 +106,7 @@ public class JoinDeclarationAndAssignmentJavaInspection extends AbstractBaseJava
     if (variable != null && assignment != null) {
       String variableName = variable.getName();
       PsiExpression rExpression = assignment.getRExpression();
-      if (variableName != null && rExpression != null) {
+      if (rExpression != null) {
         for (PsiLocalVariable aVar = variable; aVar != null; aVar = getNextSiblingOfType(aVar, PsiLocalVariable.class)) {
           if (variableIsUsed(aVar, rExpression)) {
             return null;
@@ -151,8 +151,8 @@ public class JoinDeclarationAndAssignmentJavaInspection extends AbstractBaseJava
   @Nullable
   private static <T> T findOccurrence(@Nullable PsiElement start,
                                       @NotNull PsiLocalVariable variable,
-                                      @NotNull Function<PsiElement, PsiElement> advance,
-                                      @NotNull BiFunction<PsiElement, PsiLocalVariable, T> search) {
+                                      @NotNull Function<? super PsiElement, ? extends PsiElement> advance,
+                                      @NotNull BiFunction<? super PsiElement, ? super PsiLocalVariable, ? extends T> search) {
     PsiElement candidate = advance.apply(start);
     T result = search.apply(candidate, variable);
     if (result != null) {
@@ -204,7 +204,7 @@ public class JoinDeclarationAndAssignmentJavaInspection extends AbstractBaseJava
     @NotNull
     @Override
     public String getFamilyName() {
-      return InspectionsBundle.message("inspection.join.declaration.and.assignment.fix.family.name");
+      return JavaBundle.message("inspection.join.declaration.and.assignment.fix.family.name");
     }
 
     @Override
@@ -226,24 +226,7 @@ public class JoinDeclarationAndAssignmentJavaInspection extends AbstractBaseJava
         }
 
         if (!FileModificationService.getInstance().prepareFileForWrite(assignmentExpression.getContainingFile())) return;
-        WriteAction.run(() -> applyFixImpl(context));
-      }
-    }
-
-    public void applyFixImpl(@NotNull Context context) {
-      PsiExpression initializer = DeclarationJoinLinesHandler.getInitializerExpression(context.myVariable, context.myAssignment);
-      PsiElement elementToReplace = context.myAssignment.getParent();
-      if (initializer != null && elementToReplace != null) {
-        PsiLocalVariable varCopy = DeclarationJoinLinesHandler.copyVarWithInitializer(context.myVariable, initializer);
-        if (varCopy != null) {
-          String text = varCopy.getText();
-
-          CommentTracker tracker = new CommentTracker();
-          tracker.markUnchanged(initializer);
-          tracker.markUnchanged(context.myVariable);
-          tracker.delete(context.myVariable);
-          tracker.replaceAndRestoreComments(elementToReplace, text);
-        }
+        WriteAction.run(() -> DeclarationJoinLinesHandler.joinDeclarationAndAssignment(context.myVariable, context.myAssignment));
       }
     }
   }

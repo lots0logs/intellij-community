@@ -275,7 +275,6 @@ public class JavaFxPsiUtil {
   }
 
   private static final Key<CachedValue<PsiClass>> INJECTED_CONTROLLER = Key.create("javafx.injected.controller");
-  private static final RecursionGuard ourGuard = RecursionManager.createGuard("javafx.controller");
 
   public static PsiClass getControllerClass(final PsiFile containingFile) {
     if (containingFile instanceof XmlFile) {
@@ -1126,10 +1125,10 @@ public class JavaFxPsiUtil {
       CachedValueProvider.Result.create(Arrays.stream(enumClass.getFields())
                                           .filter(PsiEnumConstant.class::isInstance)
                                           .map(PsiField::getName)
-                                          .map(String::toUpperCase)
+                                          .map(StringUtil::toUpperCase)
                                           .collect(Collectors.toCollection(THashSet::new)),
                                         PsiModificationTracker.MODIFICATION_COUNT));
-    if (!constantNames.contains(name.toUpperCase())) {
+    if (!constantNames.contains(StringUtil.toUpperCase(name))) {
       return "No enum constant '" + name + "' in " + enumClass.getQualifiedName();
     }
     return null;
@@ -1194,7 +1193,7 @@ public class JavaFxPsiUtil {
 
   @Nullable
   private static CachedValueProvider.Result<PsiClass> computeInjectedControllerClass(PsiFile containingFile) {
-    return ourGuard.doPreventingRecursion(containingFile, true, () -> {
+    return RecursionManager.doPreventingRecursion(containingFile, true, () -> {
       final Project project = containingFile.getProject();
       final Ref<PsiClass> injectedController = new Ref<>();
       final PsiClass fxmlLoader =

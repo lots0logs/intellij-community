@@ -1,6 +1,7 @@
 // Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file.
 package com.intellij.application.options.codeStyle.properties;
 
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.util.containers.BidirectionalMap;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -8,24 +9,24 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
-public class EnumPropertyAccessor extends ExternalStringAccessor<Enum> implements CodeStyleChoiceList{
+public class EnumPropertyAccessor extends ExternalStringAccessor<Enum<?>> implements CodeStyleChoiceList {
 
-  private final Class myEnumClass;
-  private final BidirectionalMap<String,Enum> myEnumMap = new BidirectionalMap<>();
+  private final Class<? extends Enum<?>> myEnumClass;
+  private final BidirectionalMap<String, Enum<?>> myEnumMap = new BidirectionalMap<>();
 
   public EnumPropertyAccessor(@NotNull Object object, @NotNull Field field) {
     super(object, field);
-    myEnumClass = field.getType();
+    //noinspection unchecked
+    myEnumClass = (Class<? extends Enum<?>>)field.getType().asSubclass(Enum.class);
     fillEnumMap();
   }
 
   private void fillEnumMap() {
-    final Object[] enumConstants = myEnumClass.getEnumConstants();
+    final Enum<?>[] enumConstants = myEnumClass.getEnumConstants();
     if (enumConstants != null) {
-      for (Object enumConstant : enumConstants) {
-        myEnumMap.put(enumConstant.toString().toLowerCase(Locale.ENGLISH), (Enum)enumConstant);
+      for (Enum<?> enumConstant : enumConstants) {
+        myEnumMap.put(StringUtil.toLowerCase(enumConstant.toString()), enumConstant);
       }
     }
   }
@@ -38,13 +39,13 @@ public class EnumPropertyAccessor extends ExternalStringAccessor<Enum> implement
 
   @Nullable
   @Override
-  protected Enum fromExternal(@NotNull String str) {
+  protected Enum<?> fromExternal(@NotNull String str) {
     return myEnumMap.get(str);
   }
 
   @NotNull
   @Override
-  protected String toExternal(@NotNull Enum value) {
+  protected String toExternal(@NotNull Enum<?> value) {
     List<String> names = myEnumMap.getKeysByValue(value);
     assert names != null && names.size() > 0 : "Unexpected value " + value.toString();
     return names.get(0);

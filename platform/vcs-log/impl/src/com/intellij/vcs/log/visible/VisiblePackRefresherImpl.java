@@ -13,6 +13,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.containers.ContainerUtil;
+import com.intellij.vcs.log.VcsLogBundle;
 import com.intellij.vcs.log.VcsLogFilterCollection;
 import com.intellij.vcs.log.data.DataPack;
 import com.intellij.vcs.log.data.SingleTaskController;
@@ -21,9 +22,12 @@ import com.intellij.vcs.log.data.VcsLogProgress;
 import com.intellij.vcs.log.data.index.VcsLogIndex;
 import com.intellij.vcs.log.graph.PermanentGraph;
 import kotlin.Pair;
+import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -54,7 +58,7 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
     myLogId = logId;
     myState = new State(filters, sortType);
 
-    myTaskController = new SingleTaskController<Request, State>(project, "visible " + StringUtil.trimMiddle(logId, 40), state -> {
+    myTaskController = new SingleTaskController<Request, State>("visible " + StringUtil.trimMiddle(logId, 40), state -> {
       boolean hasChanges = myState.getVisiblePack() != state.getVisiblePack();
       myState = state;
       if (hasChanges) {
@@ -62,14 +66,20 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
           listener.onVisiblePackChange(state.getVisiblePack());
         }
       }
-    }, true, this) {
+    }, this) {
       @NotNull
       @Override
       protected SingleTask startNewBackgroundTask() {
         ProgressIndicator indicator = myLogData.getProgress().createProgressIndicator(new VisiblePackProgressKey(myLogId, false));
-        MyTask task = new MyTask(project, "Applying filters...");
+        MyTask task = new MyTask(project, VcsLogBundle.message("vcs.log.applying.filters.process"));
         Future<?> future = ((CoreProgressManager)ProgressManager.getInstance()).runProcessWithProgressAsynchronously(task, indicator, null);
         return new SingleTaskImpl(future, indicator);
+      }
+
+      @Override
+      protected boolean cancelRunningTasks(Request @NotNull [] requests) {
+        return ContainerUtil.findInstance(requests, IndexingFinishedRequest.class) != null ||
+               ContainerUtil.findInstance(requests, FilterRequest.class) != null;
       }
     };
 
@@ -124,7 +134,7 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
 
   @Override
   public String toString() {
-    return "VisiblePackRefresher \'" + myLogId + "\' state = " + myState;
+    return "VisiblePackRefresher '" + myLogId + "' state = " + myState;
   }
 
   @Override
@@ -134,7 +144,7 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
 
   private class MyTask extends Task.Backgroundable {
 
-    MyTask(@Nullable Project project, @NotNull String title) {
+    MyTask(@Nullable Project project, @Nls(capitalization = Nls.Capitalization.Title) @NotNull String title) {
       super(project, title, false);
     }
 
@@ -154,15 +164,16 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
           throw reThrown;
         }
         catch (Throwable t) {
-          LOG.error("Error while filtering log by " + requests, t);
+          LOG.error("Error while processing requests " + requests, t);
           myTaskController.removeRequests(requests);
         }
       }
 
-      List<MoreCommitsRequest> requestsToRun = ContainerUtil.newArrayList();
-      if (state.getVisiblePack() != myState.getVisiblePack() && state.isValid()) {
+      List<MoreCommitsRequest> requestsToRun = new ArrayList<>();
+      if (state.getVisiblePack() != myState.getVisiblePack() && state.isValid() &&
+          !(state.getVisiblePack() instanceof VisiblePack.ErrorVisiblePack)) {
         requestsToRun.addAll(state.getRequestsToRun());
-        state = state.withRequests(ContainerUtil.newArrayList());
+        state = state.withRequests(new ArrayList<>());
       }
 
       myTaskController.taskCompleted(state);
@@ -257,13 +268,20 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
                                                                           state.getVisiblePack().getDataPack() != dataPack ||
                                                                           moreCommitsRequests.isEmpty()));
 
-      Pair<VisiblePack, CommitCountStage> pair =
-        myVcsLogFilterer.filter(dataPack, state.getSortType(), state.getFilters(),
-                                state.getCommitCount());
-
-      VcsLogProgress.updateCurrentKey(new VisiblePackProgressKey(myLogId, false));
-
-      return state.withVisiblePack(pair.getFirst()).withCommitCount(pair.getSecond());
+      try {
+        Pair<VisiblePack, CommitCountStage> pair = myVcsLogFilterer.filter(dataPack, state.getVisiblePack(), state.getSortType(),
+                                                                           state.getFilters(), state.getCommitCount());
+        return state.withVisiblePack(pair.getFirst()).withCommitCount(pair.getSecond());
+      }
+      catch (ProcessCanceledException e) {
+        throw e;
+      }
+      catch (Throwable t) {
+        return state.withVisiblePack(new VisiblePack.ErrorVisiblePack(dataPack, state.getFilters(), t));
+      }
+      finally {
+        VcsLogProgress.updateCurrentKey(new VisiblePackProgressKey(myLogId, false));
+      }
     }
   }
 
@@ -276,7 +294,7 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
     private final boolean myIsValid;
 
     State(@NotNull VcsLogFilterCollection filters, @NotNull PermanentGraph.SortType sortType) {
-      this(filters, sortType, CommitCountStage.INITIAL, ContainerUtil.newArrayList(), VisiblePack.EMPTY, true);
+      this(filters, sortType, CommitCountStage.INITIAL, new ArrayList<>(), VisiblePack.EMPTY, true);
     }
 
     State(@NotNull VcsLogFilterCollection filters,
@@ -353,6 +371,7 @@ public class VisiblePackRefresherImpl implements VisiblePackRefresher, Disposabl
     }
 
     @Override
+    @NonNls
     public String toString() {
       return "State{" +
              "myFilters=" + myFilters +
